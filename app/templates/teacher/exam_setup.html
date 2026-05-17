@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% block title %}Teacher Setup{% endblock %}
+
+{% block content %}
+<div class="card">
+  <h1>{% if exam %}Edit Exam Set{% else %}Create Exam Set{% endif %}</h1>
+
+  <form method="post" id="examForm">
+    <div class="grid-2">
+      <div>
+        <label>Exam Name</label>
+        <input type="text" name="exam_name" value="{{ exam.exam_name if exam else '' }}" required>
+      </div>
+      <div>
+        <label>Subject</label>
+        <input type="text" name="subject" value="{{ exam.subject if exam else '' }}" required>
+      </div>
+      <div>
+        <label>Set Code</label>
+        <input type="text" name="set_code" value="{{ exam.set_code if exam else 'A' }}" required>
+      </div>
+      <div>
+        <label>Duration (minutes)</label>
+        <input type="number" name="duration_minutes" min="1" value="{{ exam.duration_minutes if exam else 60 }}" required>
+      </div>
+      <div>
+        <label>Access Code for Students</label>
+        <input type="text" name="access_code" value="{{ exam.access_code if exam else '' }}" placeholder="Auto-generated if blank">
+      </div>
+      <div>
+        <label>Total Marks</label>
+        <input type="number" id="totalMarks" value="{{ exam.total_marks if exam else 0 }}" readonly>
+      </div>
+    </div>
+
+    <hr>
+
+    <div class="row-between">
+      <h2>Questions</h2>
+      <button type="button" class="btn secondary" onclick="addQuestionRow()">Add Question</button>
+    </div>
+
+    <div id="questionContainer">
+      {% if questions and questions|length > 0 %}
+        {% for q in questions %}
+          <div class="question-card">
+            <div class="grid-2">
+              <div>
+                <label>Question Number</label>
+                <input type="number" name="question_number" value="{{ q.question_number }}" required>
+              </div>
+              <div>
+                <label>Type</label>
+                <select name="question_type">
+                  <option value="mcq" {% if q.question_type == 'mcq' %}selected{% endif %}>MCQ</option>
+                  <option value="short" {% if q.question_type == 'short' %}selected{% endif %}>Short</option>
+                  <option value="long" {% if q.question_type == 'long' %}selected{% endif %}>Long</option>
+                  <option value="coding" {% if q.question_type == 'coding' %}selected{% endif %}>Coding</option>
+                </select>
+              </div>
+              <div>
+                <label>Marks</label>
+                <input type="number" name="marks" min="1" value="{{ q.marks }}" class="marks-field" required oninput="updateTotalMarks()">
+              </div>
+              <div>
+                <label>Correct Answer / Key</label>
+                <input type="text" name="correct_answer" value="{{ q.correct_answer or '' }}">
+              </div>
+            </div>
+
+            <label>Question Text</label>
+            <textarea name="question_text" rows="4" required>{{ q.question_text }}</textarea>
+
+            <label>Options for MCQ (use | between options)</label>
+            <input type="text" name="options" value="{{ q.options_as_list() | join('|') }}" placeholder="Option A|Option B|Option C|Option D">
+
+            <button type="button" class="btn danger small" onclick="removeQuestionRow(this)">Remove</button>
+          </div>
+        {% endfor %}
+      {% else %}
+        <div class="question-card">
+          <div class="grid-2">
+            <div>
+              <label>Question Number</label>
+              <input type="number" name="question_number" value="1" required>
+            </div>
+            <div>
+              <label>Type</label>
+              <select name="question_type">
+                <option value="mcq">MCQ</option>
+                <option value="short" selected>Short</option>
+                <option value="long">Long</option>
+                <option value="coding">Coding</option>
+              </select>
+            </div>
+            <div>
+              <label>Marks</label>
+              <input type="number" name="marks" min="1" value="1" class="marks-field" required oninput="updateTotalMarks()">
+            </div>
+            <div>
+              <label>Correct Answer / Key</label>
+              <input type="text" name="correct_answer">
+            </div>
+          </div>
+
+          <label>Question Text</label>
+          <textarea name="question_text" rows="4" required></textarea>
+
+          <label>Options for MCQ (use | between options)</label>
+          <input type="text" name="options" placeholder="Option A|Option B|Option C|Option D">
+
+          <button type="button" class="btn danger small" onclick="removeQuestionRow(this)">Remove</button>
+        </div>
+      {% endif %}
+    </div>
+
+    <hr>
+    <button type="submit" class="btn primary">Save Exam Set</button>
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  function addQuestionRow() {
+    const container = document.getElementById("questionContainer");
+    const currentCount = container.querySelectorAll(".question-card").length;
+    const nextNumber = currentCount + 1;
+
+    const card = document.createElement("div");
+    card.className = "question-card";
+    card.innerHTML = `
+      <div class="grid-2">
+        <div>
+          <label>Question Number</label>
+          <input type="number" name="question_number" value="${nextNumber}" required>
+        </div>
+        <div>
+          <label>Type</label>
+          <select name="question_type">
+            <option value="mcq">MCQ</option>
+            <option value="short" selected>Short</option>
+            <option value="long">Long</option>
+            <option value="coding">Coding</option>
+          </select>
+        </div>
+        <div>
+          <label>Marks</label>
+          <input type="number" name="marks" min="1" value="1" class="marks-field" required oninput="updateTotalMarks()">
+        </div>
+        <div>
+          <label>Correct Answer / Key</label>
+          <input type="text" name="correct_answer">
+        </div>
+      </div>
+
+      <label>Question Text</label>
+      <textarea name="question_text" rows="4" required></textarea>
+
+      <label>Options for MCQ (use | between options)</label>
+      <input type="text" name="options" placeholder="Option A|Option B|Option C|Option D">
+
+      <button type="button" class="btn danger small" onclick="removeQuestionRow(this)">Remove</button>
+    `;
+    container.appendChild(card);
+    updateTotalMarks();
+  }
+
+  function removeQuestionRow(button) {
+    const container = document.getElementById("questionContainer");
+    if (container.querySelectorAll(".question-card").length <= 1) return;
+    button.closest(".question-card").remove();
+    updateTotalMarks();
+  }
+
+  function updateTotalMarks() {
+    let total = 0;
+    document.querySelectorAll(".marks-field").forEach(input => {
+      const value = parseInt(input.value || "0", 10);
+      total += isNaN(value) ? 0 : value;
+    });
+    document.getElementById("totalMarks").value = total;
+  }
+
+  updateTotalMarks();
+</script>
+{% endblock %}

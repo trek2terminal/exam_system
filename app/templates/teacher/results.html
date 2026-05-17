@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Teacher Dashboard{% endblock %}
+
+{% block content %}
+<div class="card">
+  <div class="row-between">
+    <div>
+      <h1>Teacher Dashboard</h1>
+      <p class="muted">Logged in as {{ session.get('teacher_name') }}</p>
+    </div>
+    <a href="{{ url_for('teacher.setup_exam') }}" class="btn primary">Create New Exam Set</a>
+  </div>
+
+  <div class="stats">
+    <div class="stat-box">Draft: <strong>{{ draft_count }}</strong></div>
+    <div class="stat-box">Active: <strong>{{ active_count }}</strong></div>
+    <div class="stat-box">Closed: <strong>{{ closed_count }}</strong></div>
+    <div class="stat-box">Submissions: <strong>{{ submitted_count }}</strong></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Saved Exam Sets</h2>
+  {% if exams %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Exam</th>
+            <th>Subject</th>
+            <th>Set</th>
+            <th>Code</th>
+            <th>Duration</th>
+            <th>Status</th>
+            <th>Access</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for exam in exams %}
+          <tr>
+            <td>{{ exam.exam_name }}</td>
+            <td>{{ exam.subject }}</td>
+            <td>{{ exam.set_code }}</td>
+            <td>{{ exam.access_code }}</td>
+            <td>{{ exam.duration_minutes }} min</td>
+            <td><span class="badge {{ exam.status }}">{{ exam.status }}</span></td>
+            <td>{{ exam.sessions|length }}</td>
+            <td class="actions">
+              <a class="btn secondary small" href="{{ url_for('teacher.setup_exam', exam_id=exam.id) }}">Edit</a>
+              <a class="btn secondary small" href="{{ url_for('teacher.exam_results', exam_id=exam.id) }}">Results</a>
+              {% if exam.status != 'active' %}
+                <a class="btn primary small" href="{{ url_for('teacher.activate_exam', exam_id=exam.id) }}">Activate</a>
+              {% endif %}
+              {% if exam.status != 'closed' %}
+                <a class="btn danger small" href="{{ url_for('teacher.close_exam', exam_id=exam.id) }}">Close</a>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p>No exam sets created yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

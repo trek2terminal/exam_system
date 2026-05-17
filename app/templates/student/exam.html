@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Exam Window{% endblock %}
+
+{% block content %}
+<div class="exam-shell" data-session-code="{{ student_session.session_code }}" data-remaining="{{ remaining_seconds }}">
+  <div class="exam-topbar">
+    <div>
+      <h1>{{ exam.exam_name }}</h1>
+      <p>{{ student_session.student_name }} | Roll No {{ student_session.roll_no }} | Set {{ exam.set_code }}</p>
+    </div>
+
+    <div class="timer-box">
+      <div>Time Left</div>
+      <div id="timer">{{ remaining_seconds }}</div>
+    </div>
+
+    <div class="actions">
+      <button class="btn secondary" onclick="enterFullscreen()">Enter Fullscreen</button>
+      <button class="btn danger" onclick="submitExam('{{ student_session.session_code }}', true)">Submit Exam</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Instructions</h2>
+    <p>Do not leave this window. If focus is lost, the exam is submitted automatically.</p>
+  </div>
+
+  <div id="questionList">
+    {% for q in questions %}
+      <div class="card question-block">
+        <div class="row-between">
+          <h3>Q{{ q.question_number }}. {{ q.question_text }}</h3>
+          <span class="badge">{{ q.question_type }}</span>
+        </div>
+        <p class="muted"><strong>Marks:</strong> {{ q.marks }}</p>
+
+        {% if q.question_type == 'mcq' %}
+          <div class="mcq-list">
+            {% for option in q.options_as_list() %}
+              <label class="mcq-option">
+                <input
+                  type="radio"
+                  name="q_{{ q.id }}"
+                  value="{{ option }}"
+                  class="answer-radio"
+                  data-session-code="{{ student_session.session_code }}"
+                  data-question-id="{{ q.id }}"
+                  {% if saved_map.get(q.id) == option %}checked{% endif %}
+                >
+                <span>{{ option }}</span>
+              </label>
+            {% endfor %}
+          </div>
+        {% else %}
+          <textarea
+            class="answer-field"
+            data-session-code="{{ student_session.session_code }}"
+            data-question-id="{{ q.id }}"
+            rows="6"
+            placeholder="Type your answer here..."
+          >{{ saved_map.get(q.id, '') }}</textarea>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  initExamPage("{{ student_session.session_code }}", {{ remaining_seconds }});
+</script>
+{% endblock %}

@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Join Exam{% endblock %}
+
+{% block content %}
+<div class="card narrow">
+  <h1>Join Exam</h1>
+  <form method="post" class="form-grid">
+    <label>Student Name</label>
+    <input type="text" name="student_name" required>
+
+    <label>Roll No</label>
+    <input type="text" name="roll_no" required>
+
+    <label>Exam Access Code</label>
+    <input type="text" name="access_code" placeholder="Enter code from teacher" required>
+
+    <button type="submit" class="btn primary">Join</button>
+  </form>
+</div>
+{% endblock %}

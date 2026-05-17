@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Student Marking{% endblock %}
+
+{% block content %}
+<div class="card">
+  <div class="row-between">
+    <div>
+      <h1>Mark Student Submission</h1>
+      <p class="muted">{{ student_session.student_name }} | Roll No {{ student_session.roll_no }} | {{ student_session.exam_set.exam_name }}</p>
+    </div>
+    <div class="actions">
+      <a class="btn secondary" href="{{ url_for('student.export_pdf', session_code=student_session.session_code) }}">Download Answer PDF</a>
+      <a class="btn secondary" href="{{ url_for('teacher.results') }}">Back</a>
+    </div>
+  </div>
+
+  <form method="post">
+    <div class="card inner">
+      <h2>Teacher Summary Remarks</h2>
+      <textarea name="teacher_remarks" rows="4">{{ result.teacher_remarks if result else '' }}</textarea>
+      <label class="checkbox-line">
+        <input type="checkbox" name="published" {% if result and result.published %}checked{% endif %}>
+        Publish result to student
+      </label>
+    </div>
+
+    {% for q in questions %}
+      <div class="card inner">
+        <h3>Q{{ q.question_number }}. {{ q.question_text }}</h3>
+        <p><strong>Max Marks:</strong> {{ q.marks }}</p>
+
+        <div class="answer-box">
+          <strong>Student Answer</strong>
+          <div class="answer-text">{{ answers_map.get(q.id, "No answer submitted") }}</div>
+        </div>
+
+        <div class="grid-2">
+          <div>
+            <label>Marks Awarded</label>
+            <input type="number" name="marks_{{ q.id }}" min="0" max="{{ q.marks }}" value="{{ marks_map.get(q.id, 0) }}">
+          </div>
+          <div>
+            <label>Optional Remark</label>
+            <input type="text" name="remark_{{ q.id }}" value="{{ remarks_map.get(q.id, '') }}">
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+
+    <button type="submit" class="btn primary">Save Marks</button>
+  </form>
+</div>
+{% endblock %}

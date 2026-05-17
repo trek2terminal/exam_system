@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Teacher Login{% endblock %}
+
+{% block content %}
+<div class="card narrow">
+  <h1>Teacher Login</h1>
+  <form method="post" class="form-grid">
+    <label>Username</label>
+    <input type="text" name="username" autocomplete="username" required>
+
+    <label>Password</label>
+    <input type="password" name="password" autocomplete="current-password" required>
+
+    <button type="submit" class="btn primary">Login</button>
+  </form>
+
+  <p class="muted">First time setup is available at the setup screen.</p>
+  <a class="btn secondary inline" href="{{ url_for('auth.teacher_setup') }}">Create Teacher Account</a>
+</div>
+{% endblock %}

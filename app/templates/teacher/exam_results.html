@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Exam Results{% endblock %}
+
+{% block content %}
+<div class="card">
+  <div class="row-between">
+    <div>
+      <h1>{{ exam.exam_name }} - Results</h1>
+      <p class="muted">{{ exam.subject }} | Set {{ exam.set_code }} | Access Code {{ exam.access_code }}</p>
+    </div>
+    <a href="{{ url_for('teacher.dashboard') }}" class="btn secondary">Back</a>
+  </div>
+
+  {% if sessions %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Student</th>
+            <th>Roll No</th>
+            <th>Status</th>
+            <th>Violations</th>
+            <th>Started</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in sessions %}
+          <tr>
+            <td>{{ s.student_name }}</td>
+            <td>{{ s.roll_no }}</td>
+            <td>{{ s.status }}</td>
+            <td>{{ s.focus_violations }}</td>
+            <td>{{ s.start_time.strftime("%d-%m-%Y %H:%M") if s.start_time else "-" }}</td>
+            <td><a class="btn secondary small" href="{{ url_for('teacher.student_view', session_id=s.id) }}">Mark / View</a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p>No student sessions for this exam yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

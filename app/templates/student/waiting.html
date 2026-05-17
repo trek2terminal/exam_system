@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Waiting Room{% endblock %}
+
+{% block content %}
+<div class="card narrow">
+  <h1>Waiting Room</h1>
+  <p><strong>{{ student_session.student_name }}</strong>, your exam is not active yet.</p>
+  <p>Exam: <strong>{{ exam.exam_name }}</strong></p>
+  <p>Set: <strong>{{ exam.set_code }}</strong></p>
+  <p class="muted">This page will keep checking automatically.</p>
+  <div class="loader"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  initWaitingPage("{{ student_session.session_code }}");
+</script>
+{% endblock %}

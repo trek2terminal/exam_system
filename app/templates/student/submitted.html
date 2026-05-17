@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Submitted{% endblock %}
+
+{% block content %}
+<div class="card narrow">
+  <h1>Submission Status</h1>
+  <p><strong>{{ student_session.student_name }}</strong>, your exam has been submitted.</p>
+  <p>Exam: <strong>{{ student_session.exam_set.exam_name }}</strong></p>
+  <p>Set: <strong>{{ student_session.exam_set.set_code }}</strong></p>
+
+  {% if student_session.autosubmit_reason %}
+    <p><strong>Auto-submit reason:</strong> {{ student_session.autosubmit_reason }}</p>
+  {% endif %}
+
+  <div class="card inner">
+    <h2>Answer Copy</h2>
+    <a class="btn secondary" href="{{ url_for('student.export_pdf', session_code=student_session.session_code) }}">Download PDF Copy</a>
+  </div>
+
+  {% if result and result.published %}
+    <div class="card inner">
+      <h2>Score Card</h2>
+      <p><strong>Total Marks:</strong> {{ result.total_marks }}</p>
+      <p><strong>Teacher Remarks:</strong> {{ result.teacher_remarks or "No remarks added." }}</p>
+    </div>
+
+    <div class="card inner">
+      <h2>Question-wise Feedback</h2>
+      {% for q in questions %}
+        <div class="question-block">
+          <p><strong>Q{{ q.question_number }}</strong> - {{ q.question_text }}</p>
+          <p><strong>Marks:</strong> {{ question_marks.get(q.id).marks_awarded if question_marks.get(q.id) else 0 }} / {{ q.marks }}</p>
+          <p><strong>Remark:</strong> {{ question_marks.get(q.id).teacher_remark if question_marks.get(q.id) and question_marks.get(q.id).teacher_remark else "None" }}</p>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="muted">Marks have not been published yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

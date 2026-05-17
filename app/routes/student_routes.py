@@ -1,0 +1,130 @@
+from datetime import datetime
+from flask import Blueprint, render_template, redirect, url_for, request, flash
+from app.models.database import db
+from app.models.exam_model import ExamSet, Question
+from app.models.submission_model import StudentSession, Answer
+from app.models.result_model import Result
+from app.services.exam_service import ExamService
+
+student_bp = Blueprint("student", __name__, url_prefix="/student")
+
+
+@student_bp.route("/join", methods=["GET", "POST"])
+def join_exam():
+    if request.method == "POST":
+        student_name = request.form.get("student_name", "").strip()
+        roll_no = request.form.get("roll_no", "").strip()
+        access_code = request.form.get("access_code", "").strip().upper()
+
+        if not student_name or not roll_no or not access_code:
+            flash("All fields are required.", "danger")
+            return redirect(url_for("student.join_exam"))
+
+        exam = ExamSet.query.filter_by(access_code=access_code).first()
+        if not exam:
+            flash("Invalid exam access code.", "danger")
+            return redirect(url_for("student.join_exam"))
+
+        if exam.status == "closed":
+            flash("This exam has been closed by the teacher.", "danger")
+            return redirect(url_for("student.join_exam"))
+
+        # Create student session
+        student_session = ExamService.create_student_session(
+            exam_set_id=exam.id,
+            student_name=student_name,
+            roll_no=roll_no
+        )
+
+        if exam.status == "active":
+            ExamService.start_exam(student_session.session_code)
+
+        if student_session.status == "waiting":
+            return redirect(url_for("student.waiting", session_code=student_session.session_code))
+
+        return redirect(url_for("student.exam", session_code=student_session.session_code))
+
+    return render_template("student/join.html")
+
+
+@student_bp.route("/waiting/<session_code>")
+def waiting(session_code):
+    student_session = StudentSession.query.filter_by(session_code=session_code).first_or_404()
+    exam = student_session.exam_set
+
+    if student_session.status == "submitted":
+        return redirect(url_for("student.submitted", session_code=session_code))
+
+    if exam.status == "active":
+        ExamService.start_exam(session_code)
+        return redirect(url_for("student.exam", session_code=session_code))
+
+    return render_template("student/waiting.html",
+                           student_session=student_session,
+                           exam=exam)
+
+
+@student_bp.route("/exam/<session_code>")
+def exam(session_code):
+    student_session = StudentSession.query.filter_by(session_code=session_code).first_or_404()
+    exam = student_session.exam_set
+
+    if student_session.status == "submitted":
+        return redirect(url_for("student.submitted", session_code=session_code))
+
+    if exam.status != "active":
+        return redirect(url_for("student.waiting", session_code=session_code))
+
+    # Start exam if not started
+    if not student_session.start_time:
+        ExamService.start_exam(session_code)
+
+    questions = Question.query.filter_by(exam_set_id=exam.id) \
+        .order_by(Question.question_number.asc()).all()
+
+    saved_answers = Answer.query.filter_by(session_id=student_session.id).all()
+    saved_map = {a.question_id: a.answer_text for a in saved_answers}
+
+    # Calculate remaining time
+    remaining_seconds = 0
+    if student_session.start_time:
+        elapsed = (datetime.utcnow() - student_session.start_time).total_seconds()
+        remaining_seconds = max((exam.duration_minutes * 60) - int(elapsed), 0)
+
+    return render_template(
+        "student/exam.html",
+        student_session=student_session,
+        exam=exam,
+        questions=questions,
+        saved_map=saved_map,
+        remaining_seconds=remaining_seconds,
+    )
+
+
+@student_bp.route("/submitted/<session_code>")
+def submitted(session_code):
+    student_session = StudentSession.query.filter_by(session_code=session_code).first_or_404()
+    result = Result.query.filter_by(session_id=student_session.id).first()
+
+    questions = Question.query.filter_by(exam_set_id=student_session.exam_set_id) \
+        .order_by(Question.question_number.asc()).all()
+
+    question_marks = {}
+    if result:
+        for qm in result.question_marks:
+            question_marks[qm.question_id] = qm
+
+    return render_template(
+        "student/submitted.html",
+        student_session=student_session,
+        result=result,
+        questions=questions,
+        question_marks=question_marks,
+    )
+
+
+@student_bp.route("/export/<session_code>")
+def export_pdf(session_code):
+    # TODO: Implement PDF export using pdf_service later
+    flash("PDF export feature coming soon.", "info")
+    return redirect(url_for("student.submitted", session_code=session_code))
