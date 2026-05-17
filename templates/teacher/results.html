@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><title>Results</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { background:#0E1117; color:#E2E8F4;
+           font-family:'Segoe UI',sans-serif; }
+    header { background:#0A0D14; border-bottom:1px solid #252D45;
+             padding:14px 28px; display:flex;
+             align-items:center; justify-content:space-between; }
+    header h1 { font-size:1.1rem; }
+    header a { color:#4F8EF7; text-decoration:none; font-size:0.9rem; }
+    .main { padding:28px; }
+    table { width:100%; border-collapse:collapse; }
+    th { text-align:left; padding:10px 14px; color:#566380;
+         font-size:0.78rem; text-transform:uppercase;
+         letter-spacing:0.07em; border-bottom:1px solid #252D45; }
+    td { padding:12px 14px; border-bottom:1px solid #1C2136;
+         font-size:0.9rem; }
+    tr:hover td { background:#161B27; }
+    a.link { color:#4F8EF7; text-decoration:none; font-size:0.85rem; }
+    a.link:hover { text-decoration:underline; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>📋 Exam Results</h1>
+  <a href="/teacher/dashboard">← Dashboard</a>
+</header>
+<div class="main">
+  <table>
+    <thead>
+      <tr>
+        <th>Exam ID</th>
+        <th>Started</th>
+        <th>Duration</th>
+        <th>Status</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for exam in exams %}
+      <tr>
+        <td>{{ exam.exam_id }}</td>
+        <td>{{ exam.started_at[:16].replace('T',' ') }}</td>
+        <td>{{ exam.duration_minutes }} min</td>
+        <td>{{ 'Active' if exam.active else 'Ended' }}</td>
+        <td>
+          <a class="link" href="/teacher/results/{{ exam.exam_id }}">
+            View Submissions →
+          </a>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" style="color:#566380;text-align:center;padding:40px;">
+        No exams yet.
+      </td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+</body>
+</html>
