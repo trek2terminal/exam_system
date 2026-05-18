@@ -1,38 +1,56 @@
-import bcrypt
+import os
+from datetime import timedelta
 
-# ─── Teacher login credentials ───────────────────────────
-# To change password: run this file directly once with your
-# new password, copy the printed hash, paste it below.
+# Load environment variables from .env file
+from dotenv import load_dotenv
+load_dotenv()   # This must be at the top
 
-TEACHER_USERNAME = "admin"
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
-# Default password is:  teach@2024
-TEACHER_PASSWORD_HASH = bcrypt.hashpw(
-    b"teach@2024", bcrypt.gensalt()
-).decode("utf-8")
 
-# ─── Flask secret key (signs session cookies) ────────────
-SECRET_KEY = "exam_system_secret_key_change_this_in_production"
+class Config:
+    # ====================== SECURITY ======================
+    SECRET_KEY = os.environ.get("SECRET_KEY")
 
-# ─── Server settings ─────────────────────────────────────
-HOST = "0.0.0.0"      # listen on all interfaces (LAN + localhost)
-PORT = 5000
+    if not SECRET_KEY:
+        raise ValueError("❌ No SECRET_KEY found! Please create a .env file in the project root.")
 
-# ─── Exam settings ───────────────────────────────────────
-# How many questions to show based on exam duration
-PATTERN_RULES = [
-    {"max_minutes": 20,  "questions": 5,  "free_navigation": False},
-    {"max_minutes": 40,  "questions": 10, "free_navigation": True},
-    {"max_minutes": 60,  "questions": 20, "free_navigation": True},
-    {"max_minutes": 9999,"questions": 20, "free_navigation": True},
-]
+    # Database
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
 
-# Code execution sandbox settings
-CODE_TIMEOUT_SECONDS = 10
-BLOCKED_IMPORTS = [
-    "os", "sys", "subprocess", "socket", "shutil",
-    "importlib", "builtins", "ctypes", "multiprocessing"
-]
+    # Session Security
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = 'Lax'
+    PERMANENT_SESSION_LIFETIME = timedelta(minutes=45)
 
-# Auto-save interval reminder (actual save triggered by JS)
-AUTOSAVE_INTERVAL_SECONDS = 15
+    # Automatically set secure cookie based on environment
+    SESSION_COOKIE_SECURE = os.environ.get("FLASK_ENV") != "development"
+
+    # File Upload Limits
+    MAX_CONTENT_LENGTH = 25 * 1024 * 1024  # 25MB
+
+    # Folders
+    UPLOAD_FOLDER = os.path.join(BASE_DIR, "app", "static", "uploads")
+    BACKUP_FOLDER = os.path.join(BASE_DIR, "data", "backups")
+    LOG_FOLDER = os.path.join(BASE_DIR, "logs")
+    SCREENSHOT_FOLDER = os.path.join(BASE_DIR, "app", "static", "screenshots")
+
+    # Exam Configuration
+    EXAM_HEARTBEAT_INTERVAL = 8      # seconds
+    MAX_VIOLATIONS_ALLOWED = 3
+    AUTO_SUBMIT_ON_VIOLATION = True
+
+    # Security
+    SECURITY_HEADERS = True
+
+
+class DevelopmentConfig(Config):
+    DEBUG = True
+    SESSION_COOKIE_SECURE = False      # Important for localhost
+    SQLALCHEMY_ECHO = False            # Change to True only when debugging SQL
+
+
+class ProductionConfig(Config):
+    DEBUG = False
+    SESSION_COOKIE_SECURE = True
+    # Add production specific settings here later (e.g. Redis, logging level, etc.)
