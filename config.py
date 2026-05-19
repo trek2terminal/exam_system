@@ -1,17 +1,18 @@
 import os
 from datetime import timedelta
 
-# Load environment variables from .env file
 from dotenv import load_dotenv
-load_dotenv()   # This must be at the top
+
+load_dotenv()
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+APP_ENV = os.environ.get("APP_ENV", os.environ.get("FLASK_ENV", "development")).lower()
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
 
 class Config:
     # ====================== SECURITY ======================
     SECRET_KEY = os.environ.get("SECRET_KEY")
-
     if not SECRET_KEY:
         raise ValueError("❌ No SECRET_KEY found! Please create a .env file in the project root.")
 
@@ -20,11 +21,11 @@ class Config:
 
     # Session Security
     SESSION_COOKIE_HTTPONLY = True
-    SESSION_COOKIE_SAMESITE = 'Lax'
+    SESSION_COOKIE_SAMESITE = "Lax"
     PERMANENT_SESSION_LIFETIME = timedelta(minutes=45)
 
     # Automatically set secure cookie based on environment
-    SESSION_COOKIE_SECURE = os.environ.get("FLASK_ENV") != "development"
+    SESSION_COOKIE_SECURE = APP_ENV == "production"
 
     # File Upload Limits
     MAX_CONTENT_LENGTH = 25 * 1024 * 1024  # 25MB
@@ -36,7 +37,7 @@ class Config:
     SCREENSHOT_FOLDER = os.path.join(BASE_DIR, "app", "static", "screenshots")
 
     # Exam Configuration
-    EXAM_HEARTBEAT_INTERVAL = 8      # seconds
+    EXAM_HEARTBEAT_INTERVAL = 8
     MAX_VIOLATIONS_ALLOWED = 3
     AUTO_SUBMIT_ON_VIOLATION = True
 
@@ -46,11 +47,11 @@ class Config:
 
 class DevelopmentConfig(Config):
     DEBUG = True
-    SESSION_COOKIE_SECURE = False      # Important for localhost
-    SQLALCHEMY_ECHO = False            # Change to True only when debugging SQL
+    SESSION_COOKIE_SECURE = False
+    SQLALCHEMY_ECHO = False
 
 
 class ProductionConfig(Config):
     DEBUG = False
     SESSION_COOKIE_SECURE = True
-    # Add production specific settings here later (e.g. Redis, logging level, etc.)
+    SQLALCHEMY_DATABASE_URI = DATABASE_URL

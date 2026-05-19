@@ -1,0 +1,89 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = env("DATABASE_PROVIDER")
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  TEACHER
+  STUDENT
+}
+
+enum TokenType {
+  REFRESH
+  RESET_PASSWORD
+}
+
+model User {
+  id                 String         @id @default(cuid())
+  name               String
+  email              String         @unique
+  passwordHash       String
+  role               Role           @default(STUDENT)
+  isActive           Boolean        @default(true)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  lastLoginAt        DateTime?
+  profilePicUrl      String?
+  phone              String?
+  rollNumber         String?
+  department         String?
+  designation        String?
+  batch              String?
+  className          String?
+
+  refreshTokens      RefreshToken[]
+  auditLogs          AuditLog[]     @relation("AuditActor")
+  createdBySettings  Setting[]      @relation("SettingCreator")
+}
+
+model Setting {
+  id                     String   @id @default(cuid())
+  studentSelfRegistration Boolean  @default(false)
+  platformName           String   @default("Exam Platform")
+  welcomeMessage         String   @default("Welcome")
+  maxViolationsBeforeAlert Int     @default(3)
+  updatedAt              DateTime  @updatedAt
+
+  createdById            String?
+  createdBy              User?     @relation("SettingCreator", fields: [createdById], references: [id], onDelete: SetNull)
+}
+
+model RefreshToken {
+  id          String    @id @default(cuid())
+  tokenHash   String    @unique
+  tokenType   TokenType  @default(REFRESH)
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  action       String
+  resourceType String
+  resourceId   String?
+  status       String
+  ipAddress    String?
+  userAgent    String?
+  details      Json?
+  createdAt    DateTime @default(now())
+
+  actorId      String?
+  actor        User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([actorId])
+  @@index([resourceType, resourceId])
+  @@index([createdAt])
+}
