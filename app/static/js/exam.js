@@ -5,16 +5,24 @@ let currentSessionCode = null;
 let examSubmitted = false;
 let violationCount = 0;
 let fullscreenWarned = false;
+let fullscreenReady = false;
 const MAX_VIOLATIONS = 3;
 
-function enterFullscreen() {
+async function enterFullscreen() {
     const element = document.documentElement;
-    if (element.requestFullscreen) {
-        element.requestFullscreen().catch(() => {});
-    } else if (element.webkitRequestFullscreen) {
-        element.webkitRequestFullscreen();
-    } else if (element.msRequestFullscreen) {
-        element.msRequestFullscreen();
+    try {
+        if (element.requestFullscreen) {
+            await element.requestFullscreen();
+        } else if (element.webkitRequestFullscreen) {
+            element.webkitRequestFullscreen();
+        } else if (element.msRequestFullscreen) {
+            element.msRequestFullscreen();
+        }
+        fullscreenReady = true;
+        document.body.classList.add("exam-locked");
+        document.getElementById("fullscreenGate")?.classList.remove("active");
+    } catch (e) {
+        document.getElementById("fullscreenGate")?.classList.add("active");
     }
 }
 
@@ -43,6 +51,17 @@ async function saveAnswer(sessionCode, questionId, answerText) {
     } catch (e) {
         console.error("Autosave failed:", e);
     }
+}
+
+function snapshotAnswers() {
+    const saves = [];
+    document.querySelectorAll(".answer-field").forEach(field => {
+        saves.push(saveAnswer(currentSessionCode, field.dataset.questionId, field.value));
+    });
+    document.querySelectorAll(".answer-radio:checked").forEach(radio => {
+        saves.push(saveAnswer(currentSessionCode, radio.dataset.questionId, radio.value));
+    });
+    return saves;
 }
 
 function queueTextSave(sessionCode, questionId, answerText) {
@@ -85,6 +104,7 @@ async function submitExam(sessionCode, manual = false) {
 
     examSubmitted = true;
     try {
+        await Promise.allSettled(snapshotAnswers());
         const response = await fetch(`/api/student/session/${sessionCode}/submit`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -123,12 +143,18 @@ function initExamPage(sessionCode, remainingSeconds) {
     let remaining = parseInt(remainingSeconds || "0", 10);
 
     const timerElement = document.getElementById("timer");
+    const timerBox = document.querySelector(".timer-box");
+    const gate = document.getElementById("fullscreenGate");
 
     enterFullscreen();
 
     function updateTimer() {
         if (timerElement) {
             timerElement.textContent = formatTime(remaining);
+        }
+        if (timerBox) {
+            timerBox.classList.toggle("warning", remaining <= 300 && remaining > 60);
+            timerBox.classList.toggle("danger", remaining <= 60);
         }
     }
 
@@ -156,9 +182,11 @@ function initExamPage(sessionCode, remainingSeconds) {
         if (examSubmitted) return;
 
         const blocked =
-            (e.ctrlKey && ["c", "x", "v", "s", "p", "u", "i"].includes(e.key.toLowerCase())) ||
+            (e.ctrlKey && ["c", "x", "v", "s", "p", "u", "i", "r", "w", "n", "t"].includes(e.key.toLowerCase())) ||
+            (e.metaKey && ["c", "x", "v", "s", "p", "u", "r", "w", "n", "t"].includes(e.key.toLowerCase())) ||
             e.key === "F12" ||
             (e.altKey && e.key === "F4") ||
+            (e.altKey && e.key === "Tab") ||
             (e.ctrlKey && e.shiftKey && ["i", "j", "c", "k"].includes(e.key.toLowerCase()));
 
         if (blocked) {
@@ -189,17 +217,23 @@ function initExamPage(sessionCode, remainingSeconds) {
     }
 
     // Visibility change, blur, fullscreen exit
-    document.addEventListener("visibilitychange", handleViolation);
+    document.addEventListener("visibilitychange", () => {
+        if (document.hidden) handleViolation();
+    });
     window.addEventListener("blur", handleViolation);
 
     document.addEventListener("fullscreenchange", () => {
         if (!document.fullscreenElement && !examSubmitted) {
-            handleViolation();
+            if (fullscreenReady) {
+                submitExam(sessionCode, false);
+            } else if (gate) {
+                gate.classList.add("active");
+            }
         }
     });
 
-    // Before unload (refresh / close tab)
-    window.addEventListener("beforeunload", () => {
+    // Refresh / close tab
+    window.addEventListener("pagehide", () => {
         if (examSubmitted) return;
         try {
             const blob = new Blob([JSON.stringify({ reason: "Page closed" })], {
@@ -209,6 +243,12 @@ function initExamPage(sessionCode, remainingSeconds) {
         } catch (e) {
             console.error(e);
         }
+    });
+
+    window.addEventListener("beforeunload", event => {
+        if (examSubmitted) return;
+        event.preventDefault();
+        event.returnValue = "";
     });
 
     // Answer saving listeners
@@ -231,5 +271,10 @@ function initExamPage(sessionCode, remainingSeconds) {
                 enterFullscreen();
             }
         });
+    }
+
+    if (gate) {
+        gate.classList.add("active");
+        gate.querySelector("button")?.addEventListener("click", enterFullscreen);
     }
 }

@@ -1,5 +1,5 @@
 from datetime import datetime
-from flask import Blueprint, render_template, redirect, url_for, request, flash
+from flask import Blueprint, render_template, redirect, url_for, request, flash, session
 from app.models.database import db
 from app.models.exam_model import ExamSet, Question
 from app.models.submission_model import StudentSession, Answer
@@ -7,6 +7,18 @@ from app.models.result_model import Result
 from app.services.exam_service import ExamService
 
 student_bp = Blueprint("student", __name__, url_prefix="/student")
+
+
+def _owns_session(session_code):
+    """Keep student exam URLs bound to the browser session that joined them."""
+    return session.get("student_session_code") == session_code
+
+
+def _redirect_if_not_owner(session_code):
+    if _owns_session(session_code):
+        return None
+    flash("This exam session is not available in this browser. Please join again.", "danger")
+    return redirect(url_for("student.join_exam"))
 
 
 @student_bp.route("/join", methods=["GET", "POST"])
@@ -36,6 +48,14 @@ def join_exam():
             roll_no=roll_no
         )
 
+        session.clear()
+        session.permanent = True
+        session["role"] = "student"
+        session["student_id"] = student_session.id
+        session["student_name"] = student_name
+        session["roll_no"] = roll_no
+        session["student_session_code"] = student_session.session_code
+
         if exam.status == "active":
             ExamService.start_exam(student_session.session_code)
 
@@ -49,6 +69,10 @@ def join_exam():
 
 @student_bp.route("/waiting/<session_code>")
 def waiting(session_code):
+    owner_redirect = _redirect_if_not_owner(session_code)
+    if owner_redirect:
+        return owner_redirect
+
     student_session = StudentSession.query.filter_by(session_code=session_code).first_or_404()
     exam = student_session.exam_set
 
@@ -66,6 +90,10 @@ def waiting(session_code):
 
 @student_bp.route("/exam/<session_code>")
 def exam(session_code):
+    owner_redirect = _redirect_if_not_owner(session_code)
+    if owner_redirect:
+        return owner_redirect
+
     student_session = StudentSession.query.filter_by(session_code=session_code).first_or_404()
     exam = student_session.exam_set
 
@@ -103,6 +131,10 @@ def exam(session_code):
 
 @student_bp.route("/submitted/<session_code>")
 def submitted(session_code):
+    owner_redirect = _redirect_if_not_owner(session_code)
+    if owner_redirect:
+        return owner_redirect
+
     student_session = StudentSession.query.filter_by(session_code=session_code).first_or_404()
     result = Result.query.filter_by(session_id=student_session.id).first()
 
@@ -125,6 +157,10 @@ def submitted(session_code):
 
 @student_bp.route("/export/<session_code>")
 def export_pdf(session_code):
+    owner_redirect = _redirect_if_not_owner(session_code)
+    if owner_redirect:
+        return owner_redirect
+
     # TODO: Implement PDF export using pdf_service later
     flash("PDF export feature coming soon.", "info")
     return redirect(url_for("student.submitted", session_code=session_code))

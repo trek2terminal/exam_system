@@ -5,7 +5,7 @@ from app.models.exam_model import ExamSet, Question
 from app.models.submission_model import StudentSession, Answer
 from app.models.result_model import Result, QuestionMark
 from app.services.exam_service import ExamService
-from app.utils.helpers import teacher_required
+from app.utils.helpers import teacher_required, parse_options
 
 teacher_bp = Blueprint("teacher", __name__, url_prefix="/teacher")
 
@@ -99,8 +99,12 @@ def setup_exam(exam_id=None):
                 marks = 1
 
             raw_options = q_options[i] if i < len(q_options) else ""
-            options_list = []  # You can use parse_options from helpers
+            options_list = parse_options(raw_options)
             correct_answer = (q_answers[i] if i < len(q_answers) else "").strip()
+
+            if q_type == "mcq" and len(options_list) < 2:
+                flash(f"Question {number} needs at least two MCQ options.", "danger")
+                return redirect(request.url)
 
             question_rows.append({
                 "number": number,
@@ -177,6 +181,10 @@ def results():
 @teacher_required
 def exam_results(exam_id):
     exam = ExamSet.query.get_or_404(exam_id)
+    if exam.created_by != session.get("teacher_id"):
+        flash("You do not have permission to view this exam.", "danger")
+        return redirect(url_for("teacher.dashboard"))
+
     sessions = StudentSession.query.filter_by(exam_set_id=exam.id)\
                 .order_by(StudentSession.created_at.desc()).all()
     return render_template("teacher/exam_results.html", exam=exam, sessions=sessions)
@@ -187,6 +195,10 @@ def exam_results(exam_id):
 def student_view(session_id):
     # Your existing detailed student view logic (kept mostly same)
     student_session = StudentSession.query.get_or_404(session_id)
+    if student_session.exam_set.created_by != session.get("teacher_id"):
+        flash("You do not have permission to view this submission.", "danger")
+        return redirect(url_for("teacher.results"))
+
     questions = Question.query.filter_by(exam_set_id=student_session.exam_set_id)\
                 .order_by(Question.question_number.asc()).all()
     answers = Answer.query.filter_by(session_id=student_session.id).all()

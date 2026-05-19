@@ -1,5 +1,5 @@
 from datetime import datetime
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, session
 from app.models.database import db
 from app.models.submission_model import StudentSession, Answer
 from app.models.exam_model import Question
@@ -11,8 +11,19 @@ from app.services.result_service import ResultService
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 
 
+def _student_session_authorized(session_code):
+    return session.get("student_session_code") == session_code
+
+
+def _forbidden_session_response():
+    return jsonify({"ok": False, "message": "Unauthorized exam session"}), 403
+
+
 @api_bp.route("/student/session/<session_code>/status")
 def session_status(session_code):
+    if not _student_session_authorized(session_code):
+        return _forbidden_session_response()
+
     student_session = StudentSession.query.filter_by(session_code=session_code).first_or_404()
     exam = student_session.exam_set
 
@@ -40,6 +51,9 @@ def session_status(session_code):
 @api_bp.route("/student/session/<session_code>/save", methods=["POST"])
 def save_answer(session_code):
     """Autosave answer using service"""
+    if not _student_session_authorized(session_code):
+        return _forbidden_session_response()
+
     student_session = StudentSession.query.filter_by(session_code=session_code).first_or_404()
 
     if student_session.status not in ["active", "waiting"]:
@@ -63,6 +77,9 @@ def save_answer(session_code):
 @api_bp.route("/student/session/<session_code>/heartbeat", methods=["POST"])
 def heartbeat(session_code):
     """Handle heartbeat and proctoring violations"""
+    if not _student_session_authorized(session_code):
+        return _forbidden_session_response()
+
     student_session = StudentSession.query.filter_by(session_code=session_code).first_or_404()
     data = request.get_json(silent=True) or {}
 
@@ -87,6 +104,9 @@ def heartbeat(session_code):
 @api_bp.route("/student/session/<session_code>/submit", methods=["POST"])
 def submit_session(session_code):
     """Manual or auto exam submission"""
+    if not _student_session_authorized(session_code):
+        return _forbidden_session_response()
+
     student_session = StudentSession.query.filter_by(session_code=session_code).first_or_404()
 
     data = request.get_json(silent=True) or {}

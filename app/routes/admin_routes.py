@@ -1,3 +1,4 @@
+import re
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash, session
 from datetime import datetime, timedelta
 from app.models.database import db
@@ -96,8 +97,16 @@ def create_teacher():
             flash("Name, username, and password are required.", "danger")
             return redirect(url_for("admin.create_teacher"))
 
-        if len(password) < 8:
-            flash("Password must be at least 8 characters long.", "danger")
+        if not re.fullmatch(r"[A-Za-z0-9_.-]{4,50}", username):
+            flash("Username must be 4-50 characters and use only letters, numbers, dot, dash, or underscore.", "danger")
+            return redirect(url_for("admin.create_teacher"))
+
+        if len(password) < 10:
+            flash("Password must be at least 10 characters long.", "danger")
+            return redirect(url_for("admin.create_teacher"))
+
+        if not (re.search(r"[A-Z]", password) and re.search(r"[a-z]", password) and re.search(r"\d", password)):
+            flash("Password must include uppercase, lowercase, and a number.", "danger")
             return redirect(url_for("admin.create_teacher"))
 
         if User.query.filter_by(username=username).first():

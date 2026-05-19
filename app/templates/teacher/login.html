@@ -3,7 +3,13 @@
 
 {% block content %}
 <div class="card narrow">
-  <h1>Teacher Login</h1>
+  <div class="login-heading">
+    <i class="fas fa-chalkboard-user"></i>
+    <div>
+      <h1>Teacher Login</h1>
+      <p class="muted">Use the credentials created by the administrator.</p>
+    </div>
+  </div>
   <form method="post" class="form-grid">
     <label>Username</label>
     <input type="text" name="username" autocomplete="username" required>
@@ -13,8 +19,5 @@
 
     <button type="submit" class="btn primary">Login</button>
   </form>
-
-  <p class="muted">First time setup is available at the setup screen.</p>
-  <a class="btn secondary inline" href="{{ url_for('auth.teacher_setup') }}">Create Teacher Account</a>
 </div>
 {% endblock %}

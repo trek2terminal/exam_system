@@ -11,7 +11,7 @@ if sys.stdout.encoding != 'utf-8':
 app = create_app()
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT", 8000))
     debug_mode = os.environ.get("FLASK_ENV") != "production"
 
     print(f"🚀 Starting Exam System on http://0.0.0.0:{port}")

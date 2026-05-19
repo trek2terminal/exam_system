@@ -3,10 +3,19 @@
 
 {% block content %}
 <div class="exam-shell" data-session-code="{{ student_session.session_code }}" data-remaining="{{ remaining_seconds }}">
+  <div id="fullscreenGate" class="fullscreen-gate">
+    <div class="fullscreen-panel">
+      <i class="fas fa-lock"></i>
+      <h2>Secure exam mode required</h2>
+      <p>The exam must stay in fullscreen until it is submitted. Leaving fullscreen will submit the attempt automatically.</p>
+      <button type="button" class="btn primary">Enter Fullscreen</button>
+    </div>
+  </div>
+
   <div class="exam-topbar">
     <div>
       <h1>{{ exam.exam_name }}</h1>
-      <p>{{ student_session.student_name }} | Roll No {{ student_session.roll_no }} | Set {{ exam.set_code }}</p>
+      <p>{{ student_session.student_name }} &middot; Roll No {{ student_session.roll_no }} &middot; Set {{ exam.set_code }}</p>
     </div>
 
     <div class="timer-box">
@@ -15,14 +24,14 @@
     </div>
 
     <div class="actions">
-      <button class="btn secondary" onclick="enterFullscreen()">Enter Fullscreen</button>
+      <button class="btn secondary" onclick="enterFullscreen()"><i class="fas fa-expand"></i> Fullscreen</button>
       <button class="btn danger" onclick="submitExam('{{ student_session.session_code }}', true)">Submit Exam</button>
     </div>
   </div>
 
-  <div class="card">
-    <h2>Instructions</h2>
-    <p>Do not leave this window. If focus is lost, the exam is submitted automatically.</p>
+  <div class="exam-alert">
+    <i class="fas fa-shield-halved"></i>
+    <span>Stay in fullscreen and keep this tab focused. Fullscreen exit submits the exam automatically.</span>
   </div>
 
   <div id="questionList">
