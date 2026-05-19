@@ -1,0 +1,390 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Teachers - Admin{% endblock %}
+
+{% block content %}
+<div class="admin-page">
+    <div class="page-header">
+        <div>
+            <h1><i class="fas fa-users"></i> User Management</h1>
+            <p>Manage teachers and administrators</p>
+        </div>
+        <a href="{{ url_for('admin.create_teacher') }}" class="btn btn-primary">
+            <i class="fas fa-user-plus"></i> Create Teacher
+        </a>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2>Teachers & Admins</h2>
+            <div class="role-filter">
+                <a href="{{ url_for('admin.users', role='all') }}" class="filter-link {% if role_filter == 'all' %}active{% endif %}">All</a>
+                <a href="{{ url_for('admin.users', role='teacher') }}" class="filter-link {% if role_filter == 'teacher' %}active{% endif %}">Teachers</a>
+                <a href="{{ url_for('admin.users', role='admin') }}" class="filter-link {% if role_filter == 'admin' %}active{% endif %}">Admins</a>
+            </div>
+        </div>
+        <div class="card-body">
+            {% if users %}
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Username</th>
+                                <th>Role</th>
+                                <th>Email</th>
+                                <th>Status</th>
+                                <th>Joined</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for user in users %}
+                            <tr class="table-row">
+                                <td>
+                                    <div class="user-cell">
+                                        <div class="user-avatar">{{ user.name[0] | upper }}</div>
+                                        <div>
+                                            <div class="user-name">{{ user.name }}</div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td><code>{{ user.username }}</code></td>
+                                <td>
+                                    <span class="badge badge-{{ user.role }}">{{ user.role | title }}</span>
+                                </td>
+                                <td>{{ user.email or 'N/A' }}</td>
+                                <td>
+                                    <span class="status-badge {% if user.is_active %}active{% else %}inactive{% endif %}">
+                                        {{ 'Active' if user.is_active else 'Inactive' }}
+                                    </span>
+                                </td>
+                                <td><small>{{ user.created_at.strftime('%Y-%m-%d') }}</small></td>
+                                <td>
+                                    <div class="action-buttons">
+                                        <button class="btn-icon" onclick="toggleUserStatus({{ user.id }})" title="Toggle Status">
+                                            <i class="fas fa-{% if user.is_active %}ban{% else %}check{% endif %}"></i>
+                                        </button>
+                                        <button class="btn-icon delete" onclick="deleteUser({{ user.id }})" title="Delete">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Pagination -->
+                {% if pagination.pages > 1 %}
+                <div class="pagination">
+                    {% if pagination.has_prev %}
+                        <a href="{{ url_for('admin.users', page=pagination.prev_num) }}" class="page-link">← Previous</a>
+                    {% endif %}
+
+                    {% for page_num in pagination.iter_pages(left_edge=1, right_edge=1, left_margin=1, right_margin=1) %}
+                        {% if page_num %}
+                            {% if page_num == pagination.page %}
+                                <span class="page-link active">{{ page_num }}</span>
+                            {% else %}
+                                <a href="{{ url_for('admin.users', page=page_num) }}" class="page-link">{{ page_num }}</a>
+                            {% endif %}
+                        {% else %}
+                            <span class="page-link disabled">...</span>
+                        {% endif %}
+                    {% endfor %}
+
+                    {% if pagination.has_next %}
+                        <a href="{{ url_for('admin.users', page=pagination.next_num) }}" class="page-link">Next →</a>
+                    {% endif %}
+                </div>
+                {% endif %}
+            {% else %}
+                <div class="empty-state">
+                    <i class="fas fa-inbox"></i>
+                    <p>No users found</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<style>
+.admin-page {
+    padding: 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    gap: 2rem;
+}
+
+.page-header h1 {
+    font-size: 1.8rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+}
+
+.page-header p {
+    color: var(--muted);
+}
+
+.card {
+    background: var(--panel-solid);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+}
+
+.card-header {
+    padding: 1.5rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.card-header h2 {
+    margin: 0;
+    font-size: 1.1rem;
+}
+
+.role-filter {
+    display: flex;
+    gap: 1rem;
+}
+
+.filter-link {
+    padding: 0.5rem 1rem;
+    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text);
+    text-decoration: none;
+    transition: all 0.3s ease;
+}
+
+.filter-link:hover {
+    background: rgba(79, 140, 255, 0.15);
+}
+
+.filter-link.active {
+    background: var(--primary);
+    color: white;
+}
+
+.card-body {
+    padding: 1.5rem;
+}
+
+.table-responsive {
+    overflow-x: auto;
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.data-table thead {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.data-table th {
+    padding: 1rem;
+    text-align: left;
+    font-weight: 600;
+    color: var(--muted);
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+}
+
+.data-table td {
+    padding: 1rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.table-row:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.user-cell {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.user-avatar {
+    width: 40px;
+    height: 40px;
+    background: linear-gradient(135deg, var(--primary), var(--primary-2));
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: 700;
+    font-size: 0.9rem;
+}
+
+.user-name {
+    font-weight: 500;
+}
+
+code {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    color: var(--primary);
+}
+
+.badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.badge-admin {
+    background: rgba(255, 193, 7, 0.2);
+    color: #ffc107;
+}
+
+.badge-teacher {
+    background: rgba(76, 175, 80, 0.2);
+    color: #4caf50;
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.status-badge.active {
+    background: rgba(38, 194, 129, 0.2);
+    color: var(--success);
+}
+
+.status-badge.inactive {
+    background: rgba(255, 93, 93, 0.2);
+    color: var(--danger);
+}
+
+.action-buttons {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.btn-icon {
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--border);
+    background: transparent;
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-icon:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+    background: rgba(79, 140, 255, 0.1);
+}
+
+.btn-icon.delete:hover {
+    border-color: var(--danger);
+    color: var(--danger);
+    background: rgba(255, 93, 93, 0.1);
+}
+
+.pagination {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 2rem;
+    justify-content: center;
+}
+
+.page-link {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    color: var(--text);
+    text-decoration: none;
+    transition: all 0.3s ease;
+}
+
+.page-link:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+.page-link.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: white;
+}
+
+@media (max-width: 768px) {
+    .page-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .data-table {
+        font-size: 0.9rem;
+    }
+
+    .data-table th,
+    .data-table td {
+        padding: 0.75rem 0.5rem;
+    }
+}
+</style>
+
+<script>
+function toggleUserStatus(userId) {
+    if (!confirm('Toggle user status?')) return;
+
+    fetch(`/admin/users/${userId}/toggle-status`, { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.ok) {
+                location.reload();
+            } else {
+                alert(data.message);
+            }
+        });
+}
+
+function deleteUser(userId) {
+    if (!confirm('Delete this user? This action cannot be undone.')) return;
+
+    fetch(`/admin/users/${userId}/delete`, { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.ok) {
+                location.reload();
+            } else {
+                alert(data.message);
+            }
+        });
+}
+</script>
+{% endblock %}
+

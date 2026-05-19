@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+
+{% block title %}Login - Exam System{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <div class="auth-wrapper">
+        <div class="auth-card">
+            <div class="auth-header">
+                <h1>Welcome Back</h1>
+                <p>Choose your role to continue</p>
+            </div>
+
+            <div class="role-selector">
+                <a href="{{ url_for('auth.admin_login') }}" class="role-card role-admin">
+                    <div class="role-icon">
+                        <i class="fas fa-crown"></i>
+                    </div>
+                    <h3>Administrator</h3>
+                    <p>Manage exams, users, and system settings</p>
+                    <div class="role-badge">Full Control</div>
+                </a>
+
+                <a href="{{ url_for('auth.teacher_login') }}" class="role-card role-teacher">
+                    <div class="role-icon">
+                        <i class="fas fa-chalkboard-user"></i>
+                    </div>
+                    <h3>Teacher</h3>
+                    <p>Create and manage your exams</p>
+                    <div class="role-badge">Educator</div>
+                </a>
+
+                <a href="{{ url_for('auth.student_login') }}" class="role-card role-student">
+                    <div class="role-icon">
+                        <i class="fas fa-graduation-cap"></i>
+                    </div>
+                    <h3>Student</h3>
+                    <p>Take exams and view results</p>
+                    <div class="role-badge">Assessment</div>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.auth-container {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+}
+
+.auth-wrapper {
+    width: 100%;
+    max-width: 900px;
+}
+
+.auth-card {
+    background: var(--panel-solid);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    padding: 3rem;
+    animation: fadeIn 0.3s ease;
+}
+
+.auth-header {
+    text-align: center;
+    margin-bottom: 3rem;
+}
+
+.auth-header h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    color: var(--text);
+}
+
+.auth-header p {
+    color: var(--muted);
+    font-size: 1.1rem;
+}
+
+.role-selector {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 2rem;
+}
+
+.role-card {
+    position: relative;
+    padding: 2rem;
+    border: 2px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: rgba(255, 255, 255, 0.03);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    overflow: hidden;
+}
+
+.role-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, transparent 100%);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.role-card:hover {
+    border-color: var(--primary);
+    background: rgba(79, 140, 255, 0.08);
+    transform: translateY(-2px);
+}
+
+.role-card:hover::before {
+    opacity: 1;
+}
+
+.role-card > * {
+    position: relative;
+    z-index: 1;
+}
+
+.role-icon {
+    width: 60px;
+    height: 60px;
+    background: rgba(79, 140, 255, 0.2);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 1rem;
+    font-size: 1.8rem;
+}
+
+.role-card.role-admin .role-icon {
+    background: rgba(255, 193, 7, 0.2);
+    color: #ffc107;
+}
+
+.role-card.role-teacher .role-icon {
+    background: rgba(76, 175, 80, 0.2);
+    color: #4caf50;
+}
+
+.role-card.role-student .role-icon {
+    background: rgba(233, 30, 99, 0.2);
+    color: #e91e63;
+}
+
+.role-card h3 {
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin: 1rem 0 0.5rem;
+    color: var(--text);
+}
+
+.role-card p {
+    color: var(--muted);
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+    flex-grow: 1;
+}
+
+.role-badge {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    background: var(--primary);
+    color: white;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    margin-top: auto;
+}
+
+.role-card.role-admin .role-badge {
+    background: #ffc107;
+}
+
+.role-card.role-teacher .role-badge {
+    background: #4caf50;
+}
+
+.role-card.role-student .role-badge {
+    background: #e91e63;
+}
+
+@media (max-width: 600px) {
+    .role-selector {
+        grid-template-columns: 1fr;
+    }
+
+    .auth-card {
+        padding: 1.5rem;
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+</style>
+{% endblock %}
+

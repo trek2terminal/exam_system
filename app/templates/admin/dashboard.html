@@ -1,0 +1,588 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard - Exam System{% endblock %}
+
+{% block content %}
+<div class="admin-dashboard">
+    <div class="dashboard-header">
+        <div class="header-content">
+            <h1><i class="fas fa-gauge-high"></i> Dashboard</h1>
+            <p>Welcome back, {{ session.get('admin_name') }}! Here's your system overview.</p>
+        </div>
+        <div class="header-actions">
+            <button class="btn btn-secondary" onclick="refreshStats()">
+                <i class="fas fa-sync"></i> Refresh
+            </button>
+            <a href="{{ url_for('admin.exams') }}" class="btn btn-primary">
+                <i class="fas fa-plus"></i> New Exam
+            </a>
+        </div>
+    </div>
+
+    <!-- Statistics Cards -->
+    <div class="stats-grid">
+        <div class="stat-card animate-fade-in-up animate-stagger-1">
+            <div class="stat-icon users-icon">
+                <i class="fas fa-users"></i>
+            </div>
+            <div class="stat-content">
+                <h3>Total Users</h3>
+                <div class="stat-number">{{ total_users }}</div>
+                <p class="stat-detail">{{ total_teachers }} teachers active</p>
+            </div>
+            <a href="{{ url_for('admin.users') }}" class="stat-link"></a>
+        </div>
+
+        <div class="stat-card animate-fade-in-up animate-stagger-2">
+            <div class="stat-icon exams-icon">
+                <i class="fas fa-file-alt"></i>
+            </div>
+            <div class="stat-content">
+                <h3>Total Exams</h3>
+                <div class="stat-number">{{ total_exams }}</div>
+                <p class="stat-detail">{{ active_exams }} active now</p>
+            </div>
+            <a href="{{ url_for('admin.exams') }}" class="stat-link"></a>
+        </div>
+
+        <div class="stat-card animate-fade-in-up animate-stagger-3">
+            <div class="stat-icon sessions-icon">
+                <i class="fas fa-circle-play"></i>
+            </div>
+            <div class="stat-content">
+                <h3>Exam Sessions</h3>
+                <div class="stat-number">{{ total_sessions }}</div>
+                <p class="stat-detail">{{ completed_sessions }} completed</p>
+            </div>
+            <a href="{{ url_for('admin.analytics') }}" class="stat-link"></a>
+        </div>
+
+        <div class="stat-card animate-fade-in-up animate-stagger-4">
+            <div class="stat-icon status-icon">
+                <i class="fas fa-chart-line"></i>
+            </div>
+            <div class="stat-content">
+                <h3>Draft Exams</h3>
+                <div class="stat-number">{{ draft_exams }}</div>
+                <p class="stat-detail">{{ closed_exams }} closed</p>
+            </div>
+            <a href="{{ url_for('admin.exams') }}" class="stat-link"></a>
+        </div>
+    </div>
+
+    <div class="dashboard-grid">
+        <!-- Recent Activity -->
+        <div class="dashboard-card animate-fade-in-up animate-stagger-5">
+            <div class="card-header">
+                <h2>Recent Activity</h2>
+                <a href="{{ url_for('admin.audit_logs') }}" class="card-link">View All</a>
+            </div>
+            <div class="card-body">
+                {% if recent_logs %}
+                    <div class="activity-list">
+                        {% for log in recent_logs[:5] %}
+                        <div class="activity-item animate-fade-in">
+                            <div class="activity-icon {{ log.status }}">
+                                <i class="fas fa-{% if log.action == 'login' %}sign-in-alt{% elif log.action == 'logout' %}sign-out-alt{% elif log.action == 'create_user' %}user-plus{% elif log.action == 'activate_exam' %}play{% else %}edit{% endif %}"></i>
+                            </div>
+                            <div class="activity-content">
+                                <h4>{{ log.action | replace('_', ' ') | title }}</h4>
+                                <p>{{ log.user.name if log.user else 'System' }} on {{ log.resource_type }}</p>
+                                <small>{{ log.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</small>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="empty-state">
+                        <i class="fas fa-inbox"></i>
+                        <p>No recent activity</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Exam Status Breakdown -->
+        <div class="dashboard-card animate-fade-in-up animate-stagger-5">
+            <div class="card-header">
+                <h2>Exam Status</h2>
+            </div>
+            <div class="card-body">
+                <div class="status-breakdown">
+                    <div class="status-item">
+                        <div class="status-label">
+                            <span>Active</span>
+                            <strong>{{ active_exams }}</strong>
+                        </div>
+                        <div class="status-bar">
+                            <div class="status-fill active" style="width: {{ (active_exams / total_exams * 100) if total_exams else 0 }}%"></div>
+                        </div>
+                    </div>
+                    <div class="status-item">
+                        <div class="status-label">
+                            <span>Draft</span>
+                            <strong>{{ draft_exams }}</strong>
+                        </div>
+                        <div class="status-bar">
+                            <div class="status-fill draft" style="width: {{ (draft_exams / total_exams * 100) if total_exams else 0 }}%"></div>
+                        </div>
+                    </div>
+                    <div class="status-item">
+                        <div class="status-label">
+                            <span>Closed</span>
+                            <strong>{{ closed_exams }}</strong>
+                        </div>
+                        <div class="status-bar">
+                            <div class="status-fill closed" style="width: {{ (closed_exams / total_exams * 100) if total_exams else 0 }}%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="quick-actions">
+        <h3>Quick Actions</h3>
+        <div class="action-grid">
+            <a href="{{ url_for('admin.create_teacher') }}" class="action-card">
+                <div class="action-icon">
+                    <i class="fas fa-user-plus"></i>
+                </div>
+                <h4>Create Teacher</h4>
+                <p>Add new teacher account</p>
+            </a>
+            <a href="{{ url_for('admin.exams') }}" class="action-card">
+                <div class="action-icon">
+                    <i class="fas fa-file-alt"></i>
+                </div>
+                <h4>Manage Exams</h4>
+                <p>View and control exams</p>
+            </a>
+            <a href="{{ url_for('admin.users') }}" class="action-card">
+                <div class="action-icon">
+                    <i class="fas fa-users"></i>
+                </div>
+                <h4>Manage Users</h4>
+                <p>Control system users</p>
+            </a>
+            <a href="{{ url_for('admin.analytics') }}" class="action-card">
+                <div class="action-icon">
+                    <i class="fas fa-chart-bar"></i>
+                </div>
+                <h4>View Analytics</h4>
+                <p>System statistics</p>
+            </a>
+        </div>
+    </div>
+</div>
+
+<style>
+.admin-dashboard {
+    padding: 2rem;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+.dashboard-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 3rem;
+    gap: 2rem;
+}
+
+.header-content h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.header-content p {
+    color: var(--muted);
+    font-size: 1rem;
+}
+
+.header-actions {
+    display: flex;
+    gap: 1rem;
+}
+
+/* Statistics Grid */
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 3rem;
+}
+
+.stat-card {
+    position: relative;
+    background: linear-gradient(135deg, var(--panel-solid) 0%, var(--panel) 100%);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    overflow: hidden;
+}
+
+.stat-card::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -50%;
+    width: 200px;
+    height: 200px;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.stat-card:hover {
+    border-color: var(--primary);
+    transform: translateY(-2px);
+}
+
+.stat-card:hover::before {
+    opacity: 1;
+}
+
+.stat-icon {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    flex-shrink: 0;
+}
+
+.stat-icon.users-icon {
+    background: rgba(79, 140, 255, 0.15);
+    color: #4f8cff;
+}
+
+.stat-icon.exams-icon {
+    background: rgba(38, 194, 129, 0.15);
+    color: #26c281;
+}
+
+.stat-icon.sessions-icon {
+    background: rgba(245, 165, 36, 0.15);
+    color: #f5a524;
+}
+
+.stat-icon.status-icon {
+    background: rgba(233, 30, 99, 0.15);
+    color: #e91e63;
+}
+
+.stat-content h3 {
+    font-size: 0.9rem;
+    color: var(--muted);
+    font-weight: 500;
+    text-transform: uppercase;
+    margin-bottom: 0.5rem;
+}
+
+.stat-number {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 0.25rem;
+}
+
+.stat-detail {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin: 0;
+}
+
+.stat-link {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 0;
+}
+
+/* Dashboard Grid */
+
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 3rem;
+}
+
+.dashboard-card {
+    background: var(--panel-solid);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+}
+
+.card-header {
+    padding: 1.5rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.card-header h2 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.card-link {
+    color: var(--primary);
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: color 0.3s ease;
+}
+
+.card-link:hover {
+    color: var(--primary-2);
+    text-decoration: underline;
+}
+
+.card-body {
+    padding: 1.5rem;
+}
+
+/* Activity List */
+
+.activity-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.activity-item {
+    display: flex;
+    gap: 1rem;
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: var(--radius-md);
+    border-left: 3px solid var(--primary);
+}
+
+.activity-item.failed {
+    border-left-color: var(--danger);
+}
+
+.activity-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(79, 140, 255, 0.15);
+    color: var(--primary);
+    flex-shrink: 0;
+}
+
+.activity-icon.failed {
+    background: rgba(255, 93, 93, 0.15);
+    color: var(--danger);
+}
+
+.activity-content h4 {
+    margin: 0 0 0.25rem;
+    font-size: 0.95rem;
+    color: var(--text);
+}
+
+.activity-content p {
+    margin: 0 0 0.25rem;
+    color: var(--muted);
+    font-size: 0.85rem;
+}
+
+.activity-content small {
+    color: var(--muted);
+    font-size: 0.8rem;
+}
+
+/* Status Breakdown */
+
+.status-breakdown {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.status-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.status-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.9rem;
+}
+
+.status-label span {
+    color: var(--muted);
+}
+
+.status-label strong {
+    color: var(--text);
+    font-size: 1.1rem;
+}
+
+.status-bar {
+    height: 8px;
+    background: var(--panel);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.status-fill {
+    height: 100%;
+    transition: width 0.5s ease;
+    min-width: 2px;
+}
+
+.status-fill.active {
+    background: var(--primary);
+}
+
+.status-fill.draft {
+    background: var(--warning);
+}
+
+.status-fill.closed {
+    background: var(--muted);
+}
+
+/* Quick Actions */
+
+.quick-actions {
+    margin-top: 3rem;
+}
+
+.quick-actions h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 1.5rem;
+}
+
+.action-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+}
+
+.action-card {
+    padding: 1.5rem;
+    background: linear-gradient(135deg, rgba(79, 140, 255, 0.1) 0%, rgba(38, 194, 129, 0.05) 100%);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    text-align: center;
+    text-decoration: none;
+    color: inherit;
+    transition: all 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+}
+
+.action-card:hover {
+    border-color: var(--primary);
+    background: linear-gradient(135deg, rgba(79, 140, 255, 0.15) 0%, rgba(38, 194, 129, 0.1) 100%);
+    transform: translateY(-2px);
+}
+
+.action-icon {
+    width: 60px;
+    height: 60px;
+    background: var(--primary);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 1.5rem;
+}
+
+.action-card h4 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.action-card p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.85rem;
+}
+
+/* Empty State */
+
+.empty-state {
+    text-align: center;
+    padding: 2rem;
+    color: var(--muted);
+}
+
+.empty-state i {
+    font-size: 2rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+}
+
+@media (max-width: 768px) {
+    .dashboard-header {
+        flex-direction: column;
+    }
+
+    .header-actions {
+        width: 100%;
+    }
+
+    .header-actions button,
+    .header-actions a {
+        flex: 1;
+    }
+
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .stat-card {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .dashboard-grid {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+
+<script>
+function refreshStats() {
+    location.reload();
+}
+</script>
+{% endblock %}
+
