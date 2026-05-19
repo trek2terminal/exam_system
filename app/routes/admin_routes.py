@@ -1,6 +1,8 @@
 import re
-from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash, session
+import os
+from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash, session, current_app
 from datetime import datetime, timedelta
+from werkzeug.utils import secure_filename
 from app.models.database import db
 from app.models.user_model import User
 from app.models.exam_model import ExamSet, Question
@@ -11,6 +13,40 @@ from app.utils.helpers import admin_required
 from app.utils.network import get_client_ip
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
+
+
+def _validate_username(username):
+    return bool(re.fullmatch(r"[A-Za-z0-9_.@-]{4,50}", username or ""))
+
+
+def _validate_password(password):
+    return (
+        len(password or "") >= 10
+        and re.search(r"[A-Z]", password or "")
+        and re.search(r"[a-z]", password or "")
+        and re.search(r"\d", password or "")
+    )
+
+
+def _save_profile_photo(file_storage, user_id):
+    if not file_storage or not file_storage.filename:
+        return None
+
+    allowed = {"png", "jpg", "jpeg", "webp", "gif"}
+    filename = secure_filename(file_storage.filename)
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if ext not in allowed:
+        raise ValueError("Photo must be PNG, JPG, WEBP, or GIF.")
+
+    upload_root = os.path.join(current_app.static_folder, "uploads", "profiles")
+    os.makedirs(upload_root, exist_ok=True)
+    stored_name = f"user_{user_id}_{int(datetime.utcnow().timestamp())}.{ext}"
+    file_storage.save(os.path.join(upload_root, stored_name))
+    return f"uploads/profiles/{stored_name}"
+
+
+def _render_create_teacher(status_code=200):
+    return render_template("admin/create_teacher.html", form_data=request.form), status_code
 
 
 # ==================== DASHBOARD & OVERVIEW ====================
@@ -95,27 +131,23 @@ def create_teacher():
         # Validation
         if not name or not username or not password:
             flash("Name, username, and password are required.", "danger")
-            return redirect(url_for("admin.create_teacher"))
+            return _render_create_teacher(400)
 
-        if not re.fullmatch(r"[A-Za-z0-9_.-]{4,50}", username):
-            flash("Username must be 4-50 characters and use only letters, numbers, dot, dash, or underscore.", "danger")
-            return redirect(url_for("admin.create_teacher"))
+        if not _validate_username(username):
+            flash("Username must be 4-50 characters and use only letters, numbers, dot, @, dash, or underscore.", "danger")
+            return _render_create_teacher(400)
 
-        if len(password) < 10:
-            flash("Password must be at least 10 characters long.", "danger")
-            return redirect(url_for("admin.create_teacher"))
-
-        if not (re.search(r"[A-Z]", password) and re.search(r"[a-z]", password) and re.search(r"\d", password)):
-            flash("Password must include uppercase, lowercase, and a number.", "danger")
-            return redirect(url_for("admin.create_teacher"))
+        if not _validate_password(password):
+            flash("Password must be at least 10 characters and include uppercase, lowercase, and a number.", "danger")
+            return _render_create_teacher(400)
 
         if User.query.filter_by(username=username).first():
             flash("Username already exists.", "danger")
-            return redirect(url_for("admin.create_teacher"))
+            return _render_create_teacher(400)
 
         if email and User.query.filter_by(email=email).first():
             flash("Email already exists.", "danger")
-            return redirect(url_for("admin.create_teacher"))
+            return _render_create_teacher(400)
 
         # Create teacher
         teacher = User(
@@ -148,7 +180,7 @@ def create_teacher():
         flash(f"Teacher account for {name} created successfully!", "success")
         return redirect(url_for("admin.users"))
 
-    return render_template("admin/create_teacher.html")
+    return render_template("admin/create_teacher.html", form_data={})
 
 
 @admin_bp.route("/users/<int:user_id>/toggle-status", methods=["POST"])
@@ -157,8 +189,8 @@ def toggle_user_status(user_id):
     """Enable/Disable user account"""
     user = User.query.get_or_404(user_id)
 
-    if user.role == "admin":
-        return jsonify({"ok": False, "message": "Cannot disable admin accounts"}), 400
+    if user.id == session.get("admin_id"):
+        return jsonify({"ok": False, "message": "You cannot disable your own account"}), 400
 
     user.is_active = not user.is_active
     db.session.commit()
@@ -178,6 +210,98 @@ def toggle_user_status(user_id):
         "message": f"User {'activated' if user.is_active else 'deactivated'}",
         "is_active": user.is_active
     })
+
+
+@admin_bp.route("/users/<int:user_id>/edit", methods=["GET", "POST"])
+@admin_required
+def edit_user(user_id):
+    """Admin can edit account details, profile photo, status, role, and password."""
+    user = User.query.get_or_404(user_id)
+
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        username = request.form.get("username", "").strip()
+        email = request.form.get("email", "").strip() or None
+        phone = request.form.get("phone", "").strip() or None
+        role = request.form.get("role", user.role).strip()
+        department = request.form.get("department", "").strip() or None
+        designation = request.form.get("designation", "").strip() or None
+        password = request.form.get("password", "").strip()
+        profile_picture = request.form.get("profile_picture", "").strip() or None
+        is_active = request.form.get("is_active") == "on"
+        is_verified = request.form.get("is_verified") == "on"
+
+        if not name or not username:
+            flash("Name and username are required.", "danger")
+            return render_template("admin/edit_user.html", user=user, form_data=request.form), 400
+
+        if not _validate_username(username):
+            flash("Username must be 4-50 characters and use only letters, numbers, dot, @, dash, or underscore.", "danger")
+            return render_template("admin/edit_user.html", user=user, form_data=request.form), 400
+
+        username_owner = User.query.filter(User.username == username, User.id != user.id).first()
+        if username_owner:
+            flash("Username already exists.", "danger")
+            return render_template("admin/edit_user.html", user=user, form_data=request.form), 400
+
+        if email:
+            email_owner = User.query.filter(User.email == email, User.id != user.id).first()
+            if email_owner:
+                flash("Email already exists.", "danger")
+                return render_template("admin/edit_user.html", user=user, form_data=request.form), 400
+
+        if role not in {"admin", "teacher"}:
+            flash("Role must be admin or teacher.", "danger")
+            return render_template("admin/edit_user.html", user=user, form_data=request.form), 400
+
+        if password and not _validate_password(password):
+            flash("New password must be at least 10 characters and include uppercase, lowercase, and a number.", "danger")
+            return render_template("admin/edit_user.html", user=user, form_data=request.form), 400
+
+        user.name = name
+        user.username = username
+        user.email = email
+        user.phone = phone
+        user.role = role
+        user.department = department
+        user.designation = designation
+        user.profile_picture = profile_picture or user.profile_picture
+        user.is_verified = is_verified
+
+        if user.id == session.get("admin_id") and not is_active:
+            flash("You cannot disable your own admin account.", "danger")
+            return render_template("admin/edit_user.html", user=user, form_data=request.form), 400
+        user.is_active = is_active
+
+        if password:
+            user.set_password(password)
+            user.failed_login_attempts = 0
+            user.locked_until = None
+
+        try:
+            uploaded = _save_profile_photo(request.files.get("photo"), user.id)
+            if uploaded:
+                user.profile_picture = uploaded
+        except ValueError as exc:
+            flash(str(exc), "danger")
+            return render_template("admin/edit_user.html", user=user, form_data=request.form), 400
+
+        db.session.commit()
+
+        AuditLog(
+            user_id=session.get("admin_id"),
+            action="edit_user",
+            resource_type="user",
+            resource_id=user.id,
+            changes=f"Edited user: {user.username}",
+            status="success",
+            ip_address=get_client_ip()
+        ).save()
+
+        flash(f"{user.name}'s account was updated.", "success")
+        return redirect(url_for("admin.users"))
+
+    return render_template("admin/edit_user.html", user=user, form_data={})
 
 
 @admin_bp.route("/users/<int:user_id>/delete", methods=["POST"])
@@ -238,6 +362,9 @@ def activate_exam(exam_id):
 
     if exam.status != "draft":
         return jsonify({"ok": False, "message": "Only draft exams can be activated"}), 400
+
+    if not exam.questions:
+        return jsonify({"ok": False, "message": "Add at least one question before activating"}), 400
 
     exam.activate()
 
@@ -321,16 +448,24 @@ def analytics():
         ExamSet.exam_name,
         db.func.count(StudentSession.id).label('sessions'),
         db.func.avg(Result.percentage).label('avg_percentage')
-    ).join(StudentSession).outerjoin(Result).group_by(ExamSet.id).order_by(
+    ).select_from(ExamSet).outerjoin(
+        StudentSession, StudentSession.exam_set_id == ExamSet.id
+    ).outerjoin(
+        Result, Result.session_id == StudentSession.id
+    ).group_by(ExamSet.id).order_by(
         db.desc('avg_percentage')
     ).limit(10).all()
 
     # Teacher activity
     teacher_activity = db.session.query(
         User.name,
-        db.func.count(ExamSet.id).label('exams_created'),
-        db.func.count(StudentSession.id).label('total_students')
-    ).join(ExamSet).outerjoin(StudentSession).filter(
+        db.func.count(db.distinct(ExamSet.id)).label('exams_created'),
+        db.func.count(db.distinct(StudentSession.id)).label('total_students')
+    ).select_from(User).outerjoin(
+        ExamSet, ExamSet.created_by == User.id
+    ).outerjoin(
+        StudentSession, StudentSession.exam_set_id == ExamSet.id
+    ).filter(
         User.role == "teacher"
     ).group_by(User.id).order_by(db.desc('exams_created')).limit(10).all()
 

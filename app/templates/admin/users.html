@@ -43,7 +43,13 @@
                             <tr class="table-row">
                                 <td>
                                     <div class="user-cell">
-                                        <div class="user-avatar">{{ user.name[0] | upper }}</div>
+                                        <div class="user-avatar">
+                                            {% if user.profile_picture %}
+                                                <img src="{{ url_for('static', filename=user.profile_picture) }}" alt="{{ user.name }}">
+                                            {% else %}
+                                                {{ user.name[0] | upper }}
+                                            {% endif %}
+                                        </div>
                                         <div>
                                             <div class="user-name">{{ user.name }}</div>
                                         </div>
@@ -65,6 +71,9 @@
                                         <button class="btn-icon" onclick="toggleUserStatus({{ user.id }})" title="Toggle Status">
                                             <i class="fas fa-{% if user.is_active %}ban{% else %}check{% endif %}"></i>
                                         </button>
+                                        <a class="btn-icon" href="{{ url_for('admin.edit_user', user_id=user.id) }}" title="Edit Account">
+                                            <i class="fas fa-pen"></i>
+                                        </a>
                                         <button class="btn-icon delete" onclick="deleteUser({{ user.id }})" title="Delete">
                                             <i class="fas fa-trash"></i>
                                         </button>
@@ -231,6 +240,13 @@
     color: white;
     font-weight: 700;
     font-size: 0.9rem;
+    overflow: hidden;
+}
+
+.user-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
 }
 
 .user-name {
@@ -358,32 +374,38 @@ code {
 </style>
 
 <script>
-function toggleUserStatus(userId) {
+async function toggleUserStatus(userId) {
     if (!confirm('Toggle user status?')) return;
 
-    fetch(`/admin/users/${userId}/toggle-status`, { method: 'POST' })
-        .then(r => r.json())
-        .then(data => {
-            if (data.ok) {
-                location.reload();
-            } else {
-                alert(data.message);
-            }
-        });
+    try {
+        const response = await fetch(`/admin/users/${userId}/toggle-status`, { method: 'POST' });
+        const data = await response.json();
+        if (data.ok) {
+            showToast(data.message || 'User status updated.', 'success');
+            setTimeout(() => location.reload(), 700);
+        } else {
+            showToast(data.message || 'Could not update status.', 'error');
+        }
+    } catch (error) {
+        showToast('Could not update user status.', 'error');
+    }
 }
 
-function deleteUser(userId) {
+async function deleteUser(userId) {
     if (!confirm('Delete this user? This action cannot be undone.')) return;
 
-    fetch(`/admin/users/${userId}/delete`, { method: 'POST' })
-        .then(r => r.json())
-        .then(data => {
-            if (data.ok) {
-                location.reload();
-            } else {
-                alert(data.message);
-            }
-        });
+    try {
+        const response = await fetch(`/admin/users/${userId}/delete`, { method: 'POST' });
+        const data = await response.json();
+        if (data.ok) {
+            showToast(data.message || 'User deleted.', 'success');
+            setTimeout(() => location.reload(), 700);
+        } else {
+            showToast(data.message || 'Could not delete user.', 'error');
+        }
+    } catch (error) {
+        showToast('Could not delete user.', 'error');
+    }
 }
 </script>
 {% endblock %}

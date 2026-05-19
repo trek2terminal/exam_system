@@ -200,7 +200,7 @@ window.hideLoader = () => {
     if (window._loader) window._loader.hide();
 };
 
-window.confirm = (title, msg, onOk, onCancel) => {
+window.confirmDialog = (title, msg, onOk, onCancel) => {
     const dialog = new ConfirmDialog(title, msg, onOk, onCancel);
     dialog.show();
 };

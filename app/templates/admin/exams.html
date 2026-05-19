@@ -243,30 +243,36 @@
 </style>
 
 <script>
-function activateExam(examId) {
+async function activateExam(examId) {
     if (!confirm('Activate this exam? Students will be able to join immediately.')) return;
-    fetch(`/admin/exams/${examId}/activate`, { method: 'POST' })
-        .then(r => r.json())
-        .then(data => {
-            if (data.ok) {
-                location.reload();
-            } else {
-                alert('Error: ' + data.message);
-            }
-        });
+    try {
+        const response = await fetch(`/admin/exams/${examId}/activate`, { method: 'POST' });
+        const data = await response.json();
+        if (response.ok && data.ok) {
+            showToast(data.message || 'Exam activated.', 'success');
+            setTimeout(() => location.reload(), 700);
+        } else {
+            showToast(data.message || 'Could not activate exam.', 'error');
+        }
+    } catch (error) {
+        showToast('Could not activate exam.', 'error');
+    }
 }
 
-function closeExam(examId) {
+async function closeExam(examId) {
     if (!confirm('Close this exam? Students will no longer be able to join.')) return;
-    fetch(`/admin/exams/${examId}/close`, { method: 'POST' })
-        .then(r => r.json())
-        .then(data => {
-            if (data.ok) {
-                location.reload();
-            } else {
-                alert('Error: ' + data.message);
-            }
-        });
+    try {
+        const response = await fetch(`/admin/exams/${examId}/close`, { method: 'POST' });
+        const data = await response.json();
+        if (response.ok && data.ok) {
+            showToast(data.message || 'Exam closed.', 'success');
+            setTimeout(() => location.reload(), 700);
+        } else {
+            showToast(data.message || 'Could not close exam.', 'error');
+        }
+    } catch (error) {
+        showToast('Could not close exam.', 'error');
+    }
 }
 </script>
 {% endblock %}

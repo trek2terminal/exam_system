@@ -1,5 +1,5 @@
 from datetime import datetime
-from flask import Blueprint, render_template, redirect, url_for, request, session, flash
+from flask import Blueprint, render_template, redirect, url_for, request, session, flash, jsonify
 from app.models.database import db
 from app.models.exam_model import ExamSet, Question
 from app.models.submission_model import StudentSession, Answer
@@ -162,6 +162,37 @@ def setup_exam(exam_id=None):
         return redirect(url_for("teacher.dashboard"))
 
     return render_template("teacher/exam_setup.html", exam=exam, questions=questions)
+
+
+@teacher_bp.route("/exam/<int:exam_id>/activate", methods=["POST"])
+@teacher_required
+def activate_exam(exam_id):
+    exam = ExamSet.query.get_or_404(exam_id)
+    if exam.created_by != session.get("teacher_id"):
+        return jsonify({"ok": False, "message": "You do not own this exam."}), 403
+
+    if exam.status != "draft":
+        return jsonify({"ok": False, "message": "Only draft exams can be activated."}), 400
+
+    if not exam.questions:
+        return jsonify({"ok": False, "message": "Add at least one question before activating."}), 400
+
+    exam.activate()
+    return jsonify({"ok": True, "message": f"{exam.exam_name} activated."})
+
+
+@teacher_bp.route("/exam/<int:exam_id>/close", methods=["POST"])
+@teacher_required
+def close_exam(exam_id):
+    exam = ExamSet.query.get_or_404(exam_id)
+    if exam.created_by != session.get("teacher_id"):
+        return jsonify({"ok": False, "message": "You do not own this exam."}), 403
+
+    if exam.status == "closed":
+        return jsonify({"ok": False, "message": "Exam is already closed."}), 400
+
+    exam.close()
+    return jsonify({"ok": True, "message": f"{exam.exam_name} closed."})
 
 
 

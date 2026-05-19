@@ -122,12 +122,13 @@
       const response = await fetch(`/teacher/exam/${examId}/activate`, {
         method: 'POST'
       });
+      const data = await response.json();
       
-      if (response.ok) {
-        showToast('Exam activated successfully!', 'success');
+      if (response.ok && data.ok) {
+        showToast(data.message || 'Exam activated successfully!', 'success');
         setTimeout(() => window.location.reload(), 1000);
       } else {
-        showToast('Failed to activate exam', 'error');
+        showToast(data.message || 'Failed to activate exam', 'error');
       }
     } catch (error) {
       showToast('Error activating exam', 'error');
@@ -143,12 +144,13 @@
       const response = await fetch(`/teacher/exam/${examId}/close`, {
         method: 'POST'
       });
+      const data = await response.json();
       
-      if (response.ok) {
-        showToast('Exam closed successfully!', 'success');
+      if (response.ok && data.ok) {
+        showToast(data.message || 'Exam closed successfully!', 'success');
         setTimeout(() => window.location.reload(), 1000);
       } else {
-        showToast('Failed to close exam', 'error');
+        showToast(data.message || 'Failed to close exam', 'error');
       }
     } catch (error) {
       showToast('Error closing exam', 'error');

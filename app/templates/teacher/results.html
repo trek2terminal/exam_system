@@ -1,68 +1,47 @@
 {% extends "base.html" %}
-{% block title %}Teacher Dashboard{% endblock %}
+{% block title %}All Results{% endblock %}
 
 {% block content %}
 <div class="card">
   <div class="row-between">
     <div>
-      <h1>Teacher Dashboard</h1>
-      <p class="muted">Logged in as {{ session.get('teacher_name') }}</p>
+      <h1>All Submissions</h1>
+      <p class="muted">Student sessions from exams created by {{ session.get('teacher_name') }}.</p>
     </div>
-    <a href="{{ url_for('teacher.setup_exam') }}" class="btn primary">Create New Exam Set</a>
+    <a href="{{ url_for('teacher.dashboard') }}" class="btn secondary">Back</a>
   </div>
 
-  <div class="stats">
-    <div class="stat-box">Draft: <strong>{{ draft_count }}</strong></div>
-    <div class="stat-box">Active: <strong>{{ active_count }}</strong></div>
-    <div class="stat-box">Closed: <strong>{{ closed_count }}</strong></div>
-    <div class="stat-box">Submissions: <strong>{{ submitted_count }}</strong></div>
-  </div>
-</div>
-
-<div class="card">
-  <h2>Saved Exam Sets</h2>
-  {% if exams %}
+  {% if sessions %}
     <div class="table-wrap">
       <table>
         <thead>
           <tr>
             <th>Exam</th>
-            <th>Subject</th>
-            <th>Set</th>
-            <th>Code</th>
-            <th>Duration</th>
+            <th>Student</th>
+            <th>Roll No</th>
             <th>Status</th>
-            <th>Access</th>
-            <th>Actions</th>
+            <th>Violations</th>
+            <th>Submitted</th>
+            <th>Action</th>
           </tr>
         </thead>
         <tbody>
-          {% for exam in exams %}
+          {% for s in sessions %}
           <tr>
-            <td>{{ exam.exam_name }}</td>
-            <td>{{ exam.subject }}</td>
-            <td>{{ exam.set_code }}</td>
-            <td>{{ exam.access_code }}</td>
-            <td>{{ exam.duration_minutes }} min</td>
-            <td><span class="badge {{ exam.status }}">{{ exam.status }}</span></td>
-            <td>{{ exam.sessions|length }}</td>
-            <td class="actions">
-              <a class="btn secondary small" href="{{ url_for('teacher.setup_exam', exam_id=exam.id) }}">Edit</a>
-              <a class="btn secondary small" href="{{ url_for('teacher.exam_results', exam_id=exam.id) }}">Results</a>
-              {% if exam.status != 'active' %}
-                <a class="btn primary small" href="{{ url_for('teacher.activate_exam', exam_id=exam.id) }}">Activate</a>
-              {% endif %}
-              {% if exam.status != 'closed' %}
-                <a class="btn danger small" href="{{ url_for('teacher.close_exam', exam_id=exam.id) }}">Close</a>
-              {% endif %}
-            </td>
+            <td>{{ s.exam_set.exam_name }}</td>
+            <td>{{ s.student_name }}</td>
+            <td>{{ s.roll_no }}</td>
+            <td><span class="badge {{ s.status }}">{{ s.status | title }}</span></td>
+            <td>{{ s.focus_violations }}</td>
+            <td>{{ s.submitted_at.strftime("%d-%m-%Y %H:%M") if s.submitted_at else "-" }}</td>
+            <td><a class="btn secondary small" href="{{ url_for('teacher.student_view', session_id=s.id) }}">Mark / View</a></td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
   {% else %}
-    <p>No exam sets created yet.</p>
+    <p class="muted">No student submissions yet.</p>
   {% endif %}
 </div>
 {% endblock %}

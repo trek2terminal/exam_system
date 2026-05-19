@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}Edit User - Admin{% endblock %}
+
+{% set value = form_data.get if form_data else none %}
+
+{% block content %}
+<div class="admin-page compact-page">
+    <div class="page-header">
+        <div>
+            <h1><i class="fas fa-user-gear"></i> Edit Account</h1>
+            <p>Update identity, role, status, photo, and password for {{ user.name }}.</p>
+        </div>
+        <a href="{{ url_for('admin.users') }}" class="btn secondary">
+            <i class="fas fa-arrow-left"></i> Back
+        </a>
+    </div>
+
+    <div class="form-card">
+        <form method="POST" enctype="multipart/form-data" class="admin-form">
+            <div class="profile-edit-head">
+                <div class="user-avatar large">
+                    {% if user.profile_picture %}
+                        <img src="{{ url_for('static', filename=user.profile_picture) }}" alt="{{ user.name }}">
+                    {% else %}
+                        {{ user.name[0] | upper }}
+                    {% endif %}
+                </div>
+                <div>
+                    <h2>{{ user.name }}</h2>
+                    <p class="muted">{{ user.role | title }} account</p>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="name"><i class="fas fa-user"></i> Full Name *</label>
+                    <input type="text" id="name" name="name" required value="{{ form_data.get('name', user.name) if form_data else user.name }}">
+                </div>
+                <div class="form-group">
+                    <label for="username"><i class="fas fa-at"></i> Username *</label>
+                    <input type="text" id="username" name="username" required value="{{ form_data.get('username', user.username) if form_data else user.username }}">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="email"><i class="fas fa-envelope"></i> Email</label>
+                    <input type="email" id="email" name="email" value="{{ form_data.get('email', user.email or '') if form_data else user.email or '' }}">
+                </div>
+                <div class="form-group">
+                    <label for="phone"><i class="fas fa-phone"></i> Phone</label>
+                    <input type="text" id="phone" name="phone" value="{{ form_data.get('phone', user.phone or '') if form_data else user.phone or '' }}">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="role"><i class="fas fa-user-shield"></i> Role</label>
+                    {% set selected_role = form_data.get('role', user.role) if form_data else user.role %}
+                    <select id="role" name="role">
+                        <option value="teacher" {% if selected_role == 'teacher' %}selected{% endif %}>Teacher</option>
+                        <option value="admin" {% if selected_role == 'admin' %}selected{% endif %}>Admin</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="password"><i class="fas fa-key"></i> New Password</label>
+                    <input type="password" id="password" name="password" placeholder="Leave blank to keep current password">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="department"><i class="fas fa-building"></i> Department</label>
+                    <input type="text" id="department" name="department" value="{{ form_data.get('department', user.department or '') if form_data else user.department or '' }}">
+                </div>
+                <div class="form-group">
+                    <label for="designation"><i class="fas fa-briefcase"></i> Designation</label>
+                    <input type="text" id="designation" name="designation" value="{{ form_data.get('designation', user.designation or '') if form_data else user.designation or '' }}">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="profile_picture"><i class="fas fa-image"></i> Existing Photo Path</label>
+                    <input type="text" id="profile_picture" name="profile_picture" value="{{ form_data.get('profile_picture', user.profile_picture or '') if form_data else user.profile_picture or '' }}" placeholder="uploads/profiles/photo.jpg">
+                </div>
+                <div class="form-group">
+                    <label for="photo"><i class="fas fa-upload"></i> Upload Photo</label>
+                    <input type="file" id="photo" name="photo" accept=".png,.jpg,.jpeg,.webp,.gif">
+                </div>
+            </div>
+
+            <div class="settings-row">
+                <label class="checkbox-line">
+                    <input type="checkbox" name="is_active" {% if (form_data and form_data.get('is_active')) or (not form_data and user.is_active) %}checked{% endif %}>
+                    <span>Account active</span>
+                </label>
+                <label class="checkbox-line">
+                    <input type="checkbox" name="is_verified" {% if (form_data and form_data.get('is_verified')) or (not form_data and user.is_verified) %}checked{% endif %}>
+                    <span>Verified</span>
+                </label>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn primary">
+                    <i class="fas fa-save"></i> Save Changes
+                </button>
+                <a href="{{ url_for('admin.users') }}" class="btn secondary">
+                    <i class="fas fa-times"></i> Cancel
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
