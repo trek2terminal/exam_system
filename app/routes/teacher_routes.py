@@ -2,7 +2,7 @@ from datetime import datetime
 from flask import Blueprint, render_template, redirect, url_for, request, session, flash
 from app.models.database import db
 from app.models.exam_model import ExamSet, Question
-from app.models.submission_model import StudentSession
+from app.models.submission_model import StudentSession, Answer
 from app.models.result_model import Result, QuestionMark
 from app.services.exam_service import ExamService
 from app.utils.helpers import teacher_required
@@ -13,11 +13,18 @@ teacher_bp = Blueprint("teacher", __name__, url_prefix="/teacher")
 @teacher_bp.route("/dashboard")
 @teacher_required
 def dashboard():
-    exams = ExamSet.query.order_by(ExamSet.created_at.desc()).all()
-    active_count = ExamSet.query.filter_by(status="active").count()
-    draft_count = ExamSet.query.filter_by(status="draft").count()
-    closed_count = ExamSet.query.filter_by(status="closed").count()
-    submitted_count = StudentSession.query.filter(StudentSession.status.in_(["submitted", "evaluated"])).count()
+    # Only show exams created by the current teacher
+    teacher_id = session.get("teacher_id")
+    exams = ExamSet.query.filter_by(created_by=teacher_id).order_by(ExamSet.created_at.desc()).all()
+    active_count = ExamSet.query.filter_by(created_by=teacher_id, status="active").count()
+    draft_count = ExamSet.query.filter_by(created_by=teacher_id, status="draft").count()
+    closed_count = ExamSet.query.filter_by(created_by=teacher_id, status="closed").count()
+    # Only count sessions from their own exams
+    their_exam_ids = [e.id for e in exams]
+    submitted_count = StudentSession.query.filter(
+        StudentSession.exam_set_id.in_(their_exam_ids) if their_exam_ids else False,
+        StudentSession.status.in_(["submitted", "evaluated"])
+    ).count()
 
     return render_template(
         "teacher/dashboard.html",
@@ -34,6 +41,12 @@ def dashboard():
 @teacher_required
 def setup_exam(exam_id=None):
     exam = ExamSet.query.get(exam_id) if exam_id else None
+
+    # Verify ownership: only allow teacher to edit their own exams
+    if exam and exam.created_by != session.get("teacher_id"):
+        flash("You do not have permission to edit this exam.", "danger")
+        return redirect(url_for("teacher.dashboard"))
+
     questions = Question.query.filter_by(exam_set_id=exam.id).order_by(Question.question_number.asc()).all() if exam else []
 
     if request.method == "POST":
@@ -147,28 +160,16 @@ def setup_exam(exam_id=None):
     return render_template("teacher/exam_setup.html", exam=exam, questions=questions)
 
 
-@teacher_bp.route("/exam/<int:exam_id>/activate")
-@teacher_required
-def activate_exam(exam_id):
-    exam = ExamSet.query.get_or_404(exam_id)
-    exam.activate()
-    flash("Exam activated successfully.", "success")
-    return redirect(url_for("teacher.dashboard"))
-
-
-@teacher_bp.route("/exam/<int:exam_id>/close")
-@teacher_required
-def close_exam(exam_id):
-    exam = ExamSet.query.get_or_404(exam_id)
-    exam.close()
-    flash("Exam closed.", "info")
-    return redirect(url_for("teacher.dashboard"))
-
 
 @teacher_bp.route("/results")
 @teacher_required
 def results():
-    sessions = StudentSession.query.order_by(StudentSession.created_at.desc()).all()
+    # Only show sessions from exams created by the teacher
+    teacher_id = session.get("teacher_id")
+    their_exam_ids = [e.id for e in ExamSet.query.filter_by(created_by=teacher_id).all()]
+    sessions = StudentSession.query.filter(
+        StudentSession.exam_set_id.in_(their_exam_ids) if their_exam_ids else False
+    ).order_by(StudentSession.created_at.desc()).all()
     return render_template("teacher/results.html", sessions=sessions)
 
 

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 from app.models.database import db
 
@@ -16,7 +16,7 @@ class User(db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
 
     # Role & Status
-    role = db.Column(db.String(20), nullable=False, default="student")  # teacher or student
+    role = db.Column(db.String(20), nullable=False, default="student")  # admin, teacher, or student
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     is_verified = db.Column(db.Boolean, default=False, nullable=False)
 
@@ -66,7 +66,7 @@ class User(db.Model):
         self.failed_login_attempts += 1
         if self.failed_login_attempts >= 5:
             # Lock account for 30 minutes
-            self.locked_until = datetime.utcnow() + datetime.timedelta(minutes=30)
+            self.locked_until = datetime.utcnow() + timedelta(minutes=30)
         db.session.commit()
 
     def reset_failed_attempts(self):
@@ -88,6 +88,9 @@ class User(db.Model):
         return True
 
     # ====================== ROLE CHECKS ======================
+    def is_admin(self) -> bool:
+        return self.role == "admin"
+
     def is_teacher(self) -> bool:
         return self.role == "teacher"
 
@@ -116,6 +119,9 @@ class AnonymousUser:
     """For Flask-Login compatibility in future"""
     id = None
     role = None
+
+    def is_admin(self):
+        return False
 
     def is_teacher(self):
         return False

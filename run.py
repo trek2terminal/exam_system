@@ -1,7 +1,12 @@
 import os
 import sys
+import io
 from app import create_app
 from app.utils.db_manager import reset_database, init_database, show_tables
+
+# Fix Unicode output on Windows
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 app = create_app()
 

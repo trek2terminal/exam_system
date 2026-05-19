@@ -8,39 +8,57 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
 
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/animations.css') }}">
     {% block head %}{% endblock %}
 </head>
-<body>
+<body class="page-transition">
     <div class="app-shell">
         <header class="topbar">
             <div class="brand">
-                <div class="brand-mark">E</div>
+                <div class="brand-mark">⚡</div>
                 <div>
-                    <div class="brand-title">Local Exam System</div>
-                    <div class="brand-subtitle">Secure offline assessment</div>
+                    <div class="brand-title">Exam System</div>
+                    <div class="brand-subtitle">Professional Assessment Platform</div>
                 </div>
             </div>
 
-            <nav class="nav">
-                <a href="{{ url_for('student.join_exam') }}">Student</a>
-                {% if session.get('teacher_id') %}
-                    <a href="{{ url_for('teacher.dashboard') }}">Dashboard</a>
-                    <a href="{{ url_for('teacher.results') }}">Results</a>
-                    <a href="{{ url_for('auth.teacher_logout') }}">Logout</a>
+            <div class="nav">
+                {% if session.get('admin_id') %}
+                    <a href="{{ url_for('admin.dashboard') }}" class="nav-link">
+                        <i class="fas fa-gauge-high"></i> Dashboard
+                    </a>
+                    <a href="{{ url_for('admin.exams') }}" class="nav-link">
+                        <i class="fas fa-file-alt"></i> Exams
+                    </a>
+                    <a href="{{ url_for('admin.users') }}" class="nav-link">
+                        <i class="fas fa-users"></i> Users
+                    </a>
+                    <a href="{{ url_for('auth.admin_logout') }}" class="nav-link nav-logout">
+                        <i class="fas fa-sign-out-alt"></i> Logout
+                    </a>
+                {% elif session.get('teacher_id') %}
+                    <a href="{{ url_for('teacher.dashboard') }}" class="nav-link">Dashboard</a>
+                    <a href="{{ url_for('teacher.results') }}" class="nav-link">Results</a>
+                    <a href="{{ url_for('auth.teacher_logout') }}" class="nav-link nav-logout">Logout</a>
                 {% else %}
-                    <a href="{{ url_for('auth.teacher_login') }}">Teacher Login</a>
+                    <a href="{{ url_for('auth.login_selector') }}" class="nav-link">Login</a>
                 {% endif %}
-            </nav>
+                <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme">
+                    <i class="fas fa-moon"></i>
+                </button>
+            </div>
         </header>
 
         <main class="page-wrap">
-            {% with messages = get_flashed_messages() %}
+            {% with messages = get_flashed_messages(with_categories=true) %}
                 {% if messages %}
                     <div class="flash-stack">
-                        {% for message in messages %}
-                            <div class="flash-message">
+                        {% for category, message in messages %}
+                            <div class="flash-message flash-{{ category }} animate-slide-in">
+                                <i class="fas fa-{% if category == 'success' %}check-circle{% elif category == 'danger' %}exclamation-circle{% elif category == 'warning' %}warning{% else %}info-circle{% endif %}"></i>
                                 {{ message }}
                             </div>
                         {% endfor %}
@@ -52,7 +70,13 @@
         </main>
     </div>
 
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script src="{{ url_for('static', filename='js/loader.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/utilities.js') }}"></script>
     <script src="{{ url_for('static', filename='js/exam.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/ui.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

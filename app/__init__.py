@@ -50,11 +50,13 @@ def create_app(config_class=None):
 
     # ====================== BLUEPRINTS ======================
     from app.routes.auth_routes import auth_bp
+    from app.routes.admin_routes import admin_bp
     from app.routes.teacher_routes import teacher_bp
     from app.routes.student_routes import student_bp
     from app.routes.api_routes import api_bp
 
     app.register_blueprint(auth_bp)
+    app.register_blueprint(admin_bp)
     app.register_blueprint(teacher_bp)
     app.register_blueprint(student_bp)
     app.register_blueprint(api_bp)

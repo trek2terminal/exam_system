@@ -30,6 +30,51 @@ def teacher_required(view):
     return wrapper
 
 
+def admin_required(view):
+    """Decorator to protect admin-only routes"""
+
+    @wraps(view)
+    def wrapper(*args, **kwargs):
+        if not session.get("admin_id"):
+            flash("Please log in as admin to access this page.", "danger")
+            return redirect(url_for("auth.admin_login"))
+        if session.get("role") != "admin":
+            flash("Unauthorized access. Admin privileges required.", "danger")
+            return redirect(url_for("auth.admin_login"))
+        return view(*args, **kwargs)
+
+    return wrapper
+
+
+def student_required(view):
+    """Decorator to protect student-only routes"""
+
+    @wraps(view)
+    def wrapper(*args, **kwargs):
+        if not session.get("student_id"):
+            flash("Please log in as student to access this page.", "danger")
+            return redirect(url_for("auth.student_login"))
+        if session.get("role") != "student":
+            flash("Unauthorized access.", "danger")
+            return redirect(url_for("auth.student_login"))
+        return view(*args, **kwargs)
+
+    return wrapper
+
+
+def any_auth_required(view):
+    """Decorator for routes that require any authentication"""
+
+    @wraps(view)
+    def wrapper(*args, **kwargs):
+        if not session.get("user_id"):
+            flash("Please log in to access this page.", "danger")
+            return redirect(url_for("auth.admin_login"))
+        return view(*args, **kwargs)
+
+    return wrapper
+
+
 def generate_access_code():
     """Generate secure exam access code"""
     return secrets.token_urlsafe(8).replace("-", "").replace("_", "").upper()[:10]
