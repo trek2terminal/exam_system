@@ -2,19 +2,67 @@
 {% block title %}Join Exam{% endblock %}
 
 {% block content %}
-<div class="card narrow">
-  <h1>Join Exam</h1>
-  <form method="post" class="form-grid">
-    <label>Student Name</label>
-    <input type="text" name="student_name" required>
+<div class="join-shell">
+  <section class="join-card">
+    <div class="join-top">
+      <div class="join-mark"><i class="fas fa-bolt"></i></div>
+      <div>
+        <p class="join-kicker">Exam lobby</p>
+        <h1>Enter your access code</h1>
+        <p class="muted">Your identity is already set. No need to type it again.</p>
+      </div>
+    </div>
 
-    <label>Roll No</label>
-    <input type="text" name="roll_no" required>
+    <div class="student-pass">
+      <div><span>Name</span><strong>{{ student_name }}</strong></div>
+      <div><span>Roll No</span><strong>{{ roll_no }}</strong></div>
+    </div>
 
-    <label>Exam Access Code</label>
-    <input type="text" name="access_code" placeholder="Enter code from teacher" required>
+    <form method="post" class="join-form" id="joinExamForm">
+      <label for="access_code">Exam Access Code</label>
+      <div class="code-input-wrap">
+        <i class="fas fa-key"></i>
+        <input id="access_code" type="text" name="access_code" placeholder="Paste code from teacher" required autofocus autocomplete="off">
+      </div>
+      <button type="submit" class="join-submit" id="joinExamButton">
+        <span class="button-text">Join Exam <i class="fas fa-arrow-right"></i></span>
+        <span class="button-loader"></span>
+      </button>
+    </form>
 
-    <button type="submit" class="btn primary">Join</button>
-  </form>
+    <a href="{{ url_for('auth.student_login') }}" class="change-identity">Use different name or roll number</a>
+  </section>
 </div>
+
+<style>
+.join-shell { min-height: calc(100vh - 150px); display: grid; place-items: center; padding: 2rem 1rem; }
+.join-card { width: min(560px, 100%); border: 1px solid var(--border); border-radius: 8px; background: linear-gradient(135deg, rgba(79, 140, 255, 0.12), rgba(38, 194, 129, 0.08)), var(--panel-solid); padding: 1.4rem; box-shadow: 0 30px 90px rgba(0,0,0,.22); animation: joinPop .55s ease both; }
+.join-top { display: flex; gap: 1rem; align-items: flex-start; }
+.join-mark { width: 54px; height: 54px; display: grid; place-items: center; border-radius: 8px; color: white; background: linear-gradient(135deg, #4f8cff, #26c281); animation: softBounce 2.8s ease-in-out infinite; }
+.join-kicker { margin: 0 0 .3rem; color: var(--primary); font-size: .78rem; font-weight: 800; text-transform: uppercase; }
+.join-top h1 { margin: 0 0 .45rem; font-size: clamp(1.8rem, 4vw, 2.5rem); }
+.student-pass { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; margin: 1.25rem 0; }
+.student-pass div { border: 1px solid var(--border); border-radius: 8px; padding: .9rem; background: rgba(255,255,255,.055); }
+.student-pass span { display: block; color: var(--muted); font-size: .78rem; margin-bottom: .25rem; }
+.student-pass strong { overflow-wrap: anywhere; }
+.join-form { display: grid; gap: .8rem; }
+.code-input-wrap { position: relative; }
+.code-input-wrap i { position: absolute; top: 50%; left: 1rem; transform: translateY(-50%); color: var(--primary); }
+.code-input-wrap input { height: 58px; padding-left: 2.8rem; font-size: 1.05rem; text-transform: uppercase; letter-spacing: 0; }
+.join-submit { position: relative; min-height: 56px; border-radius: 8px; color: white; background: linear-gradient(135deg, #4f8cff, #26c281); font-weight: 800; overflow: hidden; }
+.join-submit.loading .button-text { display: none; }
+.button-loader { display: none; width: 22px; height: 22px; border-radius: 50%; border: 3px solid rgba(255,255,255,.35); border-top-color: white; animation: spin .8s linear infinite; }
+.join-submit.loading .button-loader { display: inline-block; }
+.change-identity { display: inline-flex; margin-top: 1rem; color: var(--muted); font-weight: 700; }
+.change-identity:hover { color: var(--primary); }
+@keyframes joinPop { from { opacity: 0; transform: translateY(18px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes softBounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+@media (max-width: 560px) { .student-pass { grid-template-columns: 1fr; } }
+</style>
+
+<script>
+document.getElementById('joinExamForm').addEventListener('submit', function () {
+  document.getElementById('joinExamButton').classList.add('loading');
+});
+</script>
 {% endblock %}

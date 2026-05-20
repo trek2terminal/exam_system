@@ -58,6 +58,28 @@ function getToastIcon(type) {
     return icons[type] || icons.info;
 }
 
+// Flash messages rendered after redirects
+function initFlashAutoDismiss() {
+    const messages = document.querySelectorAll('.flash-message');
+
+    messages.forEach((message, index) => {
+        const isImportant = message.classList.contains('flash-danger') || message.classList.contains('flash-warning');
+        const delay = (isImportant ? 4500 : 2600) + (index * 180);
+
+        setTimeout(() => {
+            message.classList.add('flash-hiding');
+            setTimeout(() => {
+                message.remove();
+
+                const stack = document.querySelector('.flash-stack');
+                if (stack && !stack.querySelector('.flash-message')) {
+                    stack.remove();
+                }
+            }, 320);
+        }, delay);
+    });
+}
+
 // Auto-save indicator
 function updateAutoSaveStatus(status) {
     const indicator = document.querySelector('.auto-save-indicator');
@@ -267,6 +289,7 @@ function hideSkeleton(container, content) {
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
     loadTheme();
+    initFlashAutoDismiss();
     
     // Initialize all dropdowns
     document.querySelectorAll('.dropdown').forEach(dropdown => {

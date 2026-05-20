@@ -23,13 +23,18 @@ def _redirect_if_not_owner(session_code):
 
 @student_bp.route("/join", methods=["GET", "POST"])
 def join_exam():
+    student_name = session.get("student_name", "").strip()
+    roll_no = session.get("roll_no", "").strip()
+
+    if not student_name or not roll_no:
+        flash("Please enter your student details first.", "warning")
+        return redirect(url_for("auth.student_login"))
+
     if request.method == "POST":
-        student_name = request.form.get("student_name", "").strip()
-        roll_no = request.form.get("roll_no", "").strip()
         access_code = request.form.get("access_code", "").strip().upper()
 
-        if not student_name or not roll_no or not access_code:
-            flash("All fields are required.", "danger")
+        if not access_code:
+            flash("Exam access code is required.", "danger")
             return redirect(url_for("student.join_exam"))
 
         exam = ExamSet.query.filter_by(access_code=access_code).first()
@@ -48,7 +53,6 @@ def join_exam():
             roll_no=roll_no
         )
 
-        session.clear()
         session.permanent = True
         session["role"] = "student"
         session["student_id"] = student_session.id
@@ -64,7 +68,7 @@ def join_exam():
 
         return redirect(url_for("student.exam", session_code=student_session.session_code))
 
-    return render_template("student/join.html")
+    return render_template("student/join.html", student_name=student_name, roll_no=roll_no)
 
 
 @student_bp.route("/waiting/<session_code>")

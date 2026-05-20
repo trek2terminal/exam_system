@@ -239,6 +239,21 @@
     color: var(--primary);
 }
 
+.flash-message.flash-hiding {
+    animation: flashDismiss 0.32s ease forwards;
+}
+
+@keyframes flashDismiss {
+    from {
+        opacity: 1;
+        transform: translateX(0);
+    }
+    to {
+        opacity: 0;
+        transform: translateX(36px);
+    }
+}
+
 /* Loading Spinner */
 
 .spinner {

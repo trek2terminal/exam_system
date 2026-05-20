@@ -12,6 +12,16 @@
     </div>
   </div>
 
+  <div class="proctor-status" id="proctorStatus">
+    <div>
+      <span>Integrity Watch</span>
+      <strong><span id="warningCount">0</span>/5 warnings</strong>
+    </div>
+    <div class="warning-dots" id="warningDots">
+      <span></span><span></span><span></span><span></span><span></span>
+    </div>
+  </div>
+
   <div class="exam-topbar">
     <div>
       <h1>{{ exam.exam_name }}</h1>
@@ -31,7 +41,7 @@
 
   <div class="exam-alert">
     <i class="fas fa-shield-halved"></i>
-    <span>Stay in fullscreen and keep this tab focused. Fullscreen exit submits the exam automatically.</span>
+    <span>Stay in fullscreen and keep this tab focused. Escape, fullscreen exit, tab switching, close attempts, and shortcuts are blocked and tracked. Warning 5 auto-submits the exam.</span>
   </div>
 
   <div id="questionList">
@@ -73,6 +83,40 @@
     {% endfor %}
   </div>
 </div>
+
+<div class="proctor-warning" id="proctorWarning" aria-hidden="true">
+  <div class="proctor-warning-card">
+    <div class="warning-icon"><i class="fas fa-triangle-exclamation"></i></div>
+    <p class="warning-kicker">Exam integrity warning</p>
+    <h2 id="proctorWarningTitle">Stay in the exam</h2>
+    <p id="proctorWarningMessage">Leaving fullscreen or switching tabs is not allowed.</p>
+    <div class="warning-progress"><span id="proctorWarningProgress"></span></div>
+  </div>
+</div>
+
+<style>
+.proctor-status { position: sticky; top: 86px; z-index: 12; display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 14px; padding: 12px 14px; border: 1px solid rgba(245,165,36,.28); border-radius: 8px; background: rgba(245,165,36,.10); backdrop-filter: blur(12px); }
+.proctor-status span { color: var(--muted); font-size: .78rem; font-weight: 800; text-transform: uppercase; }
+.proctor-status strong { display: block; margin-top: 2px; }
+.warning-dots { display: flex; gap: 7px; }
+.warning-dots span { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(245,165,36,.7); background: transparent; transition: .2s ease; }
+.warning-dots span.active { background: #f5a524; box-shadow: 0 0 18px rgba(245,165,36,.55); }
+.proctor-warning { position: fixed; inset: 0; z-index: 5000; display: none; place-items: center; padding: 20px; background: rgba(6,10,18,.68); backdrop-filter: blur(10px); }
+.proctor-warning.active { display: grid; animation: warningFade .18s ease both; }
+.proctor-warning-card { width: min(440px, 100%); border: 1px solid rgba(245,165,36,.35); border-radius: 8px; background: linear-gradient(135deg, rgba(245,165,36,.16), rgba(239,68,68,.10)), var(--panel-solid); padding: 1.4rem; text-align: center; box-shadow: 0 30px 100px rgba(0,0,0,.45); animation: warningPop .26s ease both; }
+.proctor-warning.level-4 .proctor-warning-card,
+.proctor-warning.level-5 .proctor-warning-card { border-color: rgba(239,68,68,.7); box-shadow: 0 0 0 1px rgba(239,68,68,.25), 0 30px 110px rgba(239,68,68,.35); }
+.proctor-warning.level-5 .warning-icon { background: rgba(239,68,68,.22); color: #fca5a5; animation: warningShake .28s ease both; }
+.warning-icon { width: 58px; height: 58px; display: grid; place-items: center; margin: 0 auto 1rem; border-radius: 8px; background: rgba(245,165,36,.18); color: #fbbf24; font-size: 1.5rem; }
+.warning-kicker { color: #fbbf24; font-size: .78rem; font-weight: 800; text-transform: uppercase; margin: 0 0 .35rem; }
+.proctor-warning-card h2 { margin-bottom: .5rem; }
+.proctor-warning-card p { color: var(--muted); }
+.warning-progress { height: 6px; background: rgba(255,255,255,.12); border-radius: 999px; overflow: hidden; margin-top: 1rem; }
+.warning-progress span { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #f5a524, #ef4444); transition: width .25s ease; }
+@keyframes warningFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes warningPop { from { opacity: 0; transform: translateY(18px) scale(.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes warningShake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+</style>
 {% endblock %}
 
 {% block scripts %}
