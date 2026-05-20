@@ -40,17 +40,36 @@ class ExamService:
 
     @staticmethod
     def create_student_session(exam_set_id: int, student_name: str, roll_no: str):
-        """Create a new student exam session"""
-        session = StudentSession(
-            student_name=student_name,
-            roll_no=roll_no,
+        """Create or reuse one student exam session for an exam and roll number."""
+        normalized_roll = (roll_no or "").strip().upper()
+        clean_name = (student_name or "").strip()
+
+        existing_session = (
+            StudentSession.query.filter(
+                StudentSession.exam_set_id == exam_set_id,
+                db.func.upper(StudentSession.roll_no) == normalized_roll,
+            )
+            .order_by(StudentSession.created_at.desc())
+            .first()
+        )
+
+        if existing_session:
+            if clean_name and existing_session.student_name != clean_name and existing_session.status in ["waiting", "active"]:
+                existing_session.student_name = clean_name
+                existing_session.updated_at = datetime.utcnow()
+                db.session.commit()
+            return existing_session
+
+        student_session = StudentSession(
+            student_name=clean_name,
+            roll_no=normalized_roll,
             exam_set_id=exam_set_id,
             status="waiting",
             start_time=None,
         )
-        db.session.add(session)
+        db.session.add(student_session)
         db.session.commit()
-        return session
+        return student_session
 
 
     @staticmethod

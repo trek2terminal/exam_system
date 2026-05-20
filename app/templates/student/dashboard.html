@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Student Dashboard{% endblock %}
+
+{% block content %}
+<div class="student-dashboard-shell">
+  <section class="student-dashboard-hero animate-fade-in-up">
+    <div>
+      <p class="student-kicker">Your exam space</p>
+      <h1>{{ greeting }}, {{ student_name }}.</h1>
+      <p>{{ quote }}</p>
+    </div>
+    <div class="student-pass dashboard-pass">
+      <div><span>Roll No</span><strong>{{ roll_no }}</strong></div>
+      <div><span>Assigned</span><strong>{{ assigned_exams | length }} exams</strong></div>
+    </div>
+  </section>
+
+  <section class="student-dashboard-grid">
+    <div class="student-dashboard-main">
+      <div class="row-between">
+        <div>
+          <p class="student-kicker">My exams</p>
+          <h2>Assigned exams</h2>
+        </div>
+        <a class="btn secondary" href="{{ url_for('student.join_exam') }}">
+          <i class="fas fa-key"></i> Use access code
+        </a>
+      </div>
+
+      <div class="student-exam-list">
+        {% for item in assigned_exams %}
+          {% set exam = item.exam %}
+          {% set attempt = item.session %}
+          <article class="student-exam-card animate-fade-in-up">
+            <div class="student-exam-card-head">
+              <div>
+                <span class="badge {{ exam.status }}">{{ exam.status | title }}</span>
+                <h3>{{ exam.exam_name }}</h3>
+                <p>{{ exam.subject }} · {{ exam.duration_minutes }} min · {{ exam.total_marks }} marks</p>
+              </div>
+              <div class="student-exam-icon">
+                <i class="fas fa-file-lines"></i>
+              </div>
+            </div>
+
+            <div class="student-exam-meta">
+              <div><span>Set</span><strong>{{ exam.set_code }}</strong></div>
+              <div>
+                <span>Attempt</span>
+                <strong>{{ attempt.status | title if attempt else "Not started" }}</strong>
+              </div>
+              <div><span>Questions</span><strong>{{ exam.questions | length }}</strong></div>
+            </div>
+
+            <div class="student-exam-actions">
+              {% if attempt and attempt.status in ["submitted", "evaluated"] %}
+                <a class="btn secondary" href="{{ url_for('student.submitted', session_code=attempt.session_code) }}">
+                  <i class="fas fa-circle-check"></i> View submission
+                </a>
+              {% elif exam.status == "closed" %}
+                <button class="btn secondary" type="button" disabled>Closed</button>
+              {% else %}
+                <form method="post" action="{{ url_for('student.start_assigned_exam', exam_id=exam.id) }}">
+                  <button class="btn primary" type="submit">
+                    {% if exam.status == "active" %}
+                      <i class="fas fa-play"></i> {{ "Resume" if attempt else "Start exam" }}
+                    {% else %}
+                      <i class="fas fa-door-open"></i> Join waiting room
+                    {% endif %}
+                  </button>
+                </form>
+              {% endif %}
+            </div>
+          </article>
+        {% else %}
+          <div class="student-empty-state">
+            <div class="student-flow-mark"><i class="fas fa-calendar-check"></i></div>
+            <h3>No assigned exams yet</h3>
+            <p>Your teacher has not assigned an exam to this roll number. You can still join an open exam with an access code.</p>
+            <a class="btn primary student-primary-action" href="{{ url_for('student.join_exam') }}">
+              <i class="fas fa-key"></i> Open exam lobby
+            </a>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <aside class="student-dashboard-side">
+      <div class="student-side-note">
+        <i class="fas fa-shield-heart"></i>
+        <h3>Before you start</h3>
+        <p>Keep this tab open, stay in fullscreen during the exam, and answer at a steady pace. Your answers autosave while you work.</p>
+      </div>
+      <div class="student-side-note">
+        <i class="fas fa-wifi"></i>
+        <h3>Connection</h3>
+        <p>If the network drops, log in again with the same roll number. The dashboard will bring you back to your attempt.</p>
+      </div>
+    </aside>
+  </section>
+</div>
+{% endblock %}

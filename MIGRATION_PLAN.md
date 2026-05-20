@@ -36,7 +36,7 @@ This project should follow that same practical model.
 
 - The working Python app is Flask-based.
 - It already supports admin, teacher, and student roles.
-- It already has student login, exam join, exam taking, autosave, submission, teacher marking, PDF export, and a calmer student UI.
+- It already has student login, assigned-exam dashboard, access-code fallback, exam taking, autosave, submission, teacher marking, PDF export, and a calmer student UI.
 - It now prints only Wi-Fi share URLs from `run.py`.
 - A Node/Prisma draft exists under `backend/`, but the project direction is now Python-first.
 
@@ -50,6 +50,10 @@ This project should follow that same practical model.
 - Admin controls for terminate, second chance, and reduce-time.
 - Student heartbeat now syncs server-side remaining time and warning count after admin action.
 - Audit logging for submit and admin security actions.
+- Exam enrollment table for assigning students by roll number.
+- Teacher assignment page for adding/removing exam rosters.
+- Student dashboard with greeting, assigned exams, waiting room/start/resume/submission actions.
+- Student access-code join now respects assignment restrictions when an exam has a roster.
 
 ## Python Feature Roadmap
 

@@ -1,13 +1,40 @@
+import csv
 from datetime import datetime
 from flask import Blueprint, render_template, redirect, url_for, request, session, flash, jsonify
 from app.models.database import db
-from app.models.exam_model import ExamSet, Question
+from app.models.exam_model import ExamEnrollment, ExamSet, Question
 from app.models.submission_model import StudentSession, Answer
 from app.models.result_model import Result, QuestionMark
 from app.services.exam_service import ExamService
 from app.utils.helpers import teacher_required, parse_options
 
 teacher_bp = Blueprint("teacher", __name__, url_prefix="/teacher")
+
+
+def _normalize_roll(roll_no):
+    return ExamEnrollment.normalize_roll_no(roll_no)
+
+
+def _parse_enrollment_line(line):
+    line = (line or "").strip()
+    if not line:
+        return None
+
+    parts = next(csv.reader([line]), [])
+    if len(parts) == 1:
+        if "\t" in line:
+            parts = line.split("\t")
+        elif ";" in line:
+            parts = line.split(";")
+
+    roll_no = _normalize_roll(parts[0] if parts else "")
+    student_name = (parts[1] if len(parts) > 1 else "").strip()
+
+    header_values = {"ROLL", "ROLLNO", "ROLL_NO", "ROLL NUMBER", "ROLL NO", "REGISTRATION"}
+    if not roll_no or roll_no in header_values:
+        return None
+
+    return roll_no, student_name
 
 
 @teacher_bp.route("/dashboard")
@@ -161,6 +188,111 @@ def setup_exam(exam_id=None):
         return redirect(url_for("teacher.dashboard"))
 
     return render_template("teacher/exam_setup.html", exam=exam, questions=questions)
+
+
+@teacher_bp.route("/exam/<int:exam_id>/enrollments", methods=["GET", "POST"])
+@teacher_required
+def enrollments(exam_id):
+    exam = ExamSet.query.get_or_404(exam_id)
+    teacher_id = session.get("teacher_id")
+
+    if exam.created_by != teacher_id:
+        flash("You do not have permission to manage this exam.", "danger")
+        return redirect(url_for("teacher.dashboard"))
+
+    if request.method == "POST":
+        raw_roster = request.form.get("enrollments", "")
+        lines = raw_roster.splitlines()
+        seen_rolls = set()
+        added_count = 0
+        updated_count = 0
+        skipped_count = 0
+
+        for line in lines:
+            parsed = _parse_enrollment_line(line)
+            if not parsed:
+                continue
+
+            roll_no, student_name = parsed
+            if roll_no in seen_rolls:
+                skipped_count += 1
+                continue
+            seen_rolls.add(roll_no)
+
+            existing = (
+                ExamEnrollment.query.filter(
+                    ExamEnrollment.exam_set_id == exam.id,
+                    db.func.upper(ExamEnrollment.roll_no) == roll_no,
+                ).first()
+            )
+
+            if existing:
+                if student_name and existing.student_name != student_name:
+                    existing.student_name = student_name
+                    updated_count += 1
+                else:
+                    skipped_count += 1
+                continue
+
+            db.session.add(
+                ExamEnrollment(
+                    exam_set_id=exam.id,
+                    roll_no=roll_no,
+                    student_name=student_name or None,
+                    created_by=teacher_id,
+                )
+            )
+            added_count += 1
+
+        db.session.commit()
+
+        if added_count or updated_count:
+            flash(
+                f"Enrollment updated: {added_count} added, {updated_count} renamed, {skipped_count} skipped.",
+                "success",
+            )
+        else:
+            flash("No new students were added. Check the roll numbers and try again.", "warning")
+
+        return redirect(url_for("teacher.enrollments", exam_id=exam.id))
+
+    existing_enrollments = (
+        ExamEnrollment.query.filter_by(exam_set_id=exam.id)
+        .order_by(ExamEnrollment.roll_no.asc())
+        .all()
+    )
+    sessions = (
+        StudentSession.query.filter_by(exam_set_id=exam.id)
+        .order_by(StudentSession.created_at.desc())
+        .all()
+    )
+    sessions_by_roll = {}
+    for student_session in sessions:
+        sessions_by_roll.setdefault(_normalize_roll(student_session.roll_no), student_session)
+
+    return render_template(
+        "teacher/enrollments.html",
+        exam=exam,
+        enrollments=existing_enrollments,
+        sessions_by_roll=sessions_by_roll,
+    )
+
+
+@teacher_bp.route("/exam/<int:exam_id>/enrollments/<int:enrollment_id>/delete", methods=["POST"])
+@teacher_required
+def delete_enrollment(exam_id, enrollment_id):
+    exam = ExamSet.query.get_or_404(exam_id)
+    if exam.created_by != session.get("teacher_id"):
+        flash("You do not have permission to manage this exam.", "danger")
+        return redirect(url_for("teacher.dashboard"))
+
+    enrollment = ExamEnrollment.query.filter_by(id=enrollment_id, exam_set_id=exam.id).first_or_404()
+    removed_roll = enrollment.roll_no
+    db.session.delete(enrollment)
+    db.session.commit()
+
+    flash(f"Removed {removed_roll} from this exam.", "info")
+    return redirect(url_for("teacher.enrollments", exam_id=exam.id))
 
 
 @teacher_bp.route("/exam/<int:exam_id>/activate", methods=["POST"])

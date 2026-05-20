@@ -294,7 +294,7 @@ def student_login():
         session["login_time"] = datetime.utcnow().isoformat()
 
         flash(f"Welcome {student_name}!", "success")
-        return redirect(url_for("student.join_exam"))
+        return redirect(url_for("student.dashboard"))
 
     return render_template("auth/student_login.html")
 

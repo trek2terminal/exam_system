@@ -53,6 +53,7 @@
                     <a href="{{ url_for('teacher.results') }}" class="nav-link">Results</a>
                     <a href="{{ url_for('auth.teacher_logout') }}" class="nav-link nav-logout">Logout</a>
                 {% elif session.get('role') == 'student' %}
+                    <a href="{{ url_for('student.dashboard') }}" class="nav-link">Dashboard</a>
                     <a href="{{ url_for('student.join_exam') }}" class="nav-link">Exam Lobby</a>
                     <a href="{{ url_for('auth.student_logout') }}" class="nav-link nav-logout">Exit</a>
                 {% else %}

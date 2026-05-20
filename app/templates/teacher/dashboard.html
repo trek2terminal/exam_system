@@ -5,10 +5,11 @@
 <div class="page-transition">
   <div class="row-between">
     <h1>Dashboard</h1>
-    <button class="btn primary" onclick="window.location.href='{{ url_for('teacher.setup_exam') }}'">+ Create Exam</button>
+    <button class="btn primary" onclick="window.location.href='{{ url_for('teacher.setup_exam') }}'">
+      <i class="fas fa-plus"></i> Create Exam
+    </button>
   </div>
 
-  <!-- Statistics Cards -->
   <div class="stats">
     <div class="stat-box">
       <div class="stat-label">Active Exams</div>
@@ -28,7 +29,6 @@
     </div>
   </div>
 
-  <!-- Recent Exams -->
   <div class="card" style="margin-top: 24px;">
     <div class="row-between">
       <h2>Recent Exams</h2>
@@ -45,6 +45,7 @@
             <th>Subject</th>
             <th>Set Code</th>
             <th>Duration</th>
+            <th>Assigned</th>
             <th>Status</th>
             <th>Actions</th>
           </tr>
@@ -59,11 +60,13 @@
             <td>{{ exam.subject }}</td>
             <td>{{ exam.set_code }}</td>
             <td>{{ exam.duration_minutes }} min</td>
+            <td>{{ exam.enrollments | length }}</td>
             <td>
               <span class="badge {{ exam.status }}">{{ exam.status|capitalize }}</span>
             </td>
             <td>
               <div class="actions">
+                <button class="btn secondary small" onclick="window.location.href='{{ url_for('teacher.enrollments', exam_id=exam.id) }}'">Assign</button>
                 <button class="btn secondary small" onclick="window.location.href='{{ url_for('teacher.setup_exam', exam_id=exam.id) }}'">Edit</button>
                 {% if exam.status == 'draft' %}
                 <button class="btn primary small" onclick="activateExam({{ exam.id }})">Activate</button>
@@ -76,7 +79,7 @@
           </tr>
           {% else %}
           <tr>
-            <td colspan="6" style="text-align: center; padding: 40px;">
+            <td colspan="7" style="text-align: center; padding: 40px;">
               <div class="muted">No exams created yet. Create your first exam to get started!</div>
             </td>
           </tr>
@@ -86,15 +89,14 @@
     </div>
   </div>
 
-  <!-- Quick Actions -->
   <div class="card" style="margin-top: 24px;">
     <h2>Quick Actions</h2>
     <div class="grid-2">
       <button class="btn secondary" onclick="window.location.href='{{ url_for('teacher.setup_exam') }}'">
-        <span>📝</span> Create New Exam
+        <i class="fas fa-pen-to-square"></i> Create New Exam
       </button>
       <button class="btn secondary" onclick="window.location.href='{{ url_for('teacher.results') }}'">
-        <span>📊</span> View All Results
+        <i class="fas fa-chart-simple"></i> View All Results
       </button>
     </div>
   </div>
@@ -106,7 +108,7 @@
   function filterExams() {
     const search = document.getElementById('examSearch').value.toLowerCase();
     const rows = document.querySelectorAll('#examTableBody tr');
-    
+
     rows.forEach(row => {
       const text = row.textContent.toLowerCase();
       row.style.display = text.includes(search) ? '' : 'none';
@@ -114,16 +116,16 @@
   }
 
   async function activateExam(examId) {
-    if (!confirm('Are you sure you want to activate this exam? Students will be able to join using the access code.')) {
+    if (!confirm('Are you sure you want to activate this exam? Assigned students will be able to start.')) {
       return;
     }
-    
+
     try {
       const response = await fetch(`/teacher/exam/${examId}/activate`, {
         method: 'POST'
       });
       const data = await response.json();
-      
+
       if (response.ok && data.ok) {
         showToast(data.message || 'Exam activated successfully!', 'success');
         setTimeout(() => window.location.reload(), 1000);
@@ -139,13 +141,13 @@
     if (!confirm('Are you sure you want to close this exam? Students will no longer be able to submit.')) {
       return;
     }
-    
+
     try {
       const response = await fetch(`/teacher/exam/${examId}/close`, {
         method: 'POST'
       });
       const data = await response.json();
-      
+
       if (response.ok && data.ok) {
         showToast(data.message || 'Exam closed successfully!', 'success');
         setTimeout(() => window.location.reload(), 1000);

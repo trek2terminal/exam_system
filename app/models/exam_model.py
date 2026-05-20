@@ -58,6 +58,37 @@ class ExamSet(db.Model):
         db.session.commit()
 
 
+class ExamEnrollment(db.Model):
+    __tablename__ = "exam_enrollments"
+    __table_args__ = (
+        db.UniqueConstraint("exam_set_id", "roll_no", name="uq_exam_enrollment_roll"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    exam_set_id = db.Column(db.Integer, db.ForeignKey("exam_sets.id"), nullable=False, index=True)
+    exam_set = db.relationship(
+        "ExamSet",
+        backref=db.backref("enrollments", lazy=True, cascade="all, delete-orphan"),
+    )
+
+    roll_no = db.Column(db.String(50), nullable=False, index=True)
+    student_name = db.Column(db.String(100), nullable=True)
+
+    created_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    creator = db.relationship("User")
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    def __repr__(self):
+        return f"<ExamEnrollment {self.roll_no} -> Exam {self.exam_set_id}>"
+
+    @staticmethod
+    def normalize_roll_no(roll_no):
+        return (roll_no or "").strip().upper()
+
+
 class Question(db.Model):
     __tablename__ = "questions"
 

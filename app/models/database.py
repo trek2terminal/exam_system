@@ -32,7 +32,7 @@ def init_db(app):
     with app.app_context():
         # Import all models so they are registered
         from app.models.user_model import User
-        from app.models.exam_model import ExamSet, Question
+        from app.models.exam_model import ExamEnrollment, ExamSet, Question
         from app.models.submission_model import StudentSession, Answer
         from app.models.result_model import Result, QuestionMark
         from app.models.audit_model import AuditLog, ViolationLog

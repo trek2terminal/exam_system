@@ -1,7 +1,8 @@
+import random
 from datetime import datetime
 from flask import Blueprint, current_app, render_template, redirect, url_for, request, flash, session, send_file
 from app.models.database import db
-from app.models.exam_model import ExamSet, Question
+from app.models.exam_model import ExamEnrollment, ExamSet, Question
 from app.models.submission_model import StudentSession, Answer
 from app.models.result_model import Result
 from app.services.exam_service import ExamService
@@ -19,17 +20,150 @@ def _redirect_if_not_owner(session_code):
     if _owns_session(session_code):
         return None
     flash("This exam session is not available in this browser. Please join again.", "danger")
-    return redirect(url_for("student.join_exam"))
+    return redirect(url_for("student.dashboard"))
+
+
+def _require_student_details():
+    student_name = session.get("student_name", "").strip()
+    roll_no = session.get("roll_no", "").strip()
+    if not student_name or not roll_no:
+        flash("Please enter your student details first.", "warning")
+        return None, None, redirect(url_for("auth.student_login"))
+    return student_name, roll_no, None
+
+
+def _normalize_roll(roll_no):
+    return ExamEnrollment.normalize_roll_no(roll_no)
+
+
+def _latest_session_for_exam(exam_id, roll_no):
+    return (
+        StudentSession.query.filter(
+            StudentSession.exam_set_id == exam_id,
+            db.func.upper(StudentSession.roll_no) == _normalize_roll(roll_no),
+        )
+        .order_by(StudentSession.created_at.desc())
+        .first()
+    )
+
+
+def _exam_requires_enrollment(exam_id):
+    return ExamEnrollment.query.filter_by(exam_set_id=exam_id).first() is not None
+
+
+def _is_enrolled(exam_id, roll_no):
+    return (
+        ExamEnrollment.query.filter(
+            ExamEnrollment.exam_set_id == exam_id,
+            db.func.upper(ExamEnrollment.roll_no) == _normalize_roll(roll_no),
+        ).first()
+        is not None
+    )
+
+
+def _remember_student_session(student_session):
+    session.permanent = True
+    session["role"] = "student"
+    session["student_id"] = student_session.id
+    session["student_name"] = student_session.student_name
+    session["roll_no"] = student_session.roll_no
+    session["student_session_code"] = student_session.session_code
+
+
+@student_bp.route("/")
+def index():
+    return redirect(url_for("student.dashboard"))
+
+
+@student_bp.route("/dashboard")
+def dashboard():
+    student_name, roll_no, redirect_response = _require_student_details()
+    if redirect_response:
+        return redirect_response
+
+    normalized_roll = _normalize_roll(roll_no)
+    enrollments = (
+        ExamEnrollment.query.filter(db.func.upper(ExamEnrollment.roll_no) == normalized_roll)
+        .join(ExamSet)
+        .order_by(ExamSet.created_at.desc())
+        .all()
+    )
+
+    assigned_exams = []
+    for enrollment in enrollments:
+        student_session = _latest_session_for_exam(enrollment.exam_set_id, normalized_roll)
+        assigned_exams.append(
+            {
+                "enrollment": enrollment,
+                "exam": enrollment.exam_set,
+                "session": student_session,
+            }
+        )
+
+    hour = datetime.now().hour
+    if hour < 12:
+        greeting = "Good morning"
+    elif hour < 17:
+        greeting = "Good afternoon"
+    else:
+        greeting = "Good evening"
+
+    quote = random.choice(
+        [
+            "One question at a time is enough.",
+            "Read calmly, answer clearly, and trust your preparation.",
+            "A steady mind does better work than a rushed one.",
+            "You do not need to be perfect. You only need to be present.",
+        ]
+    )
+
+    return render_template(
+        "student/dashboard.html",
+        student_name=student_name,
+        roll_no=normalized_roll,
+        assigned_exams=assigned_exams,
+        greeting=greeting,
+        quote=quote,
+    )
+
+
+@student_bp.route("/start/<int:exam_id>", methods=["POST"])
+def start_assigned_exam(exam_id):
+    student_name, roll_no, redirect_response = _require_student_details()
+    if redirect_response:
+        return redirect_response
+
+    exam = ExamSet.query.get_or_404(exam_id)
+    if not _is_enrolled(exam.id, roll_no):
+        flash("This exam is not assigned to your roll number.", "danger")
+        return redirect(url_for("student.dashboard"))
+
+    if exam.status == "closed":
+        flash("This exam has been closed by the teacher.", "danger")
+        return redirect(url_for("student.dashboard"))
+
+    student_session = ExamService.create_student_session(
+        exam_set_id=exam.id,
+        student_name=student_name,
+        roll_no=roll_no,
+    )
+    _remember_student_session(student_session)
+
+    if student_session.status in ["submitted", "evaluated"]:
+        return redirect(url_for("student.submitted", session_code=student_session.session_code))
+
+    if exam.status == "active":
+        ExamService.start_exam(student_session.session_code)
+        return redirect(url_for("student.exam", session_code=student_session.session_code))
+
+    return redirect(url_for("student.waiting", session_code=student_session.session_code))
 
 
 @student_bp.route("/join", methods=["GET", "POST"])
 def join_exam():
-    student_name = session.get("student_name", "").strip()
-    roll_no = session.get("roll_no", "").strip()
-
-    if not student_name or not roll_no:
-        flash("Please enter your student details first.", "warning")
-        return redirect(url_for("auth.student_login"))
+    student_name, roll_no, redirect_response = _require_student_details()
+    if redirect_response:
+        return redirect_response
 
     if request.method == "POST":
         access_code = request.form.get("access_code", "").strip().upper()
@@ -47,19 +181,19 @@ def join_exam():
             flash("This exam has been closed by the teacher.", "danger")
             return redirect(url_for("student.join_exam"))
 
-        # Create student session
+        if _exam_requires_enrollment(exam.id) and not _is_enrolled(exam.id, roll_no):
+            flash("This exam is assigned by roll number and is not available for your login.", "danger")
+            return redirect(url_for("student.dashboard"))
+
         student_session = ExamService.create_student_session(
             exam_set_id=exam.id,
             student_name=student_name,
             roll_no=roll_no
         )
+        _remember_student_session(student_session)
 
-        session.permanent = True
-        session["role"] = "student"
-        session["student_id"] = student_session.id
-        session["student_name"] = student_name
-        session["roll_no"] = roll_no
-        session["student_session_code"] = student_session.session_code
+        if student_session.status in ["submitted", "evaluated"]:
+            return redirect(url_for("student.submitted", session_code=student_session.session_code))
 
         if exam.status == "active":
             ExamService.start_exam(student_session.session_code)
