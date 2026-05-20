@@ -54,6 +54,9 @@ This project should follow that same practical model.
 - Teacher assignment page for adding/removing exam rosters.
 - Student dashboard with greeting, assigned exams, waiting room/start/resume/submission actions.
 - Student access-code join now respects assignment restrictions when an exam has a roster.
+- Teacher smart question import from pasted text, .txt, .docx, .csv, and .json with preview before import.
+- Bulk publish/hide evaluated results per exam.
+- Student results page for published marks and feedback.
 
 ## Python Feature Roadmap
 

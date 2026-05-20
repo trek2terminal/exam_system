@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}Import Questions{% endblock %}
+
+{% block content %}
+<div class="page-transition">
+  <div class="row-between">
+    <div>
+      <p class="muted">Smart import</p>
+      <h1>{{ exam.exam_name }}</h1>
+      <p class="muted">Paste questions or upload .txt, .docx, .csv, or .json.</p>
+    </div>
+    <div class="actions">
+      <a class="btn secondary" href="{{ url_for('teacher.setup_exam', exam_id=exam.id) }}">Back to editor</a>
+    </div>
+  </div>
+
+  <div class="grid-2" style="align-items: start; margin-top: 24px;">
+    <section class="card">
+      <h2>Paste or Upload</h2>
+      <form method="post" enctype="multipart/form-data" class="student-roster-form">
+        <input type="hidden" name="action" value="preview">
+
+        <label for="question_text">Question Text</label>
+        <textarea id="question_text" name="question_text" rows="16" placeholder="Q1. What is Python? [marks: 2]&#10;A. A snake&#10;B. A programming language *&#10;Answer: B&#10;&#10;Q2. Write a short note on variables. (5 marks)"></textarea>
+
+        <label for="question_file">Upload File</label>
+        <input id="question_file" type="file" name="question_file" accept=".txt,.docx,.csv,.json">
+
+        <label for="mode">Import Mode</label>
+        <select id="mode" name="mode">
+          <option value="append" {% if import_mode != "replace" %}selected{% endif %}>Append to existing questions</option>
+          <option value="replace" {% if import_mode == "replace" %}selected{% endif %}>Replace all questions</option>
+        </select>
+
+        <button class="btn primary" type="submit">
+          <i class="fas fa-wand-magic-sparkles"></i> Preview Import
+        </button>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>Supported Format</h2>
+      <p class="muted">The parser detects question numbers, options, answers, and marks from common teacher notes.</p>
+      <div class="import-format-box">
+<pre>Q1. Question text [marks: 5]
+A. Option one
+B. Option two *
+Answer: B
+
+Q2. Another question (10 marks)</pre>
+      </div>
+      <p class="muted">Mark correct MCQ options with <strong>*</strong>, <strong>[correct]</strong>, or an Answer line.</p>
+    </section>
+  </div>
+
+  {% if parsed %}
+    <section class="card" style="margin-top: 24px;">
+      <div class="row-between">
+        <div>
+          <h2>Preview</h2>
+          <p class="muted">Detected {{ parsed.questions | length }} question(s). Review before importing.</p>
+        </div>
+        {% if parsed.questions %}
+          <form method="post">
+            <input type="hidden" name="action" value="confirm">
+            <input type="hidden" name="mode" value="{{ import_mode }}">
+            <input type="hidden" name="questions_payload" value='{{ parsed.questions | tojson }}'>
+            <button class="btn primary" type="submit">
+              <i class="fas fa-check"></i> Confirm Import
+            </button>
+          </form>
+        {% endif %}
+      </div>
+
+      {% if parsed.questions %}
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Type</th>
+                <th>Question</th>
+                <th>Marks</th>
+                <th>Options / Answer</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for q in parsed.questions %}
+                <tr>
+                  <td>{{ q.question_number }}</td>
+                  <td><span class="badge active">{{ q.question_type | title }}</span></td>
+                  <td>{{ q.question_text }}</td>
+                  <td>{{ q.marks }}</td>
+                  <td>
+                    {% if q.options %}
+                      <div class="muted">{{ q.options | join(" | ") }}</div>
+                    {% endif %}
+                    {% if q.correct_answer %}
+                      <strong>Answer:</strong> {{ q.correct_answer }}
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% endif %}
+
+      {% if parsed.unmatched %}
+        <div class="gentle-alert" style="margin-top: 16px;">
+          <i class="fas fa-circle-info"></i>
+          <div>
+            <strong>Unmatched text</strong>
+            <p>{{ parsed.unmatched | join(" / ") }}</p>
+          </div>
+        </div>
+      {% endif %}
+    </section>
+  {% endif %}
+</div>
+{% endblock %}

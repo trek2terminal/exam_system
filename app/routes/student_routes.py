@@ -159,6 +159,31 @@ def start_assigned_exam(exam_id):
     return redirect(url_for("student.waiting", session_code=student_session.session_code))
 
 
+@student_bp.route("/results")
+def results():
+    student_name, roll_no, redirect_response = _require_student_details()
+    if redirect_response:
+        return redirect_response
+
+    normalized_roll = _normalize_roll(roll_no)
+    published_sessions = (
+        StudentSession.query.join(Result)
+        .filter(
+            db.func.upper(StudentSession.roll_no) == normalized_roll,
+            Result.published.is_(True),
+        )
+        .order_by(Result.published_at.desc())
+        .all()
+    )
+
+    return render_template(
+        "student/results.html",
+        student_name=student_name,
+        roll_no=normalized_roll,
+        published_sessions=published_sessions,
+    )
+
+
 @student_bp.route("/join", methods=["GET", "POST"])
 def join_exam():
     student_name, roll_no, redirect_response = _require_student_details()

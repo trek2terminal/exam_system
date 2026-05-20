@@ -8,7 +8,32 @@
       <h1>{{ exam.exam_name }} - Results</h1>
       <p class="muted">{{ exam.subject }} | Set {{ exam.set_code }} | Access Code {{ exam.access_code }}</p>
     </div>
-    <a href="{{ url_for('teacher.dashboard') }}" class="btn secondary">Back</a>
+    <div class="actions">
+      <form method="post" action="{{ url_for('teacher.publish_exam_results', exam_id=exam.id) }}">
+        <input type="hidden" name="publish" value="1">
+        <button class="btn primary" type="submit" {% if evaluated_count == 0 %}disabled{% endif %}>Publish All Evaluated</button>
+      </form>
+      <form method="post" action="{{ url_for('teacher.publish_exam_results', exam_id=exam.id) }}">
+        <input type="hidden" name="publish" value="0">
+        <button class="btn secondary" type="submit" {% if published_count == 0 %}disabled{% endif %}>Hide Published</button>
+      </form>
+      <a href="{{ url_for('teacher.dashboard') }}" class="btn secondary">Back</a>
+    </div>
+  </div>
+
+  <div class="stats" style="margin-top: 18px;">
+    <div class="stat-box">
+      <div class="stat-label">Attempts</div>
+      <div class="stat-value">{{ sessions | length }}</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Evaluated</div>
+      <div class="stat-value">{{ evaluated_count }}</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Published</div>
+      <div class="stat-value">{{ published_count }}</div>
+    </div>
   </div>
 
   {% if sessions %}
@@ -19,6 +44,8 @@
             <th>Student</th>
             <th>Roll No</th>
             <th>Status</th>
+            <th>Score</th>
+            <th>Published</th>
             <th>Violations</th>
             <th>Started</th>
             <th>Action</th>
@@ -29,7 +56,23 @@
           <tr>
             <td>{{ s.student_name }}</td>
             <td>{{ s.roll_no }}</td>
-            <td>{{ s.status }}</td>
+            <td><span class="badge {{ s.status }}">{{ s.status | title }}</span></td>
+            <td>
+              {% if s.result %}
+                {{ s.result.total_marks_obtained }} / {{ s.result.total_marks }}
+              {% else %}
+                -
+              {% endif %}
+            </td>
+            <td>
+              {% if s.result and s.result.published %}
+                <span class="badge active">Published</span>
+              {% elif s.result %}
+                <span class="badge draft">Hidden</span>
+              {% else %}
+                <span class="badge closed">Not marked</span>
+              {% endif %}
+            </td>
             <td>{{ s.focus_violations }}</td>
             <td>{{ s.start_time.strftime("%d-%m-%Y %H:%M") if s.start_time else "-" }}</td>
             <td><a class="btn secondary small" href="{{ url_for('teacher.student_view', session_id=s.id) }}">Mark / View</a></td>

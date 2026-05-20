@@ -23,6 +23,9 @@
     {% endif %}
 
     <div class="submitted-actions">
+      <a class="btn secondary" href="{{ url_for('student.dashboard') }}">
+        <i class="fas fa-table-cells-large"></i> Dashboard
+      </a>
       <a class="btn secondary" href="{{ url_for('student.export_pdf', session_code=student_session.session_code) }}">
         <i class="fas fa-file-pdf"></i> Download answer copy
       </a>

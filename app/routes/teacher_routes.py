@@ -1,4 +1,5 @@
 import csv
+import json
 from datetime import datetime
 from flask import Blueprint, render_template, redirect, url_for, request, session, flash, jsonify
 from app.models.database import db
@@ -6,6 +7,7 @@ from app.models.exam_model import ExamEnrollment, ExamSet, Question
 from app.models.submission_model import StudentSession, Answer
 from app.models.result_model import Result, QuestionMark
 from app.services.exam_service import ExamService
+from app.services.parser_service import QuestionParserService
 from app.utils.helpers import teacher_required, parse_options
 
 teacher_bp = Blueprint("teacher", __name__, url_prefix="/teacher")
@@ -190,6 +192,72 @@ def setup_exam(exam_id=None):
     return render_template("teacher/exam_setup.html", exam=exam, questions=questions)
 
 
+@teacher_bp.route("/exam/<int:exam_id>/import", methods=["GET", "POST"])
+@teacher_required
+def import_questions(exam_id):
+    exam = ExamSet.query.get_or_404(exam_id)
+    if exam.created_by != session.get("teacher_id"):
+        flash("You do not have permission to import into this exam.", "danger")
+        return redirect(url_for("teacher.dashboard"))
+
+    if exam.status == "active":
+        flash("Cannot import questions while the exam is active. Close it first.", "danger")
+        return redirect(url_for("teacher.setup_exam", exam_id=exam.id))
+
+    parsed = None
+    import_mode = request.form.get("mode", "append")
+
+    if request.method == "POST":
+        action = request.form.get("action", "preview")
+
+        if action == "confirm":
+            payload = request.form.get("questions_payload", "[]")
+            try:
+                questions = json.loads(payload)
+            except json.JSONDecodeError:
+                questions = []
+
+            if not questions:
+                flash("No parsed questions were available to import.", "danger")
+                return redirect(url_for("teacher.import_questions", exam_id=exam.id))
+
+            imported_count = QuestionParserService.save_questions_to_exam(
+                exam_set_id=exam.id,
+                questions_list=questions,
+                replace=import_mode == "replace",
+            )
+            exam.total_marks = sum(q.marks for q in Question.query.filter_by(exam_set_id=exam.id).all())
+            db.session.commit()
+
+            flash(f"Imported {imported_count} question(s) into {exam.exam_name}.", "success")
+            return redirect(url_for("teacher.setup_exam", exam_id=exam.id))
+
+        pasted_text = request.form.get("question_text", "")
+        upload = request.files.get("question_file")
+
+        try:
+            if upload and upload.filename:
+                parsed = QuestionParserService.parse_uploaded_file(upload)
+            else:
+                parsed = QuestionParserService.parse_text(pasted_text)
+        except ValueError as exc:
+            flash(str(exc), "danger")
+            parsed = {"questions": [], "unmatched": []}
+        except Exception:
+            flash("Could not parse that file. Please try plain text or a clean .docx.", "danger")
+            parsed = {"questions": [], "unmatched": []}
+
+        if parsed and not parsed.get("questions"):
+            flash("No questions were detected. Check the format and try again.", "warning")
+
+    return render_template(
+        "teacher/import_questions.html",
+        exam=exam,
+        parsed=parsed,
+        import_mode=import_mode,
+    )
+
+
 @teacher_bp.route("/exam/<int:exam_id>/enrollments", methods=["GET", "POST"])
 @teacher_required
 def enrollments(exam_id):
@@ -349,7 +417,42 @@ def exam_results(exam_id):
 
     sessions = StudentSession.query.filter_by(exam_set_id=exam.id)\
                 .order_by(StudentSession.created_at.desc()).all()
-    return render_template("teacher/exam_results.html", exam=exam, sessions=sessions)
+    evaluated_count = sum(1 for student_session in sessions if student_session.result)
+    published_count = sum(1 for student_session in sessions if student_session.result and student_session.result.published)
+    return render_template(
+        "teacher/exam_results.html",
+        exam=exam,
+        sessions=sessions,
+        evaluated_count=evaluated_count,
+        published_count=published_count,
+    )
+
+
+@teacher_bp.route("/exam/<int:exam_id>/publish-results", methods=["POST"])
+@teacher_required
+def publish_exam_results(exam_id):
+    exam = ExamSet.query.get_or_404(exam_id)
+    if exam.created_by != session.get("teacher_id"):
+        flash("You do not have permission to publish this exam.", "danger")
+        return redirect(url_for("teacher.dashboard"))
+
+    publish = request.form.get("publish") == "1"
+    sessions = StudentSession.query.filter_by(exam_set_id=exam.id).all()
+    changed_count = 0
+
+    for student_session in sessions:
+        result = student_session.result
+        if not result:
+            continue
+        result.published = publish
+        result.published_at = datetime.utcnow() if publish else None
+        changed_count += 1
+
+    db.session.commit()
+
+    action = "published" if publish else "hidden"
+    flash(f"{changed_count} evaluated result(s) {action}.", "success")
+    return redirect(url_for("teacher.exam_results", exam_id=exam.id))
 
 
 @teacher_bp.route("/session/<int:session_id>", methods=["GET", "POST"])

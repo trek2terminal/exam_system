@@ -67,6 +67,7 @@
             <td>
               <div class="actions">
                 <button class="btn secondary small" onclick="window.location.href='{{ url_for('teacher.enrollments', exam_id=exam.id) }}'">Assign</button>
+                <button class="btn secondary small" onclick="window.location.href='{{ url_for('teacher.import_questions', exam_id=exam.id) }}'">Import</button>
                 <button class="btn secondary small" onclick="window.location.href='{{ url_for('teacher.setup_exam', exam_id=exam.id) }}'">Edit</button>
                 {% if exam.status == 'draft' %}
                 <button class="btn primary small" onclick="activateExam({{ exam.id }})">Activate</button>

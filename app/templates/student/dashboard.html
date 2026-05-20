@@ -49,7 +49,16 @@
                 <span>Attempt</span>
                 <strong>{{ attempt.status | title if attempt else "Not started" }}</strong>
               </div>
-              <div><span>Questions</span><strong>{{ exam.questions | length }}</strong></div>
+              <div>
+                <span>{% if attempt and attempt.result and attempt.result.published %}Score{% else %}Questions{% endif %}</span>
+                <strong>
+                  {% if attempt and attempt.result and attempt.result.published %}
+                    {{ attempt.result.total_marks_obtained }} / {{ attempt.result.total_marks }}
+                  {% else %}
+                    {{ exam.questions | length }}
+                  {% endif %}
+                </strong>
+              </div>
             </div>
 
             <div class="student-exam-actions">

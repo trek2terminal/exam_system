@@ -2944,6 +2944,24 @@ html[data-theme="dark"] body.student-mode .student-side-note {
     resize: vertical;
 }
 
+.import-format-box {
+    margin-top: 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: rgba(15, 118, 110, 0.06);
+    overflow: auto;
+}
+
+.import-format-box pre {
+    margin: 0;
+    padding: 16px;
+    color: var(--text-primary);
+    font-family: "Consolas", "Courier New", monospace;
+    font-size: 0.9rem;
+    line-height: 1.55;
+    white-space: pre-wrap;
+}
+
 @keyframes calmBars {
     0%, 100% { transform: scaleY(1); opacity: 0.78; }
     50% { transform: scaleY(0.84); opacity: 1; }

@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}My Results{% endblock %}
+
+{% block content %}
+<div class="student-dashboard-shell">
+  <section class="student-dashboard-hero animate-fade-in-up">
+    <div>
+      <p class="student-kicker">Published results</p>
+      <h1>My results</h1>
+      <p>Only results published by your teacher appear here.</p>
+    </div>
+    <div class="student-pass dashboard-pass">
+      <div><span>Name</span><strong>{{ student_name }}</strong></div>
+      <div><span>Roll No</span><strong>{{ roll_no }}</strong></div>
+    </div>
+  </section>
+
+  <section class="student-dashboard-main">
+    <div class="row-between">
+      <h2>Result cards</h2>
+      <a class="btn secondary" href="{{ url_for('student.dashboard') }}">
+        <i class="fas fa-table-cells-large"></i> Dashboard
+      </a>
+    </div>
+
+    <div class="student-exam-list">
+      {% for student_session in published_sessions %}
+        {% set result = student_session.result %}
+        <article class="student-exam-card animate-fade-in-up">
+          <div class="student-exam-card-head">
+            <div>
+              <span class="badge active">Published</span>
+              <h3>{{ student_session.exam_set.exam_name }}</h3>
+              <p>{{ student_session.exam_set.subject }} · {{ result.published_at.strftime("%d %b %Y") if result.published_at else "Published" }}</p>
+            </div>
+            <div class="student-exam-icon">
+              <i class="fas fa-chart-simple"></i>
+            </div>
+          </div>
+
+          <div class="student-exam-meta">
+            <div><span>Total</span><strong>{{ result.total_marks_obtained }} / {{ result.total_marks }}</strong></div>
+            <div><span>Percentage</span><strong>{{ result.percentage }}%</strong></div>
+            <div><span>Status</span><strong>{{ student_session.status | title }}</strong></div>
+          </div>
+
+          {% if result.teacher_remarks %}
+            <p class="muted">{{ result.teacher_remarks }}</p>
+          {% endif %}
+
+          <div class="student-exam-actions">
+            <a class="btn primary" href="{{ url_for('student.submitted', session_code=student_session.session_code) }}">
+              <i class="fas fa-eye"></i> View feedback
+            </a>
+          </div>
+        </article>
+      {% else %}
+        <div class="student-empty-state">
+          <div class="student-flow-mark"><i class="fas fa-hourglass-half"></i></div>
+          <h3>No published results yet</h3>
+          <p>Your evaluated results will appear here after your teacher publishes them.</p>
+          <a class="btn primary student-primary-action" href="{{ url_for('student.dashboard') }}">
+            <i class="fas fa-table-cells-large"></i> Back to dashboard
+          </a>
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+{% endblock %}

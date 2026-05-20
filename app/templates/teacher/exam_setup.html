@@ -37,7 +37,14 @@
 
     <div class="row-between">
       <h2>Questions</h2>
-      <button type="button" class="btn secondary" onclick="addQuestionRow()">Add Question</button>
+      <div class="actions">
+        {% if exam %}
+          <a class="btn secondary" href="{{ url_for('teacher.import_questions', exam_id=exam.id) }}">
+            <i class="fas fa-file-import"></i> Import Questions
+          </a>
+        {% endif %}
+        <button type="button" class="btn secondary" onclick="addQuestionRow()">Add Question</button>
+      </div>
     </div>
 
     <div id="questionContainer">
