@@ -35,7 +35,7 @@ def init_db(app):
         from app.models.exam_model import ExamSet, Question
         from app.models.submission_model import StudentSession, Answer
         from app.models.result_model import Result, QuestionMark
-        from app.models.audit_model import AuditLog
+        from app.models.audit_model import AuditLog, ViolationLog
 
         db.create_all()
         app.logger.info("✅ Database tables created/verified successfully.")

@@ -40,3 +40,30 @@ class AuditLog(db.Model):
         db.session.add(self)
         db.session.commit()
 
+
+class ViolationLog(db.Model):
+    """Append-only exam integrity event log."""
+    __tablename__ = "violation_logs"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    session_id = db.Column(db.Integer, db.ForeignKey("student_sessions.id"), nullable=False, index=True)
+    student_session = db.relationship("StudentSession", backref=db.backref("violation_logs", lazy=True))
+
+    violation_type = db.Column(db.String(80), nullable=False, index=True)
+    detail = db.Column(db.Text, nullable=True)
+    client_count = db.Column(db.Integer, default=0, nullable=False)
+    admin_notified = db.Column(db.Boolean, default=False, nullable=False)
+
+    ip_address = db.Column(db.String(50), nullable=True)
+    user_agent = db.Column(db.String(255), nullable=True)
+    occurred_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    def __repr__(self):
+        return f"<ViolationLog Session:{self.session_id} {self.violation_type}>"
+
+    def save(self):
+        db.session.add(self)
+        db.session.commit()
+        return self
+

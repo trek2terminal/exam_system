@@ -2,121 +2,133 @@
 {% block title %}Exam Window{% endblock %}
 
 {% block content %}
-<div class="exam-shell" data-session-code="{{ student_session.session_code }}" data-remaining="{{ remaining_seconds }}">
+<div class="exam-shell student-exam-shell" data-session-code="{{ student_session.session_code }}" data-remaining="{{ remaining_seconds }}" data-warning-limit="{{ max_violations_allowed }}">
   <div id="fullscreenGate" class="fullscreen-gate">
     <div class="fullscreen-panel">
-      <i class="fas fa-lock"></i>
-      <h2>Secure exam mode required</h2>
-      <p>The exam must stay in fullscreen until it is submitted. Leaving fullscreen will submit the attempt automatically.</p>
-      <button type="button" class="btn primary">Enter Fullscreen</button>
+      <i class="fas fa-expand"></i>
+      <h2>Enter focused exam mode</h2>
+      <p>Your answers stay autosaved while this window remains open and focused.</p>
+      <button type="button" class="btn primary">Start Focus Mode</button>
     </div>
   </div>
 
-  <div class="proctor-status" id="proctorStatus">
-    <div>
-      <span>Integrity Watch</span>
-      <strong><span id="warningCount">0</span>/5 warnings</strong>
-    </div>
-    <div class="warning-dots" id="warningDots">
-      <span></span><span></span><span></span><span></span><span></span>
-    </div>
-  </div>
-
-  <div class="exam-topbar">
-    <div>
+  <div class="exam-topbar student-exam-topbar">
+    <div class="exam-title-block">
+      <p class="student-kicker">Now writing</p>
       <h1>{{ exam.exam_name }}</h1>
       <p>{{ student_session.student_name }} &middot; Roll No {{ student_session.roll_no }} &middot; Set {{ exam.set_code }}</p>
     </div>
 
-    <div class="timer-box">
+    <div class="timer-box calm-timer">
       <div>Time Left</div>
       <div id="timer">{{ remaining_seconds }}</div>
     </div>
 
-    <div class="actions">
-      <button class="btn secondary" onclick="enterFullscreen()"><i class="fas fa-expand"></i> Fullscreen</button>
-      <button class="btn danger" onclick="submitExam('{{ student_session.session_code }}', true)">Submit Exam</button>
+    <div class="exam-actions">
+      <div class="auto-save-indicator" id="autosaveStatus" aria-live="polite">
+        <i class="fas fa-cloud"></i><span>Answers ready</span>
+      </div>
+      <button class="btn secondary" type="button" onclick="enterFullscreen()" aria-label="Enter fullscreen">
+        <i class="fas fa-expand"></i>
+      </button>
+      <button class="btn danger" type="button" onclick="confirmSubmitExam('{{ student_session.session_code }}')">
+        Submit
+      </button>
     </div>
   </div>
 
-  <div class="exam-alert">
-    <i class="fas fa-shield-halved"></i>
-    <span>Stay in fullscreen and keep this tab focused. Escape, fullscreen exit, tab switching, close attempts, and shortcuts are blocked and tracked. Warning 5 auto-submits the exam.</span>
+  <div class="focus-reminder">
+    <i class="fas fa-circle-info"></i>
+    <span>Stay in this window during the exam. Repeated focus changes are logged and flagged for admin review.</span>
   </div>
 
-  <div id="questionList">
-    {% for q in questions %}
-      <div class="card question-block">
-        <div class="row-between">
-          <h3>Q{{ q.question_number }}. {{ q.question_text }}</h3>
-          <span class="badge">{{ q.question_type }}</span>
+  <div class="exam-layout">
+    <aside class="exam-sidebar">
+      <div class="student-side-panel">
+        <div class="progress-head">
+          <span>Answered</span>
+          <strong><span id="answeredCount">0</span>/<span id="totalQuestionCount">{{ questions|length }}</span></strong>
         </div>
-        <p class="muted"><strong>Marks:</strong> {{ q.marks }}</p>
-
-        {% if q.question_type == 'mcq' %}
-          <div class="mcq-list">
-            {% for option in q.options_as_list() %}
-              <label class="mcq-option">
-                <input
-                  type="radio"
-                  name="q_{{ q.id }}"
-                  value="{{ option }}"
-                  class="answer-radio"
-                  data-session-code="{{ student_session.session_code }}"
-                  data-question-id="{{ q.id }}"
-                  {% if saved_map.get(q.id) == option %}checked{% endif %}
-                >
-                <span>{{ option }}</span>
-              </label>
-            {% endfor %}
-          </div>
-        {% else %}
-          <textarea
-            class="answer-field"
-            data-session-code="{{ student_session.session_code }}"
-            data-question-id="{{ q.id }}"
-            rows="6"
-            placeholder="Type your answer here..."
-          >{{ saved_map.get(q.id, '') }}</textarea>
-        {% endif %}
+        <div class="progress-bar">
+          <span class="progress-fill" id="answerProgressFill" style="width: 0"></span>
+        </div>
+        <p id="answerProgressText" class="muted">0% complete</p>
       </div>
-    {% endfor %}
+
+      <div class="student-side-panel">
+        <div class="progress-head">
+          <span>Focus</span>
+          <strong><span id="warningCount">0</span>/<span id="warningLimit">{{ max_violations_allowed }}</span></strong>
+        </div>
+        <div class="warning-dots" id="warningDots" aria-hidden="true">
+          {% for _ in range(max_violations_allowed) %}
+            <span></span>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="student-side-panel question-map">
+        <span class="side-panel-label">Questions</span>
+        <div id="questionPalette" class="question-palette student-palette">
+          {% for q in questions %}
+            <button type="button" class="palette-item" data-question="{{ q.question_number }}">{{ q.question_number }}</button>
+          {% endfor %}
+        </div>
+      </div>
+    </aside>
+
+    <section id="questionList" class="question-stream">
+      {% for q in questions %}
+        <article class="student-question-card" id="question-{{ q.id }}" data-question-number="{{ q.question_number }}" data-question-id="{{ q.id }}">
+          <div class="question-card-head">
+            <div>
+              <span class="question-number">Question {{ q.question_number }}</span>
+              <h2>{{ q.question_text }}</h2>
+            </div>
+            <span class="badge">{{ q.marks }} mark{% if q.marks != 1 %}s{% endif %}</span>
+          </div>
+
+          {% if q.question_type == 'mcq' %}
+            <div class="mcq-list student-options">
+              {% for option in q.options_as_list() %}
+                <label class="mcq-option">
+                  <input
+                    type="radio"
+                    name="q_{{ q.id }}"
+                    value="{{ option }}"
+                    class="answer-radio"
+                    data-session-code="{{ student_session.session_code }}"
+                    data-question-id="{{ q.id }}"
+                    {% if saved_map.get(q.id) == option %}checked{% endif %}
+                  >
+                  <span>{{ option }}</span>
+                </label>
+              {% endfor %}
+            </div>
+          {% else %}
+            <textarea
+              class="answer-field student-answer"
+              data-session-code="{{ student_session.session_code }}"
+              data-question-id="{{ q.id }}"
+              rows="7"
+              placeholder="Write your answer here"
+            >{{ saved_map.get(q.id, '') }}</textarea>
+          {% endif %}
+        </article>
+      {% endfor %}
+    </section>
   </div>
 </div>
 
 <div class="proctor-warning" id="proctorWarning" aria-hidden="true">
   <div class="proctor-warning-card">
     <div class="warning-icon"><i class="fas fa-triangle-exclamation"></i></div>
-    <p class="warning-kicker">Exam integrity warning</p>
-    <h2 id="proctorWarningTitle">Stay in the exam</h2>
-    <p id="proctorWarningMessage">Leaving fullscreen or switching tabs is not allowed.</p>
+    <p class="warning-kicker">Focus reminder</p>
+    <h2 id="proctorWarningTitle">Stay in this exam window</h2>
+    <p id="proctorWarningMessage">The exam window needs to remain active.</p>
     <div class="warning-progress"><span id="proctorWarningProgress"></span></div>
   </div>
 </div>
-
-<style>
-.proctor-status { position: sticky; top: 86px; z-index: 12; display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 14px; padding: 12px 14px; border: 1px solid rgba(245,165,36,.28); border-radius: 8px; background: rgba(245,165,36,.10); backdrop-filter: blur(12px); }
-.proctor-status span { color: var(--muted); font-size: .78rem; font-weight: 800; text-transform: uppercase; }
-.proctor-status strong { display: block; margin-top: 2px; }
-.warning-dots { display: flex; gap: 7px; }
-.warning-dots span { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(245,165,36,.7); background: transparent; transition: .2s ease; }
-.warning-dots span.active { background: #f5a524; box-shadow: 0 0 18px rgba(245,165,36,.55); }
-.proctor-warning { position: fixed; inset: 0; z-index: 5000; display: none; place-items: center; padding: 20px; background: rgba(6,10,18,.68); backdrop-filter: blur(10px); }
-.proctor-warning.active { display: grid; animation: warningFade .18s ease both; }
-.proctor-warning-card { width: min(440px, 100%); border: 1px solid rgba(245,165,36,.35); border-radius: 8px; background: linear-gradient(135deg, rgba(245,165,36,.16), rgba(239,68,68,.10)), var(--panel-solid); padding: 1.4rem; text-align: center; box-shadow: 0 30px 100px rgba(0,0,0,.45); animation: warningPop .26s ease both; }
-.proctor-warning.level-4 .proctor-warning-card,
-.proctor-warning.level-5 .proctor-warning-card { border-color: rgba(239,68,68,.7); box-shadow: 0 0 0 1px rgba(239,68,68,.25), 0 30px 110px rgba(239,68,68,.35); }
-.proctor-warning.level-5 .warning-icon { background: rgba(239,68,68,.22); color: #fca5a5; animation: warningShake .28s ease both; }
-.warning-icon { width: 58px; height: 58px; display: grid; place-items: center; margin: 0 auto 1rem; border-radius: 8px; background: rgba(245,165,36,.18); color: #fbbf24; font-size: 1.5rem; }
-.warning-kicker { color: #fbbf24; font-size: .78rem; font-weight: 800; text-transform: uppercase; margin: 0 0 .35rem; }
-.proctor-warning-card h2 { margin-bottom: .5rem; }
-.proctor-warning-card p { color: var(--muted); }
-.warning-progress { height: 6px; background: rgba(255,255,255,.12); border-radius: 999px; overflow: hidden; margin-top: 1rem; }
-.warning-progress span { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #f5a524, #ef4444); transition: width .25s ease; }
-@keyframes warningFade { from { opacity: 0; } to { opacity: 1; } }
-@keyframes warningPop { from { opacity: 0; transform: translateY(18px) scale(.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
-@keyframes warningShake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
-</style>
 {% endblock %}
 
 {% block scripts %}

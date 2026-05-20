@@ -18,6 +18,47 @@ enum TokenType {
   RESET_PASSWORD
 }
 
+enum ExamStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+  ARCHIVED
+}
+
+enum QuestionType {
+  MCQ
+  SHORT_ANSWER
+  LONG_ANSWER
+  CODE
+}
+
+enum ExamSessionStatus {
+  IN_PROGRESS
+  SUBMITTED
+  TERMINATED
+  SECOND_CHANCE
+}
+
+enum ViolationType {
+  TAB_SWITCH
+  WINDOW_BLUR
+  FULLSCREEN_EXIT
+  DEVTOOLS_OPEN
+  RIGHT_CLICK
+  COPY_ATTEMPT
+  PASTE_ATTEMPT
+  KEYBOARD_SHORTCUT_BLOCKED
+  TIME_PENALTY
+}
+
+enum NotificationType {
+  RESULT_PUBLISHED
+  SUBMISSION_READY
+  VIOLATION_ALERT
+  ADMIN_MESSAGE
+  SYSTEM
+}
+
 model User {
   id                 String         @id @default(cuid())
   name               String
@@ -39,6 +80,18 @@ model User {
   refreshTokens      RefreshToken[]
   auditLogs          AuditLog[]     @relation("AuditActor")
   createdBySettings  Setting[]      @relation("SettingCreator")
+  teacherExams       Exam[]         @relation("ExamTeacher")
+  assignedEnrollments ExamEnrollment[] @relation("EnrollmentAssigner")
+  studentEnrollments ExamEnrollment[] @relation("StudentEnrollments")
+  assignedGroupEnrollments ExamGroupEnrollment[] @relation("GroupEnrollmentAssigner")
+  examSessions       ExamSession[]  @relation("StudentExamSessions")
+  answers            Answer[]       @relation("StudentAnswers")
+  reviewedAnswers    Answer[]       @relation("ReviewedAnswers")
+  violationLogs      ViolationLog[] @relation("StudentViolations")
+  notifications      Notification[] @relation("UserNotifications")
+  createdGroups      Group[]        @relation("GroupCreator")
+  groupMemberships   GroupMember[]  @relation("StudentGroupMembers")
+  addedGroupMembers  GroupMember[]  @relation("GroupMemberAdder")
 }
 
 model Setting {
@@ -46,11 +99,235 @@ model Setting {
   studentSelfRegistration Boolean  @default(false)
   platformName           String   @default("Exam Platform")
   welcomeMessage         String   @default("Welcome")
+  logoUrl                String?
+  quotePool              Json?
   maxViolationsBeforeAlert Int     @default(3)
+  allowTeacherStudentMessages Boolean @default(false)
+  passPercentage         Int?
   updatedAt              DateTime  @updatedAt
 
   createdById            String?
   createdBy              User?     @relation("SettingCreator", fields: [createdById], references: [id], onDelete: SetNull)
+}
+
+model Exam {
+  id                 String      @id @default(cuid())
+  title              String
+  description        String?
+  status             ExamStatus  @default(DRAFT)
+  startTime          DateTime?
+  endTime            DateTime?
+  durationMinutes    Int
+  totalMarks         Int         @default(0)
+  instructions       String?
+  shuffleQuestions   Boolean     @default(false)
+  shuffleOptions     Boolean     @default(false)
+  allowCodeExecution Boolean     @default(false)
+  passPercentage     Int?
+  archivedAt         DateTime?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  teacherId          String
+  teacher            User        @relation("ExamTeacher", fields: [teacherId], references: [id], onDelete: Restrict)
+
+  questions          Question[]
+  enrollments        ExamEnrollment[]
+  groupEnrollments   ExamGroupEnrollment[]
+  sessions           ExamSession[]
+
+  @@index([teacherId])
+  @@index([status])
+  @@index([startTime])
+}
+
+model ExamEnrollment {
+  id            String   @id @default(cuid())
+  assignedAt    DateTime @default(now())
+
+  examId        String
+  exam          Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  studentId     String
+  student       User     @relation("StudentEnrollments", fields: [studentId], references: [id], onDelete: Cascade)
+
+  assignedById  String?
+  assignedBy    User?    @relation("EnrollmentAssigner", fields: [assignedById], references: [id], onDelete: SetNull)
+
+  @@unique([examId, studentId])
+  @@index([studentId])
+  @@index([assignedById])
+}
+
+model ExamGroupEnrollment {
+  id            String   @id @default(cuid())
+  assignedAt    DateTime @default(now())
+
+  examId        String
+  exam          Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  groupId       String
+  group         Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  assignedById  String?
+  assignedBy    User?    @relation("GroupEnrollmentAssigner", fields: [assignedById], references: [id], onDelete: SetNull)
+
+  @@unique([examId, groupId])
+  @@index([groupId])
+  @@index([assignedById])
+}
+
+model Group {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdById String?
+  createdBy   User?    @relation("GroupCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  members     GroupMember[]
+  enrollments ExamGroupEnrollment[]
+
+  @@unique([name])
+  @@index([createdById])
+}
+
+model GroupMember {
+  id        String   @id @default(cuid())
+  addedAt   DateTime @default(now())
+
+  groupId   String
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  studentId String
+  student   User     @relation("StudentGroupMembers", fields: [studentId], references: [id], onDelete: Cascade)
+
+  addedById String?
+  addedBy   User?    @relation("GroupMemberAdder", fields: [addedById], references: [id], onDelete: SetNull)
+
+  @@unique([groupId, studentId])
+  @@index([studentId])
+  @@index([addedById])
+}
+
+model Question {
+  id                         String       @id @default(cuid())
+  type                       QuestionType
+  questionText               String
+  codeStarterTemplate        String?
+  marks                      Int          @default(1)
+  orderIndex                 Int
+  options                    Json?
+  modelAnswer                String?
+  expectedOutput             String?
+  executionTimeLimitSeconds  Int          @default(10)
+  explanation                String?
+  createdAt                  DateTime     @default(now())
+  updatedAt                  DateTime     @updatedAt
+
+  examId                     String
+  exam                       Exam         @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  answers                    Answer[]
+
+  @@index([examId, orderIndex])
+  @@index([type])
+}
+
+model ExamSession {
+  id                    String            @id @default(cuid())
+  startedAt             DateTime          @default(now())
+  submittedAt           DateTime?
+  status                ExamSessionStatus @default(IN_PROGRESS)
+  remainingSeconds      Int
+  violationCount        Int               @default(0)
+  secondChanceGrantedAt DateTime?
+  timePenaltySeconds    Int               @default(0)
+  ipAddress             String?
+  browserInfo           String?
+  currentQuestionIndex  Int               @default(0)
+  questionsAnswered     Int               @default(0)
+  lastHeartbeatAt       DateTime?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  examId                String
+  exam                  Exam              @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  studentId             String
+  student               User              @relation("StudentExamSessions", fields: [studentId], references: [id], onDelete: Cascade)
+
+  answers               Answer[]
+  violations            ViolationLog[]
+
+  @@index([examId])
+  @@index([studentId])
+  @@index([status])
+}
+
+model Answer {
+  id              String       @id @default(cuid())
+  answerText      String?
+  isCodeQuestion  Boolean      @default(false)
+  codeOutput      String?
+  marksAwarded    Float?
+  teacherRemark   String?
+  reviewedAt      DateTime?
+  submittedAt     DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  questionId      String
+  question        Question     @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  studentId       String
+  student         User         @relation("StudentAnswers", fields: [studentId], references: [id], onDelete: Cascade)
+
+  examSessionId   String
+  examSession     ExamSession  @relation(fields: [examSessionId], references: [id], onDelete: Cascade)
+
+  reviewedById    String?
+  reviewedBy      User?        @relation("ReviewedAnswers", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@unique([examSessionId, questionId])
+  @@index([studentId])
+  @@index([reviewedById])
+}
+
+model ViolationLog {
+  id              String        @id @default(cuid())
+  type            ViolationType
+  occurredAt      DateTime      @default(now())
+  adminNotified   Boolean       @default(false)
+  details         Json?
+
+  examSessionId   String
+  examSession     ExamSession   @relation(fields: [examSessionId], references: [id], onDelete: Cascade)
+
+  studentId       String
+  student         User          @relation("StudentViolations", fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([examSessionId])
+  @@index([studentId])
+  @@index([type])
+  @@index([occurredAt])
+}
+
+model Notification {
+  id              String           @id @default(cuid())
+  type            NotificationType
+  message         String
+  isRead          Boolean          @default(false)
+  relatedEntityId String?
+  createdAt       DateTime         @default(now())
+
+  recipientId     String
+  recipient       User             @relation("UserNotifications", fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@index([recipientId, isRead])
+  @@index([type])
+  @@index([createdAt])
 }
 
 model RefreshToken {

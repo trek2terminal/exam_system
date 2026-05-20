@@ -59,14 +59,14 @@
 
         <div class="stat-card animate-fade-in-up animate-stagger-4">
             <div class="stat-icon status-icon">
-                <i class="fas fa-chart-line"></i>
+                <i class="fas fa-triangle-exclamation"></i>
             </div>
             <div class="stat-content">
-                <h3>Draft Exams</h3>
-                <div class="stat-number">{{ draft_exams }}</div>
-                <p class="stat-detail">{{ closed_exams }} closed</p>
+                <h3>Violation Alerts</h3>
+                <div class="stat-number">{{ violation_alerts }}</div>
+                <p class="stat-detail">Integrity events logged</p>
             </div>
-            <a href="{{ url_for('admin.exams') }}" class="stat-link"></a>
+            <a href="{{ url_for('admin.violations') }}" class="stat-link"></a>
         </div>
     </div>
 
@@ -172,6 +172,20 @@
                 </div>
                 <h4>View Analytics</h4>
                 <p>System statistics</p>
+            </a>
+            <a href="{{ url_for('admin.proctoring') }}" class="action-card">
+                <div class="action-icon">
+                    <i class="fas fa-display"></i>
+                </div>
+                <h4>Live Proctoring</h4>
+                <p>Monitor active exam sessions</p>
+            </a>
+            <a href="{{ url_for('admin.violations') }}" class="action-card">
+                <div class="action-icon">
+                    <i class="fas fa-triangle-exclamation"></i>
+                </div>
+                <h4>Violation Logs</h4>
+                <p>Review exam integrity events</p>
             </a>
         </div>
     </div>

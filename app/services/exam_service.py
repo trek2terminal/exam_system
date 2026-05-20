@@ -46,7 +46,7 @@ class ExamService:
             roll_no=roll_no,
             exam_set_id=exam_set_id,
             status="waiting",
-            start_time=datetime.utcnow()
+            start_time=None,
         )
         db.session.add(session)
         db.session.commit()

@@ -8,9 +8,11 @@ from app.models.user_model import User
 from app.models.exam_model import ExamSet, Question
 from app.models.submission_model import StudentSession, Answer
 from app.models.result_model import Result
-from app.models.audit_model import AuditLog
-from app.utils.helpers import admin_required
+from app.models.audit_model import AuditLog, ViolationLog
+from app.services.exam_service import ExamService
+from app.utils.helpers import admin_required, get_remaining_seconds
 from app.utils.network import get_client_ip
+from app.utils.rate_limiter import rate_limit
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -49,6 +51,38 @@ def _render_create_teacher(status_code=200):
     return render_template("admin/create_teacher.html", form_data=request.form), status_code
 
 
+def _session_snapshot(student_session):
+    exam = student_session.exam_set
+    total_questions = Question.query.filter_by(exam_set_id=exam.id).count()
+    answered_count = Answer.query.filter_by(session_id=student_session.id).filter(Answer.answer_text != "").count()
+    latest_violation = (
+        ViolationLog.query.filter_by(session_id=student_session.id)
+        .order_by(ViolationLog.occurred_at.desc())
+        .first()
+    )
+
+    heartbeat_age = None
+    if student_session.last_heartbeat:
+        heartbeat_age = int((datetime.utcnow() - student_session.last_heartbeat).total_seconds())
+
+    return {
+        "id": student_session.id,
+        "student_name": student_session.student_name,
+        "roll_no": student_session.roll_no,
+        "exam_name": exam.exam_name,
+        "set_code": exam.set_code,
+        "status": student_session.status,
+        "remaining_seconds": get_remaining_seconds(exam, student_session.start_time),
+        "answered_count": answered_count,
+        "total_questions": total_questions,
+        "focus_violations": student_session.focus_violations,
+        "suspicion_score": student_session.suspicion_score,
+        "last_heartbeat_age": heartbeat_age,
+        "latest_violation": latest_violation.violation_type if latest_violation else None,
+        "latest_violation_at": latest_violation.occurred_at.isoformat() if latest_violation else None,
+    }
+
+
 # ==================== DASHBOARD & OVERVIEW ====================
 
 @admin_bp.route("/")
@@ -62,6 +96,7 @@ def dashboard():
     active_exams = ExamSet.query.filter_by(status="active").count()
     total_sessions = StudentSession.query.count()
     completed_sessions = StudentSession.query.filter_by(status="submitted").count()
+    violation_alerts = ViolationLog.query.count()
 
     # Recent activity
     recent_logs = AuditLog.query.order_by(AuditLog.created_at.desc()).limit(10).all()
@@ -85,6 +120,7 @@ def dashboard():
         active_exams=active_exams,
         total_sessions=total_sessions,
         completed_sessions=completed_sessions,
+        violation_alerts=violation_alerts,
         draft_exams=draft_exams,
         closed_exams=closed_exams,
         recent_logs=recent_logs,
@@ -501,6 +537,173 @@ def audit_logs():
         pagination=logs_paginated,
         action_filter=action_filter
     )
+
+
+# ==================== PROCTORING & VIOLATIONS ====================
+
+@admin_bp.route("/proctoring")
+@admin_required
+def proctoring():
+    """Live proctoring dashboard with polling updates."""
+    return render_template("admin/proctoring.html")
+
+
+@admin_bp.route("/proctoring/status")
+@admin_required
+def proctoring_status():
+    """JSON status for active/recent exam sessions."""
+    active_sessions = (
+        StudentSession.query.filter(StudentSession.status.in_(["active", "waiting"]))
+        .order_by(StudentSession.updated_at.desc())
+        .limit(100)
+        .all()
+    )
+    recent_violations = (
+        ViolationLog.query.order_by(ViolationLog.occurred_at.desc())
+        .limit(10)
+        .all()
+    )
+
+    snapshots = [_session_snapshot(student_session) for student_session in active_sessions]
+
+    return jsonify(
+        {
+            "ok": True,
+            "updated_at": datetime.utcnow().isoformat(),
+            "counts": {
+                "active_sessions": sum(1 for item in snapshots if item["status"] == "active"),
+                "waiting_sessions": sum(1 for item in snapshots if item["status"] == "waiting"),
+                "flagged_sessions": sum(1 for item in snapshots if item["focus_violations"] > 0),
+            },
+            "sessions": snapshots,
+            "recent_violations": [
+                {
+                    "id": violation.id,
+                    "student_name": violation.student_session.student_name,
+                    "roll_no": violation.student_session.roll_no,
+                    "exam_name": violation.student_session.exam_set.exam_name,
+                    "type": violation.violation_type,
+                    "detail": violation.detail,
+                    "occurred_at": violation.occurred_at.isoformat(),
+                }
+                for violation in recent_violations
+            ],
+        }
+    )
+
+
+@admin_bp.route("/violations")
+@admin_required
+def violations():
+    """View exam integrity violations."""
+    page = request.args.get("page", 1, type=int)
+    active_only = request.args.get("active", "0") == "1"
+
+    query = ViolationLog.query.join(StudentSession)
+    if active_only:
+        query = query.filter(StudentSession.status == "active")
+
+    logs_paginated = query.order_by(ViolationLog.occurred_at.desc()).paginate(page=page, per_page=50)
+
+    return render_template(
+        "admin/violations.html",
+        violations=logs_paginated.items,
+        pagination=logs_paginated,
+        active_only=active_only,
+    )
+
+
+@admin_bp.route("/sessions/<int:session_id>/terminate", methods=["POST"])
+@admin_required
+@rate_limit("admin_action", json_response=False)
+def terminate_session(session_id):
+    student_session = StudentSession.query.get_or_404(session_id)
+    reason = request.form.get("reason", "").strip() or "Terminated by admin"
+
+    if student_session.status not in ["submitted", "evaluated"]:
+        ExamService.end_exam(student_session.session_code, reason=reason)
+
+    AuditLog(
+        user_id=session.get("admin_id"),
+        action="terminate_exam_session",
+        resource_type="student_session",
+        resource_id=student_session.id,
+        reason=reason,
+        status="success",
+        ip_address=get_client_ip(),
+    ).save()
+
+    flash(f"Exam session for {student_session.student_name} was terminated.", "warning")
+    return redirect(request.referrer or url_for("admin.violations"))
+
+
+@admin_bp.route("/sessions/<int:session_id>/second-chance", methods=["POST"])
+@admin_required
+@rate_limit("admin_action", json_response=False)
+def grant_second_chance(session_id):
+    student_session = StudentSession.query.get_or_404(session_id)
+
+    if student_session.status in ["submitted", "evaluated"]:
+        flash("Submitted sessions cannot be resumed.", "danger")
+        return redirect(request.referrer or url_for("admin.violations"))
+
+    student_session.status = "active"
+    student_session.focus_violations = 0
+    student_session.tab_switch_count = 0
+    student_session.suspicion_score = 0
+    student_session.last_heartbeat = datetime.utcnow()
+    if not student_session.start_time:
+        student_session.start_time = datetime.utcnow()
+    db.session.commit()
+
+    AuditLog(
+        user_id=session.get("admin_id"),
+        action="grant_second_chance",
+        resource_type="student_session",
+        resource_id=student_session.id,
+        status="success",
+        ip_address=get_client_ip(),
+    ).save()
+
+    flash(f"Second chance granted to {student_session.student_name}.", "success")
+    return redirect(request.referrer or url_for("admin.violations"))
+
+
+@admin_bp.route("/sessions/<int:session_id>/reduce-time", methods=["POST"])
+@admin_required
+@rate_limit("admin_action", json_response=False)
+def reduce_session_time(session_id):
+    student_session = StudentSession.query.get_or_404(session_id)
+    raw_minutes = request.form.get("minutes", "0").strip()
+
+    try:
+        minutes = int(raw_minutes)
+    except ValueError:
+        minutes = 0
+
+    if minutes <= 0:
+        flash("Enter a positive number of minutes.", "danger")
+        return redirect(request.referrer or url_for("admin.violations"))
+
+    if student_session.status != "active":
+        flash("Time can only be reduced for active sessions.", "danger")
+        return redirect(request.referrer or url_for("admin.violations"))
+
+    student_session.start_time = (student_session.start_time or datetime.utcnow()) - timedelta(minutes=minutes)
+    db.session.commit()
+
+    AuditLog(
+        user_id=session.get("admin_id"),
+        action="reduce_exam_time",
+        resource_type="student_session",
+        resource_id=student_session.id,
+        changes=f"Reduced remaining time by {minutes} minutes",
+        status="success",
+        ip_address=get_client_ip(),
+    ).save()
+
+    flash(f"Reduced {student_session.student_name}'s time by {minutes} minute(s).", "warning")
+    return redirect(request.referrer or url_for("admin.violations"))
 
 
 # ==================== SYSTEM SETTINGS ====================

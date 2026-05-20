@@ -1,0 +1,257 @@
+{% extends "base.html" %}
+
+{% block title %}Live Proctoring - Admin{% endblock %}
+
+{% block content %}
+<div class="admin-page proctor-page">
+    <div class="page-header">
+        <div>
+            <h1><i class="fas fa-display"></i> Live Proctoring</h1>
+            <p>Active exam sessions refresh automatically every few seconds.</p>
+        </div>
+        <div class="actions">
+            <a class="btn secondary" href="{{ url_for('admin.violations') }}">Violation Logs</a>
+            <button class="btn primary" type="button" onclick="refreshProctoring()">Refresh</button>
+        </div>
+    </div>
+
+    <div class="stats proctor-stats">
+        <div class="stat-box">
+            <div class="stat-label">Active</div>
+            <div class="stat-value" id="activeCount">0</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-label">Waiting</div>
+            <div class="stat-value" id="waitingCount">0</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-label">Flagged</div>
+            <div class="stat-value" id="flaggedCount">0</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-label">Last Update</div>
+            <div class="stat-value compact" id="lastUpdate">--:--</div>
+        </div>
+    </div>
+
+    <div id="proctorGrid" class="proctor-grid"></div>
+
+    <div class="card">
+        <div class="row-between">
+            <h2>Recent Violations</h2>
+            <span class="muted">Latest 10 events</span>
+        </div>
+        <div id="recentViolations" class="activity-feed"></div>
+    </div>
+</div>
+
+<template id="sessionCardTemplate">
+    <article class="proctor-card">
+        <div class="row-between">
+            <div>
+                <h3 data-student></h3>
+                <p class="muted" data-exam></p>
+            </div>
+            <span class="badge" data-status></span>
+        </div>
+        <div class="proctor-metrics">
+            <div><span>Time</span><strong data-time></strong></div>
+            <div><span>Answers</span><strong data-answers></strong></div>
+            <div><span>Violations</span><strong data-violations></strong></div>
+            <div><span>Heartbeat</span><strong data-heartbeat></strong></div>
+        </div>
+        <p class="muted latest-line" data-latest></p>
+        <div class="actions" data-actions></div>
+    </article>
+</template>
+
+<style>
+.proctor-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 16px;
+    margin: 22px 0;
+}
+
+.proctor-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px;
+    background: var(--panel-solid);
+    box-shadow: var(--shadow);
+}
+
+.proctor-card.flagged {
+    border-color: rgba(245, 158, 11, 0.46);
+}
+
+.proctor-card.danger {
+    border-color: rgba(239, 68, 68, 0.62);
+}
+
+.proctor-metrics {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin: 16px 0;
+}
+
+.proctor-metrics div {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.proctor-metrics span {
+    display: block;
+    color: var(--muted);
+    font-size: 0.76rem;
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+
+.proctor-metrics strong {
+    font-size: 1rem;
+}
+
+.stat-value.compact {
+    font-size: 1.2rem;
+}
+
+.latest-line {
+    min-height: 20px;
+}
+
+.mini-form {
+    display: inline-flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.mini-form input {
+    width: 72px;
+    padding: 8px 10px;
+}
+
+@media (max-width: 720px) {
+    .proctor-metrics {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+</style>
+
+<script>
+function formatSeconds(seconds) {
+    seconds = Math.max(0, parseInt(seconds || 0, 10));
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    if (h > 0) return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function buildActionForms(sessionId, status) {
+    if (status !== 'active' && status !== 'waiting') return '';
+
+    const secondChance = `
+        <form method="post" action="/admin/sessions/${sessionId}/second-chance">
+            <button class="btn primary small" type="submit">Second Chance</button>
+        </form>
+    `;
+
+    if (status !== 'active') return secondChance;
+
+    return `
+        <form method="post" action="/admin/sessions/${sessionId}/terminate">
+            <input type="hidden" name="reason" value="Terminated from live proctoring">
+            <button class="btn danger small" type="submit">Terminate</button>
+        </form>
+        <form class="mini-form" method="post" action="/admin/sessions/${sessionId}/reduce-time">
+            <input type="number" name="minutes" min="1" max="60" value="5" aria-label="Minutes">
+            <button class="btn secondary small" type="submit">Reduce</button>
+        </form>
+        ${secondChance}
+    `;
+}
+
+function renderSessions(sessions) {
+    const grid = document.getElementById('proctorGrid');
+    const template = document.getElementById('sessionCardTemplate');
+    grid.innerHTML = '';
+
+    if (!sessions.length) {
+        grid.innerHTML = '<div class="card"><p class="muted">No active or waiting sessions right now.</p></div>';
+        return;
+    }
+
+    sessions.forEach(session => {
+        const node = template.content.cloneNode(true);
+        const card = node.querySelector('.proctor-card');
+        card.classList.toggle('flagged', session.focus_violations > 0);
+        card.classList.toggle('danger', session.focus_violations >= 3);
+
+        node.querySelector('[data-student]').textContent = `${session.student_name} (${session.roll_no})`;
+        node.querySelector('[data-exam]').textContent = `${session.exam_name} | Set ${session.set_code}`;
+        node.querySelector('[data-status]').textContent = session.status;
+        node.querySelector('[data-status]').classList.add(session.status);
+        node.querySelector('[data-time]').textContent = formatSeconds(session.remaining_seconds);
+        node.querySelector('[data-answers]').textContent = `${session.answered_count}/${session.total_questions}`;
+        node.querySelector('[data-violations]').textContent = session.focus_violations;
+        node.querySelector('[data-heartbeat]').textContent = session.last_heartbeat_age === null ? '-' : `${session.last_heartbeat_age}s`;
+        node.querySelector('[data-latest]').textContent = session.latest_violation
+            ? `Latest: ${session.latest_violation.replaceAll('_', ' ')}`
+            : 'No violations recorded.';
+        node.querySelector('[data-actions]').innerHTML = buildActionForms(session.id, session.status);
+        grid.appendChild(node);
+    });
+}
+
+function renderViolations(violations) {
+    const container = document.getElementById('recentViolations');
+    container.innerHTML = '';
+
+    if (!violations.length) {
+        container.innerHTML = '<p class="muted">No violation events yet.</p>';
+        return;
+    }
+
+    violations.forEach(event => {
+        const item = document.createElement('div');
+        item.className = 'activity-item';
+        item.innerHTML = `
+            <div class="activity-icon"><i class="fas fa-triangle-exclamation"></i></div>
+            <div class="activity-content">
+                <div class="activity-title">${event.student_name} | ${event.type.replaceAll('_', ' ')}</div>
+                <div class="activity-time">${event.exam_name} | ${new Date(event.occurred_at).toLocaleString()}</div>
+                <div class="muted">${event.detail || ''}</div>
+            </div>
+        `;
+        container.appendChild(item);
+    });
+}
+
+async function refreshProctoring() {
+    try {
+        const response = await fetch('{{ url_for("admin.proctoring_status") }}');
+        const data = await response.json();
+        if (!data.ok) throw new Error(data.message || 'Failed to load status');
+
+        document.getElementById('activeCount').textContent = data.counts.active_sessions;
+        document.getElementById('waitingCount').textContent = data.counts.waiting_sessions;
+        document.getElementById('flaggedCount').textContent = data.counts.flagged_sessions;
+        document.getElementById('lastUpdate').textContent = new Date(data.updated_at).toLocaleTimeString();
+
+        renderSessions(data.sessions);
+        renderViolations(data.recent_violations);
+    } catch (error) {
+        showToast(error.message || 'Could not refresh proctoring status', 'error');
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    refreshProctoring();
+    setInterval(refreshProctoring, 5000);
+});
+</script>
+{% endblock %}

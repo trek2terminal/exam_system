@@ -1,10 +1,11 @@
 from datetime import datetime
-from flask import Blueprint, render_template, redirect, url_for, request, flash, session
+from flask import Blueprint, current_app, render_template, redirect, url_for, request, flash, session, send_file
 from app.models.database import db
 from app.models.exam_model import ExamSet, Question
 from app.models.submission_model import StudentSession, Answer
 from app.models.result_model import Result
 from app.services.exam_service import ExamService
+from app.utils.helpers import create_submission_pdf
 
 student_bp = Blueprint("student", __name__, url_prefix="/student")
 
@@ -130,6 +131,7 @@ def exam(session_code):
         questions=questions,
         saved_map=saved_map,
         remaining_seconds=remaining_seconds,
+        max_violations_allowed=current_app.config.get("MAX_VIOLATIONS_ALLOWED", 3),
     )
 
 
@@ -165,6 +167,13 @@ def export_pdf(session_code):
     if owner_redirect:
         return owner_redirect
 
-    # TODO: Implement PDF export using pdf_service later
-    flash("PDF export feature coming soon.", "info")
-    return redirect(url_for("student.submitted", session_code=session_code))
+    student_session = StudentSession.query.filter_by(session_code=session_code).first_or_404()
+    pdf_buffer = create_submission_pdf(student_session)
+    filename = f"submission_{student_session.roll_no}_{student_session.session_code}.pdf"
+
+    return send_file(
+        pdf_buffer,
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=filename,
+    )

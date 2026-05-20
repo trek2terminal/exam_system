@@ -14,14 +14,17 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/animations.css') }}">
     {% block head %}{% endblock %}
 </head>
-<body class="page-transition">
+{% set is_student_surface = request.endpoint and (request.endpoint.startswith('student.') or request.endpoint == 'auth.student_login') %}
+<body class="page-transition{% if is_student_surface %} student-mode{% endif %}">
     <div class="app-shell">
         <header class="topbar">
             <div class="brand">
-                <div class="brand-mark"><i class="fas fa-shield-halved"></i></div>
+                <div class="brand-mark">
+                    <i class="fas {% if is_student_surface %}fa-compass{% else %}fa-shield-halved{% endif %}"></i>
+                </div>
                 <div>
                     <div class="brand-title">Exam System</div>
-                    <div class="brand-subtitle">Professional Assessment Platform</div>
+                    <div class="brand-subtitle">{% if is_student_surface %}Calm assessment space{% else %}Professional Assessment Platform{% endif %}</div>
                 </div>
             </div>
 
@@ -36,6 +39,12 @@
                     <a href="{{ url_for('admin.users') }}" class="nav-link">
                         <i class="fas fa-users"></i> Users
                     </a>
+                    <a href="{{ url_for('admin.proctoring') }}" class="nav-link">
+                        <i class="fas fa-display"></i> Proctoring
+                    </a>
+                    <a href="{{ url_for('admin.violations') }}" class="nav-link">
+                        <i class="fas fa-triangle-exclamation"></i> Violations
+                    </a>
                     <a href="{{ url_for('auth.admin_logout') }}" class="nav-link nav-logout">
                         <i class="fas fa-sign-out-alt"></i> Logout
                     </a>
@@ -43,10 +52,13 @@
                     <a href="{{ url_for('teacher.dashboard') }}" class="nav-link">Dashboard</a>
                     <a href="{{ url_for('teacher.results') }}" class="nav-link">Results</a>
                     <a href="{{ url_for('auth.teacher_logout') }}" class="nav-link nav-logout">Logout</a>
+                {% elif session.get('role') == 'student' %}
+                    <a href="{{ url_for('student.join_exam') }}" class="nav-link">Exam Lobby</a>
+                    <a href="{{ url_for('auth.student_logout') }}" class="nav-link nav-logout">Exit</a>
                 {% else %}
                     <a href="{{ url_for('auth.login_selector') }}" class="nav-link">Login</a>
                 {% endif %}
-                <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme">
+                <button class="theme-toggle" type="button" title="Toggle theme" aria-label="Toggle theme">
                     <i class="fas fa-moon"></i>
                 </button>
             </div>

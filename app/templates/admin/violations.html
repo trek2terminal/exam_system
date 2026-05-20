@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}Violation Logs - Admin{% endblock %}
+
+{% block content %}
+<div class="admin-page">
+    <div class="page-header">
+        <div>
+            <h1><i class="fas fa-triangle-exclamation"></i> Violation Logs</h1>
+            <p>Append-only exam integrity events from active and submitted sessions.</p>
+        </div>
+        <div class="actions">
+            <a class="btn secondary" href="{{ url_for('admin.violations', active=1 if not active_only else 0) }}">
+                {% if active_only %}Show All{% else %}Active Only{% endif %}
+            </a>
+            <a class="btn secondary" href="{{ url_for('admin.dashboard') }}">Back</a>
+        </div>
+    </div>
+
+    <div class="card">
+        {% if violations %}
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Student</th>
+                            <th>Exam</th>
+                            <th>Type</th>
+                            <th>Count</th>
+                            <th>IP</th>
+                            <th>Status</th>
+                            <th>Admin Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in violations %}
+                            {% set s = log.student_session %}
+                            <tr>
+                                <td>{{ log.occurred_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                                <td>
+                                    <strong>{{ s.student_name }}</strong>
+                                    <div class="muted">{{ s.roll_no }}</div>
+                                </td>
+                                <td>{{ s.exam_set.exam_name }}</td>
+                                <td>
+                                    <span class="badge warning">{{ log.violation_type | replace('_', ' ') | title }}</span>
+                                    {% if log.detail %}
+                                        <div class="muted">{{ log.detail }}</div>
+                                    {% endif %}
+                                </td>
+                                <td>{{ s.focus_violations }}</td>
+                                <td>{{ log.ip_address or '-' }}</td>
+                                <td><span class="badge {{ s.status }}">{{ s.status | title }}</span></td>
+                                <td>
+                                    <div class="actions">
+                                        {% if s.status == 'active' %}
+                                            <form method="post" action="{{ url_for('admin.terminate_session', session_id=s.id) }}">
+                                                <input type="hidden" name="reason" value="Terminated after integrity review">
+                                                <button class="btn danger small" type="submit">Terminate</button>
+                                            </form>
+                                            <form method="post" action="{{ url_for('admin.reduce_session_time', session_id=s.id) }}" class="inline-time-form">
+                                                <input type="number" name="minutes" min="1" max="60" value="5" aria-label="Minutes">
+                                                <button class="btn secondary small" type="submit">Reduce</button>
+                                            </form>
+                                        {% endif %}
+                                        {% if s.status in ['active', 'waiting'] %}
+                                            <form method="post" action="{{ url_for('admin.grant_second_chance', session_id=s.id) }}">
+                                                <button class="btn primary small" type="submit">Second Chance</button>
+                                            </form>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="muted">No violation logs yet.</p>
+        {% endif %}
+    </div>
+</div>
+
+<style>
+.inline-time-form {
+    display: inline-flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.inline-time-form input {
+    width: 78px;
+    padding: 8px 10px;
+}
+</style>
+{% endblock %}

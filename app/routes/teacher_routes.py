@@ -54,7 +54,6 @@ def setup_exam(exam_id=None):
             flash("Cannot edit an active exam. Close it first.", "danger")
             return redirect(url_for("teacher.setup_exam", exam_id=exam.id))
 
-        # ... (your existing form parsing logic remains the same)
         exam_name = request.form.get("exam_name", "").strip()
         set_code = request.form.get("set_code", "").strip().upper()
         subject = request.form.get("subject", "").strip()
@@ -245,8 +244,62 @@ def student_view(session_id):
             remarks_map[qm.question_id] = qm.teacher_remark or ""
 
     if request.method == "POST":
-        # ... (your existing POST logic for marking) - kept intact for now
-        pass   # You can keep your full POST logic here
+        if student_session.status not in ["submitted", "evaluated"]:
+            flash("This attempt is still in progress. Marks can be saved after submission.", "warning")
+            return redirect(url_for("teacher.student_view", session_id=session_id))
+
+        marks_payload = {}
+        remarks_payload = {}
+        total_obtained = 0
+        total_possible = sum(q.marks for q in questions)
+
+        for q in questions:
+            raw_marks = request.form.get(f"marks_{q.id}", "0").strip() or "0"
+            try:
+                marks_awarded = int(raw_marks)
+            except ValueError:
+                flash(f"Marks for question {q.question_number} must be a number.", "danger")
+                return redirect(url_for("teacher.student_view", session_id=session_id))
+
+            if marks_awarded < 0 or marks_awarded > q.marks:
+                flash(f"Marks for question {q.question_number} must be between 0 and {q.marks}.", "danger")
+                return redirect(url_for("teacher.student_view", session_id=session_id))
+
+            marks_payload[q.id] = marks_awarded
+            remarks_payload[q.id] = request.form.get(f"remark_{q.id}", "").strip()
+            total_obtained += marks_awarded
+
+        result = Result.query.filter_by(session_id=student_session.id).first()
+        if not result:
+            result = Result(session_id=student_session.id)
+            db.session.add(result)
+            db.session.flush()
+        else:
+            QuestionMark.query.filter_by(result_id=result.id).delete()
+
+        result.total_marks = total_possible
+        result.total_marks_obtained = total_obtained
+        result.teacher_remarks = request.form.get("teacher_remarks", "").strip()
+        result.evaluated_by = session.get("teacher_id")
+        result.published = request.form.get("published") == "on"
+        result.published_at = datetime.utcnow() if result.published else None
+        result.calculate_percentage()
+
+        for q in questions:
+            db.session.add(
+                QuestionMark(
+                    result_id=result.id,
+                    question_id=q.id,
+                    marks_awarded=marks_payload[q.id],
+                    teacher_remark=remarks_payload[q.id],
+                )
+            )
+
+        student_session.status = "evaluated"
+        db.session.commit()
+
+        flash("Marks saved successfully.", "success")
+        return redirect(url_for("teacher.student_view", session_id=session_id))
 
     return render_template(
         "teacher/student_view.html",

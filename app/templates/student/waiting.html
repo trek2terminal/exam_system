@@ -2,13 +2,27 @@
 {% block title %}Waiting Room{% endblock %}
 
 {% block content %}
-<div class="card narrow">
-  <h1>Waiting Room</h1>
-  <p><strong>{{ student_session.student_name }}</strong>, your exam is not active yet.</p>
-  <p>Exam: <strong>{{ exam.exam_name }}</strong></p>
-  <p>Set: <strong>{{ exam.set_code }}</strong></p>
-  <p class="muted">This page will keep checking automatically.</p>
-  <div class="loader"></div>
+<div class="student-flow-shell">
+  <section class="student-flow-card waiting-card animate-scale-in">
+    <div class="waiting-orbit" aria-hidden="true">
+      <span></span><span></span><span></span>
+    </div>
+
+    <p class="student-kicker">Waiting room</p>
+    <h1>You're in the right place.</h1>
+    <p><strong>{{ student_session.student_name }}</strong>, your teacher has not started this exam yet.</p>
+
+    <div class="student-exam-summary">
+      <div><span>Exam</span><strong>{{ exam.exam_name }}</strong></div>
+      <div><span>Set</span><strong>{{ exam.set_code }}</strong></div>
+      <div><span>Subject</span><strong>{{ exam.subject }}</strong></div>
+    </div>
+
+    <div class="waiting-status">
+      <div class="loader-dots" aria-hidden="true"><span></span><span></span><span></span></div>
+      <span>Checking for the start signal...</span>
+    </div>
+  </section>
 </div>
 {% endblock %}
 

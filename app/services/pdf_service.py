@@ -3,17 +3,25 @@ from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
 import os
-from app.config import Config
+from flask import current_app, has_app_context
 
 
 class PDFService:
+    @staticmethod
+    def _export_path(filename):
+        upload_folder = (
+            current_app.config.get("UPLOAD_FOLDER")
+            if has_app_context()
+            else os.path.join(os.getcwd(), "app", "static", "uploads")
+        )
+        return os.path.join(upload_folder, "exports", filename)
 
     @staticmethod
     def generate_question_paper(exam_set, questions, output_path=None):
         """Generate Question Paper PDF"""
         if not output_path:
             filename = f"question_paper_{exam_set.access_code}_{datetime.now().strftime('%Y%m%d')}.pdf"
-            output_path = os.path.join(Config.UPLOAD_FOLDER, "exports", filename)
+            output_path = PDFService._export_path(filename)
 
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
@@ -61,5 +69,48 @@ class PDFService:
     @staticmethod
     def generate_result_pdf(result, session, exam_set, output_path=None):
         """Generate Student Result PDF"""
-        # Implementation similar to above (can be expanded later)
-        pass
+        if not output_path:
+            filename = f"result_{session.roll_no}_{datetime.now().strftime('%Y%m%d')}.pdf"
+            output_path = PDFService._export_path(filename)
+
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+        c = canvas.Canvas(output_path, pagesize=letter)
+        width, height = letter
+        y = height - 50
+
+        c.setFont("Helvetica-Bold", 18)
+        c.drawString(50, y, "Exam Result")
+        y -= 36
+
+        c.setFont("Helvetica", 12)
+        rows = [
+            ("Student", session.student_name),
+            ("Roll No", session.roll_no),
+            ("Exam", exam_set.exam_name),
+            ("Subject", exam_set.subject),
+            ("Marks", f"{result.total_marks_obtained} / {result.total_marks}"),
+            ("Percentage", f"{result.percentage}%"),
+        ]
+
+        for label, value in rows:
+            c.setFont("Helvetica-Bold", 11)
+            c.drawString(50, y, f"{label}:")
+            c.setFont("Helvetica", 11)
+            c.drawString(145, y, str(value or "-"))
+            y -= 22
+
+        if result.teacher_remarks:
+            y -= 10
+            c.setFont("Helvetica-Bold", 11)
+            c.drawString(50, y, "Teacher Remarks:")
+            y -= 20
+            c.setFont("Helvetica", 11)
+            text_object = c.beginText(50, y)
+            text_object.setLeading(15)
+            for line in str(result.teacher_remarks).splitlines() or ["-"]:
+                text_object.textLine(line)
+            c.drawText(text_object)
+
+        c.save()
+        return output_path

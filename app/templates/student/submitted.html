@@ -2,40 +2,64 @@
 {% block title %}Submitted{% endblock %}
 
 {% block content %}
-<div class="card narrow">
-  <h1>Submission Status</h1>
-  <p><strong>{{ student_session.student_name }}</strong>, your exam has been submitted.</p>
-  <p>Exam: <strong>{{ student_session.exam_set.exam_name }}</strong></p>
-  <p>Set: <strong>{{ student_session.exam_set.set_code }}</strong></p>
+<div class="student-flow-shell">
+  <section class="student-flow-card submitted-card animate-scale-in">
+    <div class="submitted-check"><i class="fas fa-check"></i></div>
+    <p class="student-kicker">Submission complete</p>
+    <h1>Nice work, {{ student_session.student_name }}.</h1>
+    <p>Your answers for <strong>{{ student_session.exam_set.exam_name }}</strong> have been saved.</p>
 
-  {% if student_session.autosubmit_reason %}
-    <p><strong>Auto-submit reason:</strong> {{ student_session.autosubmit_reason }}</p>
-  {% endif %}
-
-  <div class="card inner">
-    <h2>Answer Copy</h2>
-    <a class="btn secondary" href="{{ url_for('student.export_pdf', session_code=student_session.session_code) }}">Download PDF Copy</a>
-  </div>
-
-  {% if result and result.published %}
-    <div class="card inner">
-      <h2>Score Card</h2>
-      <p><strong>Total Marks:</strong> {{ result.total_marks }}</p>
-      <p><strong>Teacher Remarks:</strong> {{ result.teacher_remarks or "No remarks added." }}</p>
+    <div class="student-exam-summary">
+      <div><span>Set</span><strong>{{ student_session.exam_set.set_code }}</strong></div>
+      <div><span>Roll No</span><strong>{{ student_session.roll_no }}</strong></div>
+      <div><span>Status</span><strong>{{ student_session.status | title }}</strong></div>
     </div>
 
-    <div class="card inner">
-      <h2>Question-wise Feedback</h2>
-      {% for q in questions %}
-        <div class="question-block">
-          <p><strong>Q{{ q.question_number }}</strong> - {{ q.question_text }}</p>
-          <p><strong>Marks:</strong> {{ question_marks.get(q.id).marks_awarded if question_marks.get(q.id) else 0 }} / {{ q.marks }}</p>
-          <p><strong>Remark:</strong> {{ question_marks.get(q.id).teacher_remark if question_marks.get(q.id) and question_marks.get(q.id).teacher_remark else "None" }}</p>
+    {% if student_session.autosubmit_reason %}
+      <div class="gentle-alert">
+        <i class="fas fa-circle-info"></i>
+        <span>{{ student_session.autosubmit_reason }}</span>
+      </div>
+    {% endif %}
+
+    <div class="submitted-actions">
+      <a class="btn secondary" href="{{ url_for('student.export_pdf', session_code=student_session.session_code) }}">
+        <i class="fas fa-file-pdf"></i> Download answer copy
+      </a>
+    </div>
+
+    {% if result and result.published %}
+      <div class="result-card">
+        <h2>Score Card</h2>
+        <div class="score-line">
+          <span>Total Marks</span>
+          <strong>{{ result.total_marks_obtained }} / {{ result.total_marks }}</strong>
         </div>
-      {% endfor %}
-    </div>
-  {% else %}
-    <p class="muted">Marks have not been published yet.</p>
-  {% endif %}
+        <div class="score-line">
+          <span>Percentage</span>
+          <strong>{{ result.percentage }}%</strong>
+        </div>
+        <p class="muted">{{ result.teacher_remarks or "No remarks added." }}</p>
+      </div>
+
+      <div class="result-card">
+        <h2>Question-wise Feedback</h2>
+        {% for q in questions %}
+          <div class="feedback-row">
+            <div>
+              <strong>Q{{ q.question_number }}</strong>
+              <p>{{ q.question_text }}</p>
+            </div>
+            <span>{{ question_marks.get(q.id).marks_awarded if question_marks.get(q.id) else 0 }} / {{ q.marks }}</span>
+          </div>
+          {% if question_marks.get(q.id) and question_marks.get(q.id).teacher_remark %}
+            <p class="muted feedback-remark">{{ question_marks.get(q.id).teacher_remark }}</p>
+          {% endif %}
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="muted result-pending">Your teacher will publish marks when evaluation is ready.</p>
+    {% endif %}
+  </section>
 </div>
 {% endblock %}

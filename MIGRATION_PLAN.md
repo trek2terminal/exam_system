@@ -1,54 +1,151 @@
-# Exam Platform Migration Plan
+# Exam Platform Python Build Plan
 
-## Goal
-Migrate the current Flask-based exam system toward the shared next-level specification in stages, without breaking the existing app during the transition.
+## Direction
 
-## Strategy
-- Keep the current Flask app operational as the legacy runtime during migration.
-- Introduce the new architecture incrementally.
-- Move backend capabilities first, then UI, then security/proctoring, then deployment.
-- Preserve data and workflows during each stage.
+Build the full local-first, host-ready exam platform with Python as the backend stack.
 
-## Stage 1 — Foundation
-- Create a new backend structure aligned with the target architecture.
-- Define environment/config loading, logging, and error-handling standards.
-- Introduce the database layer that supports local SQLite and production PostgreSQL.
-- Establish migration tooling and seed strategy.
-- Keep the current Flask app intact while the new foundation is introduced.
+Recommended final architecture:
 
-## Stage 2 — Authentication and Users
-- Implement role-based auth.
-- Add JWT access/refresh handling.
-- Build user and settings management APIs.
-- Add admin seed flow.
+- Backend: Python, preferably FastAPI for the final API service.
+- Current runtime: Flask app under `app/`, kept working during migration.
+- Realtime: Flask-SocketIO now or FastAPI WebSockets/python-socketio later.
+- ORM: SQLAlchemy with SQLite locally and PostgreSQL in production.
+- Migrations: Alembic for the final service.
+- Frontend: React + Vite for Monaco editor, terminal UI, and richer dashboards.
+- Code execution: sandboxed Python subprocess with timeouts and restricted imports.
+- LAN deployment: local machine shares Wi-Fi IP links first, production hosting later.
 
-## Stage 3 — Exams and Questions
-- Implement exam CRUD.
-- Add question models and import parsing.
-- Add enrollment and assignment flows.
-- Add result and review foundations.
+## Important Security Reality
 
-## Stage 4 — Student Exam Flow
-- Add exam start/resume/session handling.
-- Implement autosave and timed submission.
-- Add integrity controls and session state APIs.
+No web exam platform can fully block operating-system actions such as Alt+Tab, screenshots, camera photos, second devices, or hardware-level shortcuts. Serious exam portals handle this by combining:
 
-## Stage 5 — Code Execution and Proctoring
-- Add sandboxed Python execution.
-- Add violation logging and real-time events.
-- Add admin/teacher monitoring flows.
+- fullscreen enforcement,
+- tab/window blur detection,
+- blocked browser shortcuts,
+- copy/paste/right-click restrictions,
+- violation logging,
+- proctor/admin alerts,
+- server-side autosave and timer state,
+- audit trails,
+- role-based access control,
+- strong operational rules.
 
-## Stage 6 — Frontend Migration
-- Introduce React frontend.
-- Build role-based dashboards.
-- Implement exam UI, editor, terminal, and review screens.
+This project should follow that same practical model.
 
-## Stage 7 — Deployment and Hardening
-- Add production config, reverse proxy support, and process management.
-- Add rate limiting, CSRF, audit logging, backups, and observability.
-- Finalize migration and retire legacy paths.
+## Current App State
 
-## Current State
-- Legacy Flask app is still the running system.
-- Production hardening has been applied to the current Flask code.
-- Migration now moves forward in stages instead of a full rewrite in one step.
+- The working Python app is Flask-based.
+- It already supports admin, teacher, and student roles.
+- It already has student login, exam join, exam taking, autosave, submission, teacher marking, PDF export, and a calmer student UI.
+- It now prints only Wi-Fi share URLs from `run.py`.
+- A Node/Prisma draft exists under `backend/`, but the project direction is now Python-first.
+
+## Completed Hardening Slices
+
+- Lightweight local/LAN rate limiting for login, autosave, heartbeat, violation reporting, submit, and admin security actions.
+- Append-only violation log model.
+- Student exam violation endpoint.
+- Admin violation log page.
+- Admin live proctoring page with polling status cards.
+- Admin controls for terminate, second chance, and reduce-time.
+- Student heartbeat now syncs server-side remaining time and warning count after admin action.
+- Audit logging for submit and admin security actions.
+
+## Python Feature Roadmap
+
+### Phase 1 - Harden Current Flask App
+
+- Append-only violation log table.
+- 3-warning exam integrity model.
+- Admin-visible violation records.
+- Admin actions: terminate exam, grant second chance, reduce time.
+- Stronger audit logging for sensitive actions.
+- Rate limiting for login, autosave, submit, and code execution.
+- Security headers and form/JSON validation cleanup.
+
+### Phase 2 - Full Python Domain Model
+
+- Users: Admin, Teacher, Student.
+- Settings: registration toggle, platform name, violation threshold, quotes.
+- Exams: draft, published, closed, archived.
+- Questions: MCQ, short, long, Python code.
+- Enrollments: students and groups.
+- Exam sessions: start/resume/submit/terminate/second chance.
+- Answers: text, selected options, code, output, marks, remarks.
+- Violations: immutable append-only rows.
+- Notifications: student, teacher, admin alerts.
+
+### Phase 3 - Student Experience
+
+- Student dashboard with greeting, quotes, assigned exams, results.
+- Pre-exam checklist and fullscreen capability test.
+- Exam interface with timer, navigator, autosave, flagged questions.
+- Resume after refresh/reconnect.
+- Results page after teacher publishes marks.
+
+### Phase 4 - Teacher Experience
+
+- Teacher dashboard.
+- Exam CRUD.
+- Question editor.
+- Word/text/direct-paste import parser.
+- Student assignment.
+- Review answers and publish results.
+- Read-only proctoring view.
+
+### Phase 5 - Admin Experience
+
+- User and teacher management.
+- Settings panel.
+- Live proctoring dashboard.
+- End exam, second chance, reduce time, private message.
+- Violation logs and audit logs.
+- Export CSV/PDF reports.
+- Backup database.
+
+### Phase 6 - Python Code Execution
+
+- Code question type.
+- Python static safety checks.
+- Subprocess execution with timeout.
+- Captured stdout/stderr.
+- Input support for `input()`.
+- Output saved with answer.
+- Rate limiting per student.
+
+### Phase 7 - Realtime Layer
+
+- Student heartbeat.
+- Admin/teacher proctor rooms.
+- Violation alert events.
+- Time reduction/termination/second chance events.
+- Student private messages.
+
+### Phase 8 - React Frontend
+
+- React + Vite app.
+- Monaco editor for Python.
+- xterm.js for terminal output.
+- Zustand or simple query state.
+- Axios with auth refresh if/when API auth moves to JWT.
+- shadcn/Tailwind or equivalent modern UI.
+
+### Phase 9 - Deployment
+
+- Local LAN mode remains first-class.
+- SQLite for local use.
+- PostgreSQL option for hosting.
+- Nginx or Caddy reverse proxy.
+- Windows firewall instructions.
+- Optional HTTPS in production.
+
+## Non-Negotiable Rules
+
+- Admin should be seeded/setup securely, not freely self-created.
+- Teachers only manage their own exams.
+- Students only access their own sessions/results.
+- Results are hidden until published.
+- Violation logs are append-only.
+- Answers survive refreshes/reconnects.
+- Security actions are logged with user/IP/time/reason.
+- The current Python app must stay runnable during every migration step.

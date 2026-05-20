@@ -2,11 +2,15 @@ from datetime import datetime
 
 from flask import Blueprint, current_app, jsonify, request, session
 
+from app.models.audit_model import AuditLog
 from app.models.submission_model import StudentSession
 from app.services.autosave_service import AutoSaveService
 from app.services.exam_service import ExamService
 from app.services.result_service import ResultService
 from app.services.security_service import SecurityService
+from app.utils.helpers import get_remaining_seconds
+from app.utils.network import get_client_ip
+from app.utils.rate_limiter import rate_limit
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 
@@ -46,15 +50,7 @@ def session_status(session_code):
     student_session = _get_student_session(session_code)
     exam = student_session.exam_set
 
-    remaining_seconds = 0
-    if student_session.start_time:
-        elapsed = (datetime.utcnow() - student_session.start_time).total_seconds()
-        remaining_seconds = max((exam.duration_minutes * 60) - int(elapsed), 0)
-    elif exam.activated_at:
-        elapsed = (datetime.utcnow() - exam.activated_at).total_seconds()
-        remaining_seconds = max((exam.duration_minutes * 60) - int(elapsed), 0)
-    else:
-        remaining_seconds = exam.duration_minutes * 60
+    remaining_seconds = get_remaining_seconds(exam, student_session.start_time)
 
     return jsonify(
         {
@@ -63,6 +59,7 @@ def session_status(session_code):
             "session_status": student_session.status,
             "remaining_seconds": remaining_seconds,
             "focus_violations": student_session.focus_violations,
+            "max_violations_allowed": current_app.config.get("MAX_VIOLATIONS_ALLOWED", 3),
             "suspicion_score": getattr(student_session, "suspicion_score", 0),
             "submitted": student_session.status in ["submitted", "evaluated"],
         }
@@ -70,6 +67,7 @@ def session_status(session_code):
 
 
 @api_bp.route("/student/session/<session_code>/save", methods=["POST"])
+@rate_limit("autosave")
 def save_answer(session_code):
     """Autosave answer using service"""
     if not _student_session_authorized(session_code):
@@ -93,6 +91,7 @@ def save_answer(session_code):
 
 
 @api_bp.route("/student/session/<session_code>/heartbeat", methods=["POST"])
+@rate_limit("heartbeat")
 def heartbeat(session_code):
     """Handle heartbeat and proctoring violations"""
     if not _student_session_authorized(session_code):
@@ -100,6 +99,7 @@ def heartbeat(session_code):
 
     student_session = _get_student_session(session_code)
     data = _get_json_payload()
+    remaining_seconds = get_remaining_seconds(student_session.exam_set, student_session.start_time)
 
     focused = bool(data.get("focused", True))
     violation_count = _parse_int_field(data, "violation_count")
@@ -116,13 +116,56 @@ def heartbeat(session_code):
         {
             "ok": True,
             "submitted": student_session.status in ["submitted", "evaluated"],
+            "session_status": student_session.status,
+            "remaining_seconds": remaining_seconds,
             "focus_violations": student_session.focus_violations,
+            "max_violations_allowed": current_app.config.get("MAX_VIOLATIONS_ALLOWED", 3),
             "should_submit": should_submit,
         }
     )
 
 
+@api_bp.route("/student/session/<session_code>/violation", methods=["POST"])
+@rate_limit("violation")
+def record_violation(session_code):
+    """Record an append-only browser integrity violation."""
+    if not _student_session_authorized(session_code):
+        return _forbidden_session_response()
+
+    student_session = _get_student_session(session_code)
+    if student_session.status != "active":
+        return jsonify({"ok": False, "message": "Session is not active"}), 400
+
+    data = _get_json_payload()
+    violation_type = (data.get("type") or "UNKNOWN").strip()
+    detail = (data.get("detail") or "").strip()
+    client_count = _parse_int_field(data, "violation_count") or 0
+
+    SecurityService.record_violation(
+        session_code=session_code,
+        violation_type=violation_type,
+        detail=detail,
+        client_count=client_count,
+        ip_address=get_client_ip(),
+        user_agent=request.headers.get("User-Agent"),
+    )
+
+    max_violations = current_app.config.get("MAX_VIOLATIONS_ALLOWED", 3)
+    admin_review_required = student_session.focus_violations >= max_violations
+
+    return jsonify(
+        {
+            "ok": True,
+            "focus_violations": student_session.focus_violations,
+            "max_violations_allowed": max_violations,
+            "admin_review_required": admin_review_required,
+            "message": "Violation recorded",
+        }
+    )
+
+
 @api_bp.route("/student/session/<session_code>/submit", methods=["POST"])
+@rate_limit("submit")
 def submit_session(session_code):
     """Manual or auto exam submission"""
     if not _student_session_authorized(session_code):
@@ -135,6 +178,16 @@ def submit_session(session_code):
 
     if student_session.status not in ["submitted", "evaluated"]:
         ExamService.end_exam(session_code, reason=reason)
+        AuditLog(
+            user_id=None,
+            action="submit_exam_session",
+            resource_type="student_session",
+            resource_id=student_session.id,
+            reason=reason,
+            status="success",
+            ip_address=get_client_ip(),
+            user_agent=request.headers.get("User-Agent"),
+        ).save()
 
     try:
         ResultService.calculate_result(session_code)

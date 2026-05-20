@@ -5,6 +5,7 @@ import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth.routes.js';
+import usersRoutes from './routes/users.routes.js';
 
 dotenv.config();
 
@@ -43,8 +44,6 @@ app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 app.use(morgan(isProduction ? 'combined' : 'dev'));
 
-app.use('/api/auth', authRoutes);
-
 app.use(
   rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -53,6 +52,9 @@ app.use(
     legacyHeaders: false,
   })
 );
+
+app.use('/api/auth', authRoutes);
+app.use('/api/users', usersRoutes);
 
 app.get('/health', (req, res) => {
   res.status(200).json({

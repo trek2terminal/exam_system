@@ -3,6 +3,7 @@ from datetime import datetime
 from app.models.database import db
 from app.models.user_model import User
 from app.models.audit_model import AuditLog
+from app.utils.rate_limiter import rate_limit
 from app.utils.network import get_client_ip
 
 auth_bp = Blueprint("auth", __name__)
@@ -92,6 +93,7 @@ def admin_setup():
 
 
 @auth_bp.route("/admin/login", methods=["GET", "POST"])
+@rate_limit("auth_login", methods=("POST",), json_response=False)
 def admin_login():
     """Admin Login"""
     if not User.query.filter_by(role="admin").first():
@@ -186,6 +188,7 @@ def teacher_setup():
 
 
 @auth_bp.route("/teacher/login", methods=["GET", "POST"])
+@rate_limit("auth_login", methods=("POST",), json_response=False)
 def teacher_login():
     """Teacher Login"""
     if request.method == "POST":
@@ -270,6 +273,7 @@ def teacher_logout():
 # ==================== STUDENT LOGIN ====================
 
 @auth_bp.route("/student/login", methods=["GET", "POST"])
+@rate_limit("student_login", methods=("POST",), json_response=False)
 def student_login():
     """Student Login"""
     if request.method == "POST":

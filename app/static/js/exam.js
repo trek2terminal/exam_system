@@ -5,7 +5,7 @@ let currentSessionCode = null;
 let examSubmitted = false;
 let violationCount = 0;
 let fullscreenReady = false;
-const MAX_WARNINGS = 5;
+let MAX_WARNINGS = 3;
 
 async function enterFullscreen() {
     const element = document.documentElement;
@@ -35,15 +35,55 @@ function formatTime(seconds) {
 }
 
 async function saveAnswer(sessionCode, questionId, answerText) {
+    updateAutoSaveStatus?.("saving");
     try {
-        await fetch(`/api/student/session/${sessionCode}/save`, {
+        const response = await fetch(`/api/student/session/${sessionCode}/save`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ question_id: questionId, answer_text: answerText })
         });
+        const data = await response.json();
+        if (!response.ok || !data.ok) {
+            throw new Error(data.message || "Autosave failed");
+        }
+        updateAutoSaveStatus?.("saved");
     } catch (e) {
         console.error("Autosave failed:", e);
+        updateAutoSaveStatus?.("error", "Check connection");
     }
+}
+
+function getQuestionAnswerValue(questionBlock) {
+    const checked = questionBlock.querySelector(".answer-radio:checked");
+    if (checked) return checked.value.trim();
+
+    const field = questionBlock.querySelector(".answer-field");
+    return field ? field.value.trim() : "";
+}
+
+function updateAnswerProgress() {
+    const questionBlocks = Array.from(document.querySelectorAll("[data-question-number]"));
+    if (!questionBlocks.length) return;
+
+    let answered = 0;
+    questionBlocks.forEach(block => {
+        const isAnswered = getQuestionAnswerValue(block).length > 0;
+        const questionNumber = block.dataset.questionNumber;
+        if (isAnswered) answered += 1;
+        block.classList.toggle("answered", isAnswered);
+        updatePaletteStatus?.(questionNumber, isAnswered ? "answered" : "");
+    });
+
+    const answeredCount = document.getElementById("answeredCount");
+    const totalCount = document.getElementById("totalQuestionCount");
+    const progressFill = document.getElementById("answerProgressFill");
+    const progressText = document.getElementById("answerProgressText");
+    const percent = Math.round((answered / questionBlocks.length) * 100);
+
+    if (answeredCount) answeredCount.textContent = answered;
+    if (totalCount) totalCount.textContent = questionBlocks.length;
+    if (progressFill) progressFill.style.width = `${percent}%`;
+    if (progressText) progressText.textContent = `${percent}% complete`;
 }
 
 function snapshotAnswers() {
@@ -71,9 +111,41 @@ async function sendHeartbeat(sessionCode, focused = true) {
             body: JSON.stringify({ focused, violation_count: violationCount })
         });
         const data = await response.json();
+        if (typeof data.max_violations_allowed === "number") {
+            MAX_WARNINGS = data.max_violations_allowed;
+        }
+        if (typeof data.focus_violations === "number") {
+            violationCount = data.focus_violations;
+            updateWarningHud();
+        }
+        if (typeof window.syncExamStatus === "function") {
+            window.syncExamStatus(data);
+        }
         if (data.submitted && !examSubmitted) forceSubmit(sessionCode);
     } catch (e) {
         console.error("Heartbeat failed:", e);
+    }
+}
+
+async function reportViolation(sessionCode, type, detail) {
+    try {
+        const response = await fetch(`/api/student/session/${sessionCode}/violation`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ type, detail, violation_count: violationCount })
+        });
+        const data = await response.json();
+        if (typeof data.max_violations_allowed === "number") {
+            MAX_WARNINGS = data.max_violations_allowed;
+        }
+        if (typeof data.focus_violations === "number") {
+            violationCount = data.focus_violations;
+            updateWarningHud();
+        }
+        return data;
+    } catch (e) {
+        console.error("Violation report failed:", e);
+        return null;
     }
 }
 
@@ -101,11 +173,19 @@ async function submitExam(sessionCode, manual = false, reason = null) {
     }
 }
 
+function confirmSubmitExam(sessionCode) {
+    if (examSubmitted) return;
+    const confirmed = window.confirm("Submit your exam now? Your saved answers will be sent before submission.");
+    if (confirmed) submitExam(sessionCode, true, "Manual submission");
+}
+
 function updateWarningHud() {
     const warningCount = document.getElementById("warningCount");
+    const warningLimit = document.getElementById("warningLimit");
     const warningDots = document.querySelectorAll("#warningDots span");
     const count = Math.min(violationCount, MAX_WARNINGS);
     if (warningCount) warningCount.textContent = count;
+    if (warningLimit) warningLimit.textContent = MAX_WARNINGS;
     warningDots.forEach((dot, index) => dot.classList.toggle("active", index < count));
 }
 
@@ -116,10 +196,10 @@ function playWarningSound() {
         const context = new AudioContext();
         const oscillator = context.createOscillator();
         const gain = context.createGain();
-        oscillator.type = "sawtooth";
-        oscillator.frequency.setValueAtTime(520 + Math.min(violationCount, MAX_WARNINGS) * 70, context.currentTime);
+        oscillator.type = "sine";
+        oscillator.frequency.setValueAtTime(420 + Math.min(violationCount, MAX_WARNINGS) * 45, context.currentTime);
         gain.gain.setValueAtTime(0.001, context.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.18, context.currentTime + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.045, context.currentTime + 0.02);
         gain.gain.exponentialRampToValueAtTime(0.001, context.currentTime + 0.22);
         oscillator.connect(gain);
         gain.connect(context.destination);
@@ -156,24 +236,15 @@ function registerViolation(sessionCode, type, detail) {
     violationCount += 1;
     updateWarningHud();
     playWarningSound();
-    sendHeartbeat(sessionCode, false);
-    if (violationCount <= MAX_WARNINGS) {
-        const remaining = MAX_WARNINGS - violationCount;
-        const suffix = remaining > 2
-            ? `${remaining} warnings left. Stay in this exam window.`
-            : remaining > 1
-                ? `Only ${remaining} warnings left. This is now a serious integrity risk.`
-                : remaining === 1
-                    ? "FINAL WARNING after this. The next violation will auto-submit your exam."
-                    : "This was warning 5. Your exam is being submitted now.";
-        showProctorWarning(type, `${detail} ${suffix}`);
-        if (violationCount === MAX_WARNINGS) {
-            setTimeout(() => submitExam(sessionCode, false, detail), 900);
-        }
-        return;
-    }
-    showProctorWarning("Auto-submitting exam", `${detail} You crossed the 5-warning limit, so your exam is being submitted now.`);
-    setTimeout(() => submitExam(sessionCode, false, detail), 900);
+    reportViolation(sessionCode, type, detail);
+
+    const remaining = Math.max(MAX_WARNINGS - violationCount, 0);
+    const suffix = remaining > 1
+        ? `${remaining} warnings left. Stay in this exam window.`
+        : remaining === 1
+            ? "Final warning. The next violation will require admin review."
+            : "Your session has been flagged for admin review. Continue only inside this exam window.";
+    showProctorWarning(type, `${detail} ${suffix}`);
 }
 
 function initWaitingPage(sessionCode) {
@@ -193,6 +264,10 @@ function initWaitingPage(sessionCode) {
 
 function initExamPage(sessionCode, remainingSeconds) {
     currentSessionCode = sessionCode;
+    const shell = document.querySelector(".exam-shell");
+    const configuredLimit = parseInt(shell?.dataset.warningLimit || "3", 10);
+    if (configuredLimit > 0) MAX_WARNINGS = configuredLimit;
+
     const closeAttemptKey = `exam_close_attempts_${sessionCode}`;
     localStorage.removeItem(closeAttemptKey);
     let remaining = parseInt(remainingSeconds || "0", 10);
@@ -210,6 +285,16 @@ function initExamPage(sessionCode, remainingSeconds) {
             timerBox.classList.toggle("danger", remaining <= 60);
         }
     }
+
+    window.syncExamStatus = data => {
+        if (typeof data.remaining_seconds === "number" && Math.abs(data.remaining_seconds - remaining) > 2) {
+            remaining = data.remaining_seconds;
+            updateTimer();
+        }
+        if (data.session_status === "submitted" || data.session_status === "evaluated" || data.submitted) {
+            forceSubmit(sessionCode);
+        }
+    };
 
     updateTimer();
     examTimerInterval = setInterval(() => {
@@ -268,9 +353,12 @@ function initExamPage(sessionCode, remainingSeconds) {
         const attempts = parseInt(localStorage.getItem(closeAttemptKey) || "0", 10) + 1;
         localStorage.setItem(closeAttemptKey, String(attempts));
         if (attempts >= MAX_WARNINGS) {
-            const blob = new Blob([JSON.stringify({ reason: "Repeated page close/refresh attempts" })], { type: "application/json" });
-            navigator.sendBeacon(`/api/student/session/${sessionCode}/submit`, blob);
-            examSubmitted = true;
+            const blob = new Blob([JSON.stringify({
+                type: "PAGE_CLOSE_ATTEMPT",
+                detail: "Repeated page close/refresh attempts",
+                violation_count: attempts
+            })], { type: "application/json" });
+            navigator.sendBeacon(`/api/student/session/${sessionCode}/violation`, blob);
             return;
         }
         event.preventDefault();
@@ -282,16 +370,32 @@ function initExamPage(sessionCode, remainingSeconds) {
         if (examSubmitted) return;
         const attempts = parseInt(localStorage.getItem(closeAttemptKey) || "0", 10);
         if (attempts >= MAX_WARNINGS) {
-            const blob = new Blob([JSON.stringify({ reason: "Repeated page close/refresh attempts" })], { type: "application/json" });
-            navigator.sendBeacon(`/api/student/session/${sessionCode}/submit`, blob);
+            const blob = new Blob([JSON.stringify({
+                type: "PAGE_CLOSE_ATTEMPT",
+                detail: "Repeated page close/refresh attempts",
+                violation_count: attempts
+            })], { type: "application/json" });
+            navigator.sendBeacon(`/api/student/session/${sessionCode}/violation`, blob);
         }
     });
 
     document.querySelectorAll(".answer-field").forEach(field => {
-        field.addEventListener("input", () => queueTextSave(sessionCode, field.dataset.questionId, field.value));
+        field.addEventListener("input", () => {
+            queueTextSave(sessionCode, field.dataset.questionId, field.value);
+            updateAnswerProgress();
+        });
     });
     document.querySelectorAll(".answer-radio").forEach(radio => {
-        radio.addEventListener("change", () => saveAnswer(sessionCode, radio.dataset.questionId, radio.value));
+        radio.addEventListener("change", () => {
+            saveAnswer(sessionCode, radio.dataset.questionId, radio.value);
+            updateAnswerProgress();
+        });
+    });
+
+    document.getElementById("questionPalette")?.addEventListener("click", event => {
+        const item = event.target.closest(".palette-item");
+        if (!item) return;
+        scrollToQuestion?.(item.dataset.question);
     });
 
     document.getElementById("questionList")?.addEventListener("click", () => {
@@ -302,4 +406,7 @@ function initExamPage(sessionCode, remainingSeconds) {
         gate.classList.add("active");
         gate.querySelector("button")?.addEventListener("click", enterFullscreen);
     }
+
+    updateAnswerProgress();
+    updateAutoSaveStatus?.("idle");
 }

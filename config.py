@@ -14,7 +14,7 @@ class Config:
     # ====================== SECURITY ======================
     SECRET_KEY = os.environ.get("SECRET_KEY")
     if not SECRET_KEY:
-        raise ValueError("❌ No SECRET_KEY found! Please create a .env file in the project root.")
+        raise ValueError("No SECRET_KEY found. Please create a .env file in the project root.")
 
     # Database
     SQLALCHEMY_TRACK_MODIFICATIONS = False
@@ -39,7 +39,19 @@ class Config:
     # Exam Configuration
     EXAM_HEARTBEAT_INTERVAL = 8
     MAX_VIOLATIONS_ALLOWED = 3
-    AUTO_SUBMIT_ON_VIOLATION = True
+    AUTO_SUBMIT_ON_VIOLATION = False
+
+    # Local-first in-memory rate limits. For hosted multi-process deployment,
+    # move these buckets to Redis or a reverse proxy limiter.
+    RATE_LIMITS = {
+        "auth_login": {"limit": 10, "window": 15 * 60},
+        "student_login": {"limit": 30, "window": 15 * 60},
+        "autosave": {"limit": 90, "window": 60},
+        "heartbeat": {"limit": 30, "window": 60},
+        "violation": {"limit": 30, "window": 60},
+        "submit": {"limit": 10, "window": 60},
+        "admin_action": {"limit": 40, "window": 60},
+    }
 
     # Security
     SECURITY_HEADERS = True
