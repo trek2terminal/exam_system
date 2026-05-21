@@ -3,7 +3,9 @@ import io
 import re
 import os
 import secrets
-from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash, session, current_app
+import shutil
+import subprocess
+from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash, session, current_app, send_file
 from datetime import datetime, timedelta
 from werkzeug.utils import secure_filename
 from app.models.database import db
@@ -12,11 +14,12 @@ from app.models.exam_model import ExamSet, Question
 from app.models.submission_model import StudentSession, Answer
 from app.models.result_model import Result
 from app.models.audit_model import AuditLog, ViolationLog
+from app.models.group_model import StudentGroup, StudentGroupMember
 from app.services.exam_service import ExamService
 from app.services.exam_session_guard import LOCKED_SESSION_STATUSES
 from app.services.settings_service import SettingsService
 from app.utils.export_utils import csv_response, format_datetime
-from app.utils.helpers import admin_required, get_remaining_seconds
+from app.utils.helpers import admin_required
 from app.utils.network import get_client_ip
 from app.utils.rate_limiter import rate_limit
 
@@ -66,6 +69,21 @@ def _row_value(row, *keys):
     return ""
 
 
+def _find_student_for_group(identifier):
+    value = (identifier or "").strip()
+    if not value:
+        return None
+    normalized = value.upper()
+    return User.query.filter(
+        User.role == "student",
+        db.or_(
+            db.func.upper(User.roll_number) == normalized,
+            db.func.upper(User.username) == normalized,
+            db.func.upper(User.email) == normalized,
+        ),
+    ).first()
+
+
 def _session_snapshot(student_session):
     exam = student_session.exam_set
     total_questions = Question.query.filter_by(exam_set_id=exam.id).count()
@@ -87,11 +105,7 @@ def _session_snapshot(student_session):
         "exam_name": exam.exam_name,
         "set_code": exam.set_code,
         "status": student_session.status,
-        "remaining_seconds": get_remaining_seconds(
-            exam,
-            student_session.start_time,
-            getattr(student_session, "extra_time_minutes", 0),
-        ),
+        "remaining_seconds": ExamService.remaining_seconds_for_session(student_session),
         "answered_count": answered_count,
         "total_questions": total_questions,
         "focus_violations": student_session.focus_violations,
@@ -99,6 +113,9 @@ def _session_snapshot(student_session):
         "last_heartbeat_age": heartbeat_age,
         "latest_violation": latest_violation.violation_type if latest_violation else None,
         "latest_violation_at": latest_violation.occurred_at.isoformat() if latest_violation else None,
+        "pause_requested": bool(student_session.pause_requested_at),
+        "pause_reason": student_session.pause_reason,
+        "paused_at": student_session.paused_at.isoformat() if student_session.paused_at else None,
     }
 
 
@@ -169,6 +186,69 @@ def users():
         pagination=users_paginated,
         role_filter=role_filter
     )
+
+
+@admin_bp.route("/groups", methods=["GET", "POST"])
+@admin_required
+def groups():
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        description = request.form.get("description", "").strip() or None
+        if not name:
+            flash("Group name is required.", "danger")
+            return redirect(url_for("admin.groups"))
+        if StudentGroup.query.filter(db.func.lower(StudentGroup.name) == name.lower()).first():
+            flash("A group with this name already exists.", "danger")
+            return redirect(url_for("admin.groups"))
+
+        db.session.add(
+            StudentGroup(
+                name=name,
+                description=description,
+                created_by=session.get("admin_id"),
+            )
+        )
+        db.session.commit()
+        flash(f"Group {name} created.", "success")
+        return redirect(url_for("admin.groups"))
+
+    student_groups = StudentGroup.query.order_by(StudentGroup.name.asc()).all()
+    return render_template("admin/groups.html", groups=student_groups)
+
+
+@admin_bp.route("/groups/<int:group_id>/members", methods=["POST"])
+@admin_required
+def add_group_members(group_id):
+    group = StudentGroup.query.get_or_404(group_id)
+    raw_members = request.form.get("members", "")
+    added_count = 0
+    skipped_count = 0
+    existing_student_ids = {member.student_id for member in group.members}
+
+    for line in raw_members.splitlines():
+        student = _find_student_for_group(line)
+        if not student or student.id in existing_student_ids:
+            skipped_count += 1
+            continue
+        db.session.add(StudentGroupMember(group_id=group.id, student_id=student.id))
+        existing_student_ids.add(student.id)
+        added_count += 1
+
+    if added_count:
+        db.session.commit()
+    flash(f"Group updated: {added_count} added, {skipped_count} skipped.", "success" if added_count else "warning")
+    return redirect(url_for("admin.groups"))
+
+
+@admin_bp.route("/groups/<int:group_id>/delete", methods=["POST"])
+@admin_required
+def delete_group(group_id):
+    group = StudentGroup.query.get_or_404(group_id)
+    group_name = group.name
+    db.session.delete(group)
+    db.session.commit()
+    flash(f"Deleted group {group_name}.", "info")
+    return redirect(url_for("admin.groups"))
 
 
 @admin_bp.route("/users/import-students", methods=["POST"])
@@ -301,6 +381,7 @@ def create_teacher():
             designation=designation,
             is_active=True,
             is_verified=True,
+            must_change_password=True,
             created_at=datetime.utcnow()
         )
         teacher.set_password(password)
@@ -661,7 +742,7 @@ def proctoring():
 def proctoring_status():
     """JSON status for active/recent exam sessions."""
     active_sessions = (
-        StudentSession.query.filter(StudentSession.status.in_(["active", "waiting"]))
+        StudentSession.query.filter(StudentSession.status.in_(["active", "waiting", "paused"]))
         .order_by(StudentSession.updated_at.desc())
         .limit(100)
         .all()
@@ -681,6 +762,7 @@ def proctoring_status():
             "counts": {
                 "active_sessions": sum(1 for item in snapshots if item["status"] == "active"),
                 "waiting_sessions": sum(1 for item in snapshots if item["status"] == "waiting"),
+                "paused_sessions": sum(1 for item in snapshots if item["status"] == "paused"),
                 "flagged_sessions": sum(1 for item in snapshots if item["focus_violations"] > 0),
             },
             "sessions": snapshots,
@@ -779,6 +861,41 @@ def export_violations():
     return csv_response(filename, headers, rows)
 
 
+@admin_bp.route("/suspicious-activity")
+@admin_required
+def suspicious_activity():
+    sessions = (
+        StudentSession.query.filter(StudentSession.focus_violations > 0)
+        .order_by(StudentSession.focus_violations.desc(), StudentSession.updated_at.desc())
+        .all()
+    )
+    grouped = {}
+    for student_session in sessions:
+        key = (student_session.roll_no or "").upper() or f"session-{student_session.id}"
+        entry = grouped.setdefault(
+            key,
+            {
+                "student_name": student_session.student_name,
+                "roll_no": student_session.roll_no,
+                "exam_count": 0,
+                "total_violations": 0,
+                "max_suspicion_score": 0,
+                "sessions": [],
+            },
+        )
+        entry["exam_count"] += 1
+        entry["total_violations"] += student_session.focus_violations
+        entry["max_suspicion_score"] = max(entry["max_suspicion_score"], student_session.suspicion_score)
+        entry["sessions"].append(student_session)
+
+    rows = sorted(
+        grouped.values(),
+        key=lambda item: (item["exam_count"], item["total_violations"], item["max_suspicion_score"]),
+        reverse=True,
+    )
+    return render_template("admin/suspicious_activity.html", rows=rows)
+
+
 @admin_bp.route("/sessions/<int:session_id>/terminate", methods=["POST"])
 @admin_required
 @rate_limit("admin_action", json_response=False)
@@ -820,6 +937,10 @@ def grant_second_chance(session_id):
     student_session.last_heartbeat = datetime.utcnow()
     student_session.active_window_token = None
     student_session.active_window_heartbeat_at = None
+    student_session.pause_requested_at = None
+    student_session.pause_reason = None
+    student_session.paused_at = None
+    student_session.paused_remaining_seconds = None
     if not student_session.start_time:
         student_session.start_time = datetime.utcnow()
     db.session.commit()
@@ -853,11 +974,14 @@ def reduce_session_time(session_id):
         flash("Enter a positive number of minutes.", "danger")
         return redirect(request.referrer or url_for("admin.violations"))
 
-    if student_session.status != "active":
-        flash("Time can only be reduced for active sessions.", "danger")
+    if student_session.status not in ["active", "paused"]:
+        flash("Time can only be reduced for active or paused sessions.", "danger")
         return redirect(request.referrer or url_for("admin.violations"))
 
-    student_session.start_time = (student_session.start_time or datetime.utcnow()) - timedelta(minutes=minutes)
+    if student_session.status == "paused":
+        student_session.paused_remaining_seconds = max(int(student_session.paused_remaining_seconds or 0) - minutes * 60, 60)
+    else:
+        student_session.start_time = (student_session.start_time or datetime.utcnow()) - timedelta(minutes=minutes)
     db.session.commit()
 
     AuditLog(
@@ -872,6 +996,56 @@ def reduce_session_time(session_id):
 
     flash(f"Reduced {student_session.student_name}'s time by {minutes} minute(s).", "warning")
     return redirect(request.referrer or url_for("admin.violations"))
+
+
+@admin_bp.route("/sessions/<int:session_id>/pause", methods=["POST"])
+@admin_required
+@rate_limit("admin_action", json_response=False)
+def pause_session(session_id):
+    student_session = StudentSession.query.get_or_404(session_id)
+    reason = request.form.get("reason", "").strip() or student_session.pause_reason or "Paused by admin"
+
+    if not ExamService.pause_session(student_session):
+        flash("Only active sessions can be paused.", "danger")
+        return redirect(request.referrer or url_for("admin.proctoring"))
+
+    AuditLog(
+        user_id=session.get("admin_id"),
+        action="pause_exam_session",
+        resource_type="student_session",
+        resource_id=student_session.id,
+        reason=reason,
+        status="success",
+        ip_address=get_client_ip(),
+    ).save()
+
+    flash(f"Paused {student_session.student_name}'s exam timer.", "warning")
+    return redirect(request.referrer or url_for("admin.proctoring"))
+
+
+@admin_bp.route("/sessions/<int:session_id>/resume", methods=["POST"])
+@admin_required
+@rate_limit("admin_action", json_response=False)
+def resume_session(session_id):
+    student_session = StudentSession.query.get_or_404(session_id)
+    reason = request.form.get("reason", "").strip() or "Resumed by admin"
+
+    if not ExamService.resume_session(student_session):
+        flash("Only paused sessions can be resumed.", "danger")
+        return redirect(request.referrer or url_for("admin.proctoring"))
+
+    AuditLog(
+        user_id=session.get("admin_id"),
+        action="resume_exam_session",
+        resource_type="student_session",
+        resource_id=student_session.id,
+        reason=reason,
+        status="success",
+        ip_address=get_client_ip(),
+    ).save()
+
+    flash(f"Resumed {student_session.student_name}'s exam.", "success")
+    return redirect(request.referrer or url_for("admin.proctoring"))
 
 
 # ==================== SYSTEM SETTINGS ====================
@@ -900,6 +1074,53 @@ def save_settings():
     ).save()
     flash("Settings saved successfully!", "success")
     return redirect(url_for("admin.settings"))
+
+
+@admin_bp.route("/settings/backup")
+@admin_required
+@rate_limit("admin_action", json_response=False)
+def backup_database():
+    backup_root = current_app.config.get("BACKUP_FOLDER")
+    os.makedirs(backup_root, exist_ok=True)
+    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    database_url = str(db.engine.url)
+
+    if database_url.startswith("sqlite"):
+        source_path = db.engine.url.database
+        if not source_path or not os.path.exists(source_path):
+            flash("SQLite database file could not be found.", "danger")
+            return redirect(url_for("admin.settings"))
+        backup_path = os.path.join(backup_root, f"exam_backup_{timestamp}.db")
+        shutil.copy2(source_path, backup_path)
+    elif database_url.startswith("postgres"):
+        backup_path = os.path.join(backup_root, f"exam_backup_{timestamp}.sql")
+        try:
+            subprocess.run(
+                ["pg_dump", database_url, "-f", backup_path],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+        except Exception as exc:
+            current_app.logger.exception("Database backup failed")
+            flash(f"PostgreSQL backup failed. Ensure pg_dump is installed. Details: {exc}", "danger")
+            return redirect(url_for("admin.settings"))
+    else:
+        flash("Database backup is not configured for this database engine.", "danger")
+        return redirect(url_for("admin.settings"))
+
+    download_name = os.path.basename(backup_path)
+    AuditLog(
+        user_id=session.get("admin_id"),
+        action="backup_database",
+        resource_type="system",
+        changes=download_name,
+        status="success",
+        ip_address=get_client_ip(),
+    ).save()
+
+    return send_file(backup_path, as_attachment=True, download_name=download_name)
 
 
 

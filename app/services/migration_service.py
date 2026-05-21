@@ -110,10 +110,58 @@ class MigrationService:
         from app.models.exam_model import QuestionBankItem
 
         QuestionBankItem.__table__.create(db.engine, checkfirst=True)
+
+    @staticmethod
+    def _migration_question_media_and_randomization():
+        MigrationService._add_column_if_missing(
+            "exam_sets",
+            "random_question_count",
+            "INTEGER NOT NULL DEFAULT 0",
+        )
+        MigrationService._add_column_if_missing(
+            "exam_sets",
+            "shuffle_questions",
+            "BOOLEAN NOT NULL DEFAULT 0",
+        )
+        MigrationService._add_column_if_missing(
+            "student_sessions",
+            "question_order",
+            "TEXT",
+        )
+        for table_name in ("questions", "question_bank_items"):
+            MigrationService._add_column_if_missing(
+                table_name,
+                "image_paths",
+                "TEXT NOT NULL DEFAULT '[]'",
+            )
+            MigrationService._add_column_if_missing(table_name, "code_snippet", "TEXT")
+            MigrationService._add_column_if_missing(table_name, "code_language", "VARCHAR(40)")
         MigrationService._add_column_if_missing(
             "student_sessions",
             "extra_time_minutes",
             "INTEGER NOT NULL DEFAULT 0",
+        )
+
+    @staticmethod
+    def _migration_pause_requests():
+        MigrationService._add_column_if_missing("student_sessions", "pause_requested_at", "DATETIME")
+        MigrationService._add_column_if_missing("student_sessions", "pause_reason", "TEXT")
+        MigrationService._add_column_if_missing("student_sessions", "paused_at", "DATETIME")
+        MigrationService._add_column_if_missing("student_sessions", "paused_remaining_seconds", "INTEGER")
+
+    @staticmethod
+    def _migration_student_groups():
+        from app.models.group_model import StudentGroup, StudentGroupMember
+
+        StudentGroup.__table__.create(db.engine, checkfirst=True)
+        StudentGroupMember.__table__.create(db.engine, checkfirst=True)
+
+    @staticmethod
+    def _migration_must_change_password():
+        MigrationService._add_column_if_missing(
+            "users",
+            "must_change_password",
+            "BOOLEAN NOT NULL DEFAULT 0",
         )
 
     @staticmethod
@@ -184,6 +232,26 @@ class MigrationService:
             "Add teacher question bank table",
             _migration_question_bank_items.__func__,
         ),
+        (
+            "20260521_010_question_media_randomization",
+            "Add question media, snippets, and random delivery fields",
+            _migration_question_media_and_randomization.__func__,
+        ),
+        (
+            "20260521_011_pause_requests",
+            "Add student pause request and timer freeze fields",
+            _migration_pause_requests.__func__,
+        ),
+        (
+            "20260521_012_student_groups",
+            "Add student groups and group membership tables",
+            _migration_student_groups.__func__,
+        ),
+        (
+            "20260521_013_must_change_password",
+            "Add forced password change flag for temporary teacher credentials",
+            _migration_must_change_password.__func__,
+        ),
     ]
 
     @staticmethod
@@ -229,6 +297,32 @@ class MigrationService:
             return MigrationService._has_column("platform_settings", "announcement_message")
         if version == "20260521_009_question_bank_items":
             return MigrationService._has_table("question_bank_items")
+        if version == "20260521_010_question_media_randomization":
+            return (
+                MigrationService._has_column("exam_sets", "random_question_count")
+                and MigrationService._has_column("exam_sets", "shuffle_questions")
+                and MigrationService._has_column("student_sessions", "question_order")
+                and MigrationService._has_column("questions", "image_paths")
+                and MigrationService._has_column("questions", "code_snippet")
+                and MigrationService._has_column("questions", "code_language")
+                and MigrationService._has_column("question_bank_items", "image_paths")
+                and MigrationService._has_column("question_bank_items", "code_snippet")
+                and MigrationService._has_column("question_bank_items", "code_language")
+            )
+        if version == "20260521_011_pause_requests":
+            return (
+                MigrationService._has_column("student_sessions", "pause_requested_at")
+                and MigrationService._has_column("student_sessions", "pause_reason")
+                and MigrationService._has_column("student_sessions", "paused_at")
+                and MigrationService._has_column("student_sessions", "paused_remaining_seconds")
+            )
+        if version == "20260521_012_student_groups":
+            return (
+                MigrationService._has_table("student_groups")
+                and MigrationService._has_table("student_group_members")
+            )
+        if version == "20260521_013_must_change_password":
+            return MigrationService._has_column("users", "must_change_password")
         return False
 
     @staticmethod

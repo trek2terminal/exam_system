@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Suspicious Activity{% endblock %}
+
+{% block content %}
+<div class="admin-page">
+  <div class="page-header">
+    <div>
+      <h1><i class="fas fa-user-shield"></i> Suspicious Activity</h1>
+      <p>Students with repeated integrity events across exams appear first.</p>
+    </div>
+    <a class="btn secondary" href="{{ url_for('admin.violations') }}">Violation Logs</a>
+  </div>
+
+  <section class="card">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Student</th>
+            <th>Roll No</th>
+            <th>Exams With Violations</th>
+            <th>Total Violations</th>
+            <th>Max Suspicion</th>
+            <th>Recent Exams</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td><strong>{{ row.student_name }}</strong></td>
+              <td>{{ row.roll_no }}</td>
+              <td>{{ row.exam_count }}</td>
+              <td>{{ row.total_violations }}</td>
+              <td>{{ row.max_suspicion_score }}</td>
+              <td>
+                {% for student_session in row.sessions[:3] %}
+                  <div class="muted">{{ student_session.exam_set.exam_name }}: {{ student_session.focus_violations }}</div>
+                {% endfor %}
+              </td>
+            </tr>
+          {% else %}
+            <tr>
+              <td colspan="6" style="text-align:center; padding:32px;">
+                <span class="muted">No suspicious activity has been recorded.</span>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+{% endblock %}

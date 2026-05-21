@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Student Groups{% endblock %}
+
+{% block content %}
+<div class="admin-page">
+  <div class="page-header">
+    <div>
+      <h1><i class="fas fa-layer-group"></i> Student Groups</h1>
+      <p>Create batches once, then teachers can assign the full batch to an exam.</p>
+    </div>
+    <a class="btn secondary" href="{{ url_for('admin.users', role='student') }}">Students</a>
+  </div>
+
+  <div class="grid-2" style="align-items: start;">
+    <section class="card">
+      <h2>Create Group</h2>
+      <form method="post" class="student-roster-form">
+        <label for="group-name">Group Name</label>
+        <input id="group-name" name="name" type="text" placeholder="Batch A 2026" required>
+        <label for="group-description">Description</label>
+        <textarea id="group-description" name="description" rows="3" placeholder="Optional note"></textarea>
+        <button class="btn primary" type="submit">
+          <i class="fas fa-plus"></i> Create Group
+        </button>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>Existing Groups</h2>
+      <div class="question-bank-list">
+        {% for group in groups %}
+          <article class="question-bank-item">
+            <div class="row-between">
+              <div>
+                <h3>{{ group.name }}</h3>
+                <p class="muted">{{ group.description or "No description" }}</p>
+              </div>
+              <span class="badge active">{{ group.members | length }} students</span>
+            </div>
+
+            <form method="post" action="{{ url_for('admin.add_group_members', group_id=group.id) }}" class="student-roster-form">
+              <label>Add Members</label>
+              <textarea name="members" rows="4" placeholder="Paste roll number, username, or email, one per line"></textarea>
+              <button class="btn secondary small" type="submit">Add Students</button>
+            </form>
+
+            {% if group.members %}
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Roll</th>
+                      <th>Email</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for member in group.members %}
+                      <tr>
+                        <td>{{ member.student.name }}</td>
+                        <td>{{ member.student.roll_number or "-" }}</td>
+                        <td>{{ member.student.email or "-" }}</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% endif %}
+
+            <form method="post" action="{{ url_for('admin.delete_group', group_id=group.id) }}" onsubmit="return confirm('Delete this group? Student accounts will remain.');">
+              <button class="btn danger small" type="submit">Delete Group</button>
+            </form>
+          </article>
+        {% else %}
+          <p class="muted">No groups created yet.</p>
+        {% endfor %}
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}

@@ -14,6 +14,18 @@
   <div class="answer-box">
     <strong>Question</strong>
     <div class="answer-text">{{ question.question_text }}</div>
+    {% if question.image_paths_as_list() %}
+      <div class="question-image-grid compact">
+        {% for image_path in question.image_paths_as_list() %}
+          <a href="{{ url_for('static', filename=image_path) }}" target="_blank" rel="noopener">
+            <img src="{{ url_for('static', filename=image_path) }}" alt="Question {{ question.question_number }} image">
+          </a>
+        {% endfor %}
+      </div>
+    {% endif %}
+    {% if question.code_snippet %}
+      <pre class="question-code-snippet compact"><code>{{ question.code_snippet }}</code></pre>
+    {% endif %}
     {% if question.model_answer %}
       <div class="answer-text"><strong>Model answer:</strong> {{ question.model_answer }}</div>
     {% endif %}

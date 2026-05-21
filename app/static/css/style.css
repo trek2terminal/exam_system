@@ -2415,6 +2415,27 @@ body.exam-locked .exam-sidebar {
     margin-top: 2px;
 }
 
+.offline-banner {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    margin: 12px 0;
+    border: 1px solid rgba(239, 68, 68, 0.30);
+    border-radius: 8px;
+    padding: 12px 14px;
+    background: rgba(239, 68, 68, 0.08);
+    color: #991b1b;
+    font-weight: 700;
+}
+
+.offline-banner.active {
+    display: flex;
+}
+
+html[data-theme="dark"] body.student-mode .offline-banner {
+    color: #fecaca;
+}
+
 .exam-layout {
     display: grid;
     grid-template-columns: 280px minmax(0, 1fr);
@@ -2646,6 +2667,52 @@ html[data-theme="dark"] body.student-mode .student-palette .palette-item {
     line-height: 1.5;
 }
 
+.question-image-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 240px));
+    gap: 12px;
+    margin-top: 14px;
+}
+
+.question-image-grid.compact {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 180px));
+    margin: 10px 0;
+}
+
+.question-image-grid a {
+    display: block;
+    overflow: hidden;
+    border: 1px solid var(--student-border, var(--border));
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.68);
+}
+
+.question-image-grid img {
+    display: block;
+    width: 100%;
+    max-height: 260px;
+    object-fit: contain;
+}
+
+.question-code-snippet {
+    margin: 14px 0 0;
+    border: 1px solid var(--student-border, var(--border));
+    border-radius: 8px;
+    padding: 14px;
+    background: #0f172a;
+    color: #dbeafe;
+    font-family: "Consolas", "Courier New", monospace;
+    font-size: 0.92rem;
+    line-height: 1.6;
+    overflow: auto;
+    white-space: pre-wrap;
+}
+
+.question-code-snippet.compact {
+    margin: 10px 0;
+    font-size: 0.86rem;
+}
+
 .student-options .mcq-option {
     border-radius: 8px;
     background: rgba(255, 255, 255, 0.50);
@@ -2850,6 +2917,19 @@ body.student-mode .fullscreen-panel {
     background: rgba(249, 115, 22, 0.12);
     color: var(--student-coral);
     font-size: 1.5rem;
+}
+
+.warning-icon.pause {
+    background: rgba(37, 99, 235, 0.12);
+    color: var(--student-blue);
+}
+
+.pause-overlay .proctor-warning-card {
+    border-color: rgba(37, 99, 235, 0.34);
+}
+
+.pause-overlay .warning-kicker {
+    color: var(--student-blue);
 }
 
 .warning-kicker {

@@ -28,6 +28,7 @@ class User(db.Model):
     # Additional Security Fields
     failed_login_attempts = db.Column(db.Integer, default=0, nullable=False)
     locked_until = db.Column(db.DateTime, nullable=True)
+    must_change_password = db.Column(db.Boolean, default=False, nullable=False)
 
     # Optional fields for future use
     email = db.Column(db.String(120), unique=True, nullable=True, index=True)

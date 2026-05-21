@@ -9,6 +9,7 @@ let violationCount = 0;
 let fullscreenReady = false;
 let MAX_WARNINGS = 3;
 let questionStateMap = {};
+let examPaused = false;
 
 const QUESTION_STATES = ["NOT_VISITED", "VISITED_UNANSWERED", "ANSWERED", "MARKED_REVIEW", "ANSWERED_MARKED"];
 
@@ -206,27 +207,149 @@ function refreshQuestionStates() {
     });
 }
 
-async function saveAnswer(sessionCode, questionId, answerText, visitStatus = null) {
-    updateAutoSaveStatus?.("saving");
+function offlineQueueKey(sessionCode = currentSessionCode) {
+    return `exam_offline_answers_${sessionCode}`;
+}
+
+function getOfflineQueue(sessionCode = currentSessionCode) {
     try {
-        const response = await fetch(`/api/student/session/${sessionCode}/save`, {
+        return JSON.parse(localStorage.getItem(offlineQueueKey(sessionCode)) || "{}");
+    } catch (error) {
+        return {};
+    }
+}
+
+function setOfflineQueue(queue, sessionCode = currentSessionCode) {
+    localStorage.setItem(offlineQueueKey(sessionCode), JSON.stringify(queue || {}));
+}
+
+function setOfflineBanner(active, message = null) {
+    const banner = document.getElementById("offlineBanner");
+    if (!banner) return;
+    if (message) {
+        const text = banner.querySelector("span");
+        if (text) text.textContent = message;
+    }
+    banner.classList.toggle("active", Boolean(active));
+}
+
+function queueOfflineSave(sessionCode, questionId, answerText, visitStatus) {
+    const queue = getOfflineQueue(sessionCode);
+    queue[String(questionId)] = {
+        question_id: questionId,
+        answer_text: answerText,
+        visit_status: visitStatus || questionStateMap[questionId] || "ANSWERED",
+        queued_at: Date.now()
+    };
+    setOfflineQueue(queue, sessionCode);
+    setOfflineBanner(true);
+    updateAutoSaveStatus?.("error", "Offline buffer");
+}
+
+async function postAnswerPayload(sessionCode, payload) {
+    const response = await fetch(`/api/student/session/${sessionCode}/save`, {
+        method: "POST",
+        headers: examRequestHeaders(),
+        body: JSON.stringify(examPayload(payload))
+    });
+    const data = await response.json();
+    if (redirectIfLocked(data)) return { ok: false, locked: true, data };
+    if (!response.ok || !data.ok) {
+        const error = new Error(data.message || "Autosave failed");
+        error.httpStatus = response.status;
+        throw error;
+    }
+    return { ok: true, data };
+}
+
+async function flushOfflineQueue(sessionCode = currentSessionCode) {
+    if (!sessionCode || examPaused || !navigator.onLine) return;
+    const queue = getOfflineQueue(sessionCode);
+    const entries = Object.values(queue);
+    if (!entries.length) {
+        setOfflineBanner(false);
+        return;
+    }
+
+    updateAutoSaveStatus?.("saving", "Syncing");
+    for (const entry of entries) {
+        try {
+            await postAnswerPayload(sessionCode, entry);
+            delete queue[String(entry.question_id)];
+            setOfflineQueue(queue, sessionCode);
+        } catch (error) {
+            setOfflineBanner(true, "Connection is unstable. Unsynced answers remain safely buffered on this device.");
+            updateAutoSaveStatus?.("error", "Retrying sync");
+            return;
+        }
+    }
+
+    setOfflineBanner(false);
+    updateAutoSaveStatus?.("saved", "Synced");
+}
+
+async function saveAnswer(sessionCode, questionId, answerText, visitStatus = null) {
+    if (examPaused) {
+        updateAutoSaveStatus?.("idle", "Paused");
+        return;
+    }
+    updateAutoSaveStatus?.("saving");
+    const payload = {
+        question_id: questionId,
+        answer_text: answerText,
+        visit_status: visitStatus || questionStateMap[questionId] || "ANSWERED"
+    };
+    try {
+        await postAnswerPayload(sessionCode, payload);
+        updateAutoSaveStatus?.("saved");
+        flushOfflineQueue(sessionCode);
+    } catch (e) {
+        console.error("Autosave failed:", e);
+        if (!navigator.onLine || e.name === "TypeError" || !e.httpStatus || e.httpStatus >= 500) {
+            queueOfflineSave(sessionCode, questionId, answerText, payload.visit_status);
+        } else {
+            updateAutoSaveStatus?.("error", "Check connection");
+        }
+    }
+}
+
+function setPauseOverlay(paused, message = null) {
+    examPaused = Boolean(paused);
+    const overlay = document.getElementById("pauseOverlay");
+    const title = document.getElementById("pauseOverlayTitle");
+    const body = document.getElementById("pauseOverlayMessage");
+    if (!overlay) return;
+
+    if (title) title.textContent = examPaused ? "Please wait here" : "Exam resumed";
+    if (body && message) body.textContent = message;
+    overlay.classList.toggle("active", examPaused);
+    overlay.setAttribute("aria-hidden", examPaused ? "false" : "true");
+    updateAutoSaveStatus?.(examPaused ? "idle" : "saved", examPaused ? "Timer paused" : "Exam resumed");
+}
+
+async function requestExamPause(sessionCode) {
+    if (examSubmitted || examPaused) return;
+    const reason = window.prompt("Why do you need a pause?");
+    if (reason === null) return;
+
+    const trimmed = reason.trim();
+    if (trimmed.length < 3) {
+        showToast?.("Please enter a short reason.", "warning");
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/student/session/${sessionCode}/pause-request`, {
             method: "POST",
             headers: examRequestHeaders(),
-            body: JSON.stringify(examPayload({
-                question_id: questionId,
-                answer_text: answerText,
-                visit_status: visitStatus || questionStateMap[questionId] || "ANSWERED"
-            }))
+            body: JSON.stringify(examPayload({ reason: trimmed }))
         });
         const data = await response.json();
         if (redirectIfLocked(data)) return;
-        if (!response.ok || !data.ok) {
-            throw new Error(data.message || "Autosave failed");
-        }
-        updateAutoSaveStatus?.("saved");
-    } catch (e) {
-        console.error("Autosave failed:", e);
-        updateAutoSaveStatus?.("error", "Check connection");
+        if (!response.ok || !data.ok) throw new Error(data.message || "Pause request failed");
+        showToast?.("Pause request sent to admin.", "success");
+    } catch (error) {
+        showToast?.(error.message || "Pause request failed", "error");
     }
 }
 
@@ -334,6 +457,14 @@ async function sendHeartbeat(sessionCode, focused = true) {
         if (typeof data.focus_violations === "number") {
             violationCount = data.focus_violations;
             updateWarningHud();
+        }
+        if (typeof data.paused === "boolean") {
+            setPauseOverlay(
+                data.paused,
+                data.paused
+                    ? "An admin has paused your exam timer. Stay on this screen until it resumes."
+                    : "Your exam has resumed."
+            );
         }
         if (typeof window.syncExamStatus === "function") {
             window.syncExamStatus(data);
@@ -467,7 +598,7 @@ function showProctorWarning(type, message) {
 }
 
 function registerViolation(sessionCode, type, detail) {
-    if (examSubmitted) return;
+    if (examSubmitted || examPaused) return;
     violationCount += 1;
     updateWarningHud();
     playWarningSound();
@@ -512,6 +643,7 @@ async function initExamPage(sessionCode, remainingSeconds, sessionToken = null) 
     if (!(await acquireExamWindowLock(sessionCode))) return;
 
     const shell = document.querySelector(".exam-shell");
+    examPaused = shell?.dataset.sessionStatus === "paused";
     const configuredLimit = parseInt(shell?.dataset.warningLimit || "3", 10);
     if (configuredLimit > 0) MAX_WARNINGS = configuredLimit;
 
@@ -538,6 +670,14 @@ async function initExamPage(sessionCode, remainingSeconds, sessionToken = null) 
             remaining = data.remaining_seconds;
             updateTimer();
         }
+        if (typeof data.paused === "boolean") {
+            setPauseOverlay(
+                data.paused,
+                data.paused
+                    ? "An admin has paused your exam timer. Stay on this screen until it resumes."
+                    : "Your exam has resumed."
+            );
+        }
         if (data.session_status === "submitted" || data.session_status === "evaluated" || data.submitted) {
             if (data.redirect) {
                 window.location.replace(data.redirect);
@@ -548,13 +688,24 @@ async function initExamPage(sessionCode, remainingSeconds, sessionToken = null) 
     };
 
     updateTimer();
+    setOfflineBanner(!navigator.onLine);
+    if (navigator.onLine) flushOfflineQueue(sessionCode);
     examTimerInterval = setInterval(() => {
+        if (examPaused) return;
         remaining -= 1;
         updateTimer();
         if (remaining <= 0 && !examSubmitted) submitExam(sessionCode, false, "Time expired");
     }, 1000);
 
     heartbeatInterval = setInterval(() => sendHeartbeat(sessionCode, document.hasFocus()), 8000);
+    window.addEventListener("online", () => {
+        setOfflineBanner(false);
+        flushOfflineQueue(sessionCode);
+    });
+    window.addEventListener("offline", () => {
+        setOfflineBanner(true);
+        updateAutoSaveStatus?.("error", "Offline buffer");
+    });
 
     document.addEventListener("keydown", e => {
         if (examSubmitted) return;
@@ -704,6 +855,7 @@ async function initExamPage(sessionCode, remainingSeconds, sessionToken = null) 
     }
 
     refreshQuestionStates();
+    setPauseOverlay(examPaused, examPaused ? "An admin has paused your exam timer. Stay on this screen until it resumes." : null);
     updateAnswerProgress();
     updateAutoSaveStatus?.("idle");
 }

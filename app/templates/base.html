@@ -45,11 +45,17 @@
                     <a href="{{ url_for('admin.users') }}" class="nav-link">
                         <i class="fas fa-users"></i> Users
                     </a>
+                    <a href="{{ url_for('admin.groups') }}" class="nav-link">
+                        <i class="fas fa-layer-group"></i> Groups
+                    </a>
                     <a href="{{ url_for('admin.proctoring') }}" class="nav-link">
                         <i class="fas fa-display"></i> Proctoring
                     </a>
                     <a href="{{ url_for('admin.violations') }}" class="nav-link">
                         <i class="fas fa-triangle-exclamation"></i> Violations
+                    </a>
+                    <a href="{{ url_for('admin.suspicious_activity') }}" class="nav-link">
+                        <i class="fas fa-user-shield"></i> Risk
                     </a>
                     <a href="{{ url_for('admin.settings') }}" class="nav-link">
                         <i class="fas fa-cog"></i> Settings

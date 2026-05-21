@@ -21,6 +21,8 @@ class ExamSet(db.Model):
     subject = db.Column(db.String(100), nullable=False)
     duration_minutes = db.Column(db.Integer, nullable=False)
     total_marks = db.Column(db.Integer, nullable=False, default=0)
+    random_question_count = db.Column(db.Integer, default=0, nullable=False)
+    shuffle_questions = db.Column(db.Boolean, default=False, nullable=False)
 
     # Access & Status
     access_code = db.Column(db.String(32), unique=True, nullable=False, default=generate_access_code)
@@ -120,6 +122,9 @@ class Question(db.Model):
     correct_answer = db.Column(db.Text, nullable=True)  # Can be JSON for complex answers
     explanation = db.Column(db.Text, nullable=True)
     model_answer = db.Column(db.Text, nullable=True)
+    image_paths = db.Column(db.Text, default="[]", nullable=False)
+    code_snippet = db.Column(db.Text, nullable=True)
+    code_language = db.Column(db.String(40), nullable=True)
 
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
@@ -140,6 +145,15 @@ class Question(db.Model):
     def is_mcq(self):
         return self.question_type == "mcq"
 
+    def image_paths_as_list(self):
+        try:
+            return json.loads(self.image_paths or "[]")
+        except Exception:
+            return []
+
+    def set_image_paths(self, paths):
+        self.image_paths = json.dumps(paths or [])
+
 
 class QuestionBankItem(db.Model):
     __tablename__ = "question_bank_items"
@@ -156,6 +170,9 @@ class QuestionBankItem(db.Model):
     correct_answer = db.Column(db.Text, nullable=True)
     explanation = db.Column(db.Text, nullable=True)
     model_answer = db.Column(db.Text, nullable=True)
+    image_paths = db.Column(db.Text, default="[]", nullable=False)
+    code_snippet = db.Column(db.Text, nullable=True)
+    code_language = db.Column(db.String(40), nullable=True)
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
@@ -169,6 +186,15 @@ class QuestionBankItem(db.Model):
     def set_options(self, options_list):
         self.options = json.dumps(options_list or [])
 
+    def image_paths_as_list(self):
+        try:
+            return json.loads(self.image_paths or "[]")
+        except Exception:
+            return []
+
+    def set_image_paths(self, paths):
+        self.image_paths = json.dumps(paths or [])
+
     @classmethod
     def from_question(cls, question, teacher_id):
         item = cls(
@@ -179,6 +205,9 @@ class QuestionBankItem(db.Model):
             correct_answer=question.correct_answer,
             explanation=question.explanation,
             model_answer=question.model_answer,
+            code_snippet=question.code_snippet,
+            code_language=question.code_language,
         )
         item.set_options(question.options_as_list())
+        item.set_image_paths(question.image_paths_as_list())
         return item

@@ -1,3 +1,5 @@
+import json
+import random
 from datetime import datetime, timedelta
 from app.models.database import db
 from app.models.exam_model import ExamEnrollment, ExamSet, Question
@@ -104,9 +106,78 @@ class ExamService:
             session.status = "active"
             session.start_time = datetime.utcnow()
             session.last_heartbeat = datetime.utcnow()
+            ExamService.ensure_question_order(session)
             db.session.commit()
             return True
         return False
+
+    @staticmethod
+    def remaining_seconds_for_session(student_session):
+        if not student_session:
+            return 0
+
+        if student_session.status == "paused" and student_session.paused_remaining_seconds is not None:
+            return max(int(student_session.paused_remaining_seconds or 0), 0)
+
+        if not student_session.start_time:
+            return (student_session.exam_set.duration_minutes + int(student_session.extra_time_minutes or 0)) * 60
+
+        exam = student_session.exam_set
+        total_seconds = (exam.duration_minutes + int(student_session.extra_time_minutes or 0)) * 60
+        elapsed = (datetime.utcnow() - student_session.start_time).total_seconds()
+        duration_remaining = max(int(total_seconds - elapsed), 0)
+
+        if getattr(exam, "end_time", None):
+            window_remaining = max(int((exam.end_time - datetime.utcnow()).total_seconds()), 0)
+            return min(duration_remaining, window_remaining)
+
+        return duration_remaining
+
+    @staticmethod
+    def request_pause(session_code, reason):
+        student_session = StudentSession.query.filter_by(session_code=session_code).first()
+        if not student_session or student_session.status != "active":
+            return False
+
+        student_session.pause_requested_at = datetime.utcnow()
+        student_session.pause_reason = (reason or "").strip()[:1000] or "Pause requested by student"
+        student_session.updated_at = datetime.utcnow()
+        db.session.commit()
+        return True
+
+    @staticmethod
+    def pause_session(student_session):
+        if not student_session or student_session.status != "active":
+            return False
+
+        student_session.paused_remaining_seconds = ExamService.remaining_seconds_for_session(student_session)
+        student_session.paused_at = datetime.utcnow()
+        student_session.status = "paused"
+        student_session.updated_at = datetime.utcnow()
+        db.session.commit()
+        return True
+
+    @staticmethod
+    def resume_session(student_session):
+        if not student_session or student_session.status != "paused":
+            return False
+
+        remaining_seconds = max(int(student_session.paused_remaining_seconds or 0), 0)
+        total_seconds = (
+            student_session.exam_set.duration_minutes + int(student_session.extra_time_minutes or 0)
+        ) * 60
+        elapsed_seconds = max(total_seconds - remaining_seconds, 0)
+
+        student_session.start_time = datetime.utcnow() - timedelta(seconds=elapsed_seconds)
+        student_session.status = "active"
+        student_session.paused_at = None
+        student_session.paused_remaining_seconds = None
+        student_session.pause_requested_at = None
+        student_session.pause_reason = None
+        student_session.last_heartbeat = datetime.utcnow()
+        student_session.updated_at = datetime.utcnow()
+        db.session.commit()
+        return True
 
 
     @staticmethod
@@ -114,6 +185,35 @@ class ExamService:
         questions = Question.query.filter_by(exam_set_id=exam_set_id)\
                     .order_by(Question.question_number).all()
         return questions
+
+
+    @staticmethod
+    def ensure_question_order(student_session):
+        if student_session.question_order:
+            return json.loads(student_session.question_order)
+
+        questions = Question.query.filter_by(exam_set_id=student_session.exam_set_id).order_by(Question.question_number).all()
+        question_ids = [question.id for question in questions]
+        exam = student_session.exam_set
+
+        if exam.shuffle_questions or exam.random_question_count:
+            rng = random.SystemRandom()
+            rng.shuffle(question_ids)
+
+        if exam.random_question_count and exam.random_question_count > 0:
+            question_ids = question_ids[: min(exam.random_question_count, len(question_ids))]
+
+        student_session.question_order = json.dumps(question_ids)
+        student_session.updated_at = datetime.utcnow()
+        return question_ids
+
+
+    @staticmethod
+    def get_session_questions(student_session):
+        question_ids = ExamService.ensure_question_order(student_session)
+        questions = Question.query.filter(Question.id.in_(question_ids)).all() if question_ids else []
+        by_id = {question.id: question for question in questions}
+        return [by_id[question_id] for question_id in question_ids if question_id in by_id]
 
 
     @staticmethod
@@ -126,6 +226,8 @@ class ExamService:
             session.autosubmit_reason = reason
             session.active_window_token = None
             session.active_window_heartbeat_at = None
+            session.paused_at = None
+            session.paused_remaining_seconds = None
             db.session.commit()
             return True
         return False
@@ -141,7 +243,7 @@ class ExamService:
         now = datetime.utcnow()
 
         if exam.has_ended(now):
-            if student_session.status in ["waiting", "active"]:
+            if student_session.status in ["waiting", "active", "paused"]:
                 ExamService.end_exam(
                     student_session.session_code,
                     reason="Auto-submitted because the exam window ended",
@@ -164,7 +266,7 @@ class ExamService:
             .filter(
                 ExamSet.end_time.isnot(None),
                 ExamSet.end_time <= now,
-                StudentSession.status.in_(["waiting", "active"]),
+                StudentSession.status.in_(["waiting", "active", "paused"]),
             )
             .limit(limit)
             .all()
@@ -177,6 +279,8 @@ class ExamService:
             student_session.autosubmit_reason = "Auto-submitted because the exam window ended"
             student_session.active_window_token = None
             student_session.active_window_heartbeat_at = None
+            student_session.paused_at = None
+            student_session.paused_remaining_seconds = None
 
         if sessions:
             db.session.commit()

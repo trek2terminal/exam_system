@@ -29,6 +29,19 @@
         <h3>Q{{ q.question_number }}. {{ q.question_text }}</h3>
         <p><strong>Max Marks:</strong> {{ q.marks }}</p>
 
+        {% if q.image_paths_as_list() %}
+          <div class="question-image-grid compact">
+            {% for image_path in q.image_paths_as_list() %}
+              <a href="{{ url_for('static', filename=image_path) }}" target="_blank" rel="noopener">
+                <img src="{{ url_for('static', filename=image_path) }}" alt="Question {{ q.question_number }} image">
+              </a>
+            {% endfor %}
+          </div>
+        {% endif %}
+        {% if q.code_snippet %}
+          <pre class="question-code-snippet compact"><code>{{ q.code_snippet }}</code></pre>
+        {% endif %}
+
         {% if q.model_answer %}
           <div class="answer-box model-answer-box">
             <strong>Model Answer / Review Reference</strong>

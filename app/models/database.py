@@ -39,6 +39,7 @@ def init_db(app):
         from app.models.audit_model import AuditLog, ViolationLog
         from app.models.settings_model import PlatformSettings
         from app.models.migration_model import SchemaMigration
+        from app.models.group_model import StudentGroup, StudentGroupMember
 
         db.create_all()
         from app.services.migration_service import MigrationService

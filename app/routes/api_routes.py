@@ -13,7 +13,6 @@ from app.services.exam_session_guard import ExamSessionGuard, MUTABLE_SESSION_ST
 from app.services.result_service import ResultService
 from app.services.security_service import SecurityService
 from app.services.settings_service import SettingsService
-from app.utils.helpers import get_remaining_seconds
 from app.utils.network import get_client_ip
 from app.utils.rate_limiter import rate_limit
 
@@ -59,7 +58,7 @@ def _window_lock_response(student_session):
     )
 
 
-def _require_attempt(session_code, payload=None, require_active=False, require_window=False):
+def _require_attempt(session_code, payload=None, require_active=False, require_window=False, allowed_statuses=None):
     student_session = _get_student_session(session_code)
     payload = payload or {}
 
@@ -76,7 +75,8 @@ def _require_attempt(session_code, payload=None, require_active=False, require_w
                 redirect=f"/student/waiting/{student_session.session_code}",
             )
 
-    if require_active and student_session.status != MUTABLE_SESSION_STATUS:
+    allowed_statuses = allowed_statuses or {MUTABLE_SESSION_STATUS}
+    if require_active and student_session.status not in allowed_statuses:
         return None, _locked_session_response(student_session)
 
     if require_window and not ExamSessionGuard.request_window_owns_attempt(student_session, payload):
@@ -104,11 +104,7 @@ def session_status(session_code):
     exam = student_session.exam_set
     time_state = ExamService.enforce_time_window(student_session)
 
-    remaining_seconds = get_remaining_seconds(
-        exam,
-        student_session.start_time,
-        getattr(student_session, "extra_time_minutes", 0),
-    )
+    remaining_seconds = ExamService.remaining_seconds_for_session(student_session)
     is_locked = ExamSessionGuard.is_locked(student_session)
 
     return jsonify(
@@ -121,6 +117,9 @@ def session_status(session_code):
             "focus_violations": student_session.focus_violations,
             "max_violations_allowed": SettingsService.max_violations_allowed(),
             "suspicion_score": getattr(student_session, "suspicion_score", 0),
+            "pause_requested": bool(student_session.pause_requested_at),
+            "pause_reason": student_session.pause_reason,
+            "paused": student_session.status == "paused",
             "submitted": is_locked,
             "redirect": _submitted_redirect(session_code) if is_locked else None,
         }
@@ -189,6 +188,38 @@ def save_question_status(session_code):
 
     success, message = AutoSaveService.save_visit_status(session_code, question_id, visit_status)
     return jsonify({"ok": success, "message": message}), 200 if success else 400
+
+
+@api_bp.route("/student/session/<session_code>/pause-request", methods=["POST"])
+@rate_limit("autosave")
+def request_pause(session_code):
+    data = _get_json_payload()
+    student_session, error_response = _require_attempt(
+        session_code,
+        data,
+        require_active=True,
+        require_window=True,
+        allowed_statuses={"active"},
+    )
+    if error_response:
+        return error_response
+
+    reason = (data.get("reason") or "").strip()
+    if len(reason) < 3:
+        return jsonify({"ok": False, "message": "Please enter a short pause reason."}), 400
+
+    ExamService.request_pause(session_code, reason)
+    AuditLog(
+        user_id=None,
+        action="request_exam_pause",
+        resource_type="student_session",
+        resource_id=student_session.id,
+        reason=reason,
+        status="success",
+        ip_address=get_client_ip(),
+        user_agent=request.headers.get("User-Agent"),
+    ).save()
+    return jsonify({"ok": True, "message": "Pause request sent to admin."})
 
 
 @api_bp.route("/student/session/<session_code>/execute", methods=["POST"])
@@ -261,23 +292,24 @@ def heartbeat(session_code):
         data,
         require_active=True,
         require_window=True,
+        allowed_statuses={"active", "paused"},
     )
     if error_response:
         return error_response
 
-    remaining_seconds = get_remaining_seconds(
-        student_session.exam_set,
-        student_session.start_time,
-        getattr(student_session, "extra_time_minutes", 0),
-    )
+    remaining_seconds = ExamService.remaining_seconds_for_session(student_session)
 
     focused = bool(data.get("focused", True))
     violation_count = _parse_int_field(data, "violation_count")
     violation_count = violation_count if violation_count is not None else 0
 
-    SecurityService.record_heartbeat(session_code, focused, violation_count)
+    if student_session.status == "active":
+        SecurityService.record_heartbeat(session_code, focused, violation_count)
+    else:
+        student_session.last_heartbeat = datetime.utcnow()
+        db.session.commit()
 
-    should_submit = SecurityService.should_auto_submit(session_code)
+    should_submit = student_session.status == "active" and SecurityService.should_auto_submit(session_code)
 
     if should_submit and student_session.status == "active":
         ExamService.end_exam(session_code, reason="Auto-submitted due to security violations")
@@ -291,6 +323,9 @@ def heartbeat(session_code):
             "remaining_seconds": remaining_seconds,
             "focus_violations": student_session.focus_violations,
             "max_violations_allowed": SettingsService.max_violations_allowed(),
+            "paused": student_session.status == "paused",
+            "pause_requested": bool(student_session.pause_requested_at),
+            "pause_reason": student_session.pause_reason,
             "should_submit": should_submit,
         }
     )

@@ -8,7 +8,7 @@ from app.models.user_model import User
 from app.services.exam_service import ExamService
 from app.services.exam_session_guard import ExamSessionGuard
 from app.services.settings_service import SettingsService
-from app.utils.helpers import create_submission_pdf, get_remaining_seconds
+from app.utils.helpers import create_submission_pdf
 
 student_bp = Blueprint("student", __name__, url_prefix="/student")
 
@@ -374,8 +374,7 @@ def exam(session_code):
                 return redirect(url_for("student.submitted", session_code=session_code))
             return redirect(url_for("student.waiting", session_code=session_code))
 
-    questions = Question.query.filter_by(exam_set_id=exam.id) \
-        .order_by(Question.question_number.asc()).all()
+    questions = ExamService.get_session_questions(student_session)
 
     saved_answers = Answer.query.filter_by(session_id=student_session.id).all()
     saved_map = {a.question_id: a.answer_text for a in saved_answers}
@@ -394,11 +393,7 @@ def exam(session_code):
             status_map[question.id] = "VISITED_UNANSWERED"
 
     # Calculate remaining time
-    remaining_seconds = get_remaining_seconds(
-        exam,
-        student_session.start_time,
-        getattr(student_session, "extra_time_minutes", 0),
-    )
+    remaining_seconds = ExamService.remaining_seconds_for_session(student_session)
 
     return render_template(
         "student/exam.html",
@@ -430,8 +425,7 @@ def submitted(session_code):
             return redirect(url_for("student.precheck", session_code=session_code))
         return redirect(url_for("student.waiting", session_code=session_code))
 
-    questions = Question.query.filter_by(exam_set_id=student_session.exam_set_id) \
-        .order_by(Question.question_number.asc()).all()
+    questions = ExamService.get_session_questions(student_session)
 
     question_marks = {}
     if result:

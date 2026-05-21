@@ -2,7 +2,7 @@
 {% block title %}Exam Window{% endblock %}
 
 {% block content %}
-<div class="exam-shell student-exam-shell" data-session-code="{{ student_session.session_code }}" data-session-token="{{ attempt_token }}" data-remaining="{{ remaining_seconds }}" data-warning-limit="{{ max_violations_allowed }}">
+<div class="exam-shell student-exam-shell" data-session-code="{{ student_session.session_code }}" data-session-token="{{ attempt_token }}" data-remaining="{{ remaining_seconds }}" data-warning-limit="{{ max_violations_allowed }}" data-session-status="{{ student_session.status }}">
   <div id="fullscreenGate" class="fullscreen-gate">
     <div class="fullscreen-panel">
       <i class="fas fa-expand"></i>
@@ -31,6 +31,9 @@
       <button class="btn secondary" type="button" onclick="enterFullscreen()" aria-label="Enter fullscreen">
         <i class="fas fa-expand"></i>
       </button>
+      <button class="btn secondary" type="button" onclick="requestExamPause('{{ student_session.session_code }}')">
+        <i class="fas fa-pause"></i> Pause
+      </button>
       <button class="btn danger" type="button" onclick="confirmSubmitExam('{{ student_session.session_code }}')">
         Submit
       </button>
@@ -40,6 +43,11 @@
   <div class="focus-reminder">
     <i class="fas fa-circle-info"></i>
     <span>Stay in this window during the exam. Repeated focus changes are logged and flagged for admin review.</span>
+  </div>
+
+  <div class="offline-banner" id="offlineBanner" aria-live="polite">
+    <i class="fas fa-wifi"></i>
+    <span>You are offline. Answers are being kept on this device and will sync automatically.</span>
   </div>
 
   <div class="exam-layout">
@@ -101,6 +109,18 @@
             <div>
               <span class="question-number">Question {{ q.question_number }}</span>
               <h2>{{ q.question_text }}</h2>
+              {% if q.image_paths_as_list() %}
+                <div class="question-image-grid">
+                  {% for image_path in q.image_paths_as_list() %}
+                    <a href="{{ url_for('static', filename=image_path) }}" target="_blank" rel="noopener">
+                      <img src="{{ url_for('static', filename=image_path) }}" alt="Question {{ q.question_number }} image">
+                    </a>
+                  {% endfor %}
+                </div>
+              {% endif %}
+              {% if q.code_snippet %}
+                <pre class="question-code-snippet"><code>{{ q.code_snippet }}</code></pre>
+              {% endif %}
             </div>
             <div class="question-card-tools">
               <button type="button" class="flag-review-button {% if q_status in ['MARKED_REVIEW', 'ANSWERED_MARKED'] %}active{% endif %}" data-question-id="{{ q.id }}" aria-label="Flag question for review">
@@ -187,6 +207,20 @@
     <h2 id="proctorWarningTitle">Stay in this exam window</h2>
     <p id="proctorWarningMessage">The exam window needs to remain active.</p>
     <div class="warning-progress"><span id="proctorWarningProgress"></span></div>
+  </div>
+</div>
+
+<div class="proctor-warning pause-overlay" id="pauseOverlay" aria-hidden="true">
+  <div class="proctor-warning-card">
+    <div class="warning-icon pause"><i class="fas fa-pause"></i></div>
+    <p class="warning-kicker">Timer paused</p>
+    <h2 id="pauseOverlayTitle">Please wait here</h2>
+    <p id="pauseOverlayMessage">An admin has paused your exam timer. Your answers are still safe.</p>
+    <div class="submitted-actions">
+      <button class="btn secondary" type="button" onclick="sendHeartbeat('{{ student_session.session_code }}', document.hasFocus())">
+        Check status
+      </button>
+    </div>
   </div>
 </div>
 {% endblock %}

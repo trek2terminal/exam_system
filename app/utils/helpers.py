@@ -1,4 +1,5 @@
 import secrets
+import os
 from functools import wraps
 from io import BytesIO
 from datetime import datetime
@@ -6,12 +7,13 @@ from flask import session, redirect, url_for, flash, current_app
 
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
-from reportlab.lib.utils import simpleSplit
+from reportlab.lib.utils import ImageReader, simpleSplit
 from reportlab.pdfgen import canvas
 
 from app.models.exam_model import Question
 from app.models.submission_model import Answer
 from app.models.result_model import Result
+from app.services.exam_service import ExamService
 
 
 def _active_user(user_id, expected_role):
@@ -37,10 +39,14 @@ def teacher_required(view):
         if session.get("role") != "teacher":
             flash("Unauthorized access.", "danger")
             return redirect(url_for("auth.teacher_login"))
-        if not _active_user(session.get("teacher_id"), "teacher"):
+        teacher = _active_user(session.get("teacher_id"), "teacher")
+        if not teacher:
             session.clear()
             flash("Your teacher account is no longer active. Please contact the administrator.", "danger")
             return redirect(url_for("auth.teacher_login"))
+        if getattr(teacher, "must_change_password", False) and view.__name__ != "teacher_change_password":
+            flash("Please change your temporary password first.", "warning")
+            return redirect(url_for("auth.teacher_change_password"))
         return view(*args, **kwargs)
 
     return wrapper
@@ -171,8 +177,7 @@ def create_submission_pdf(student_session):
     y = page_height - 20 * mm
 
     exam = student_session.exam_set
-    questions = Question.query.filter_by(exam_set_id=exam.id) \
-        .order_by(Question.question_number.asc()).all()
+    questions = ExamService.get_session_questions(student_session)
     answers = Answer.query.filter_by(session_id=student_session.id).all()
     answers_map = {a.question_id: a.answer_text for a in answers}
     code_output_map = {a.question_id: a.code_output for a in answers if getattr(a, "code_output", None)}
@@ -190,6 +195,42 @@ def create_submission_pdf(student_session):
         pdf.setFont("Helvetica-Bold", size)
         pdf.drawString(left, y, text)
         y -= 10 * mm
+
+    def ensure_pdf_space(required_height):
+        nonlocal y
+        if y - required_height < 30 * mm:
+            pdf.showPage()
+            y = page_height - 20 * mm
+
+    def draw_question_images(question):
+        nonlocal y
+        image_paths = question.image_paths_as_list() if hasattr(question, "image_paths_as_list") else []
+        if not image_paths:
+            return
+
+        static_root = current_app.static_folder
+        for image_path in image_paths:
+            disk_path = os.path.join(static_root, image_path.replace("/", os.sep))
+            if not os.path.exists(disk_path):
+                y = draw_wrapped_text(pdf, f"[Question image missing: {image_path}]", left, y, right_width, font_size=9)
+                y -= 2 * mm
+                continue
+
+            try:
+                image = ImageReader(disk_path)
+                image_width, image_height = image.getSize()
+                draw_width = min(right_width, 115 * mm)
+                draw_height = draw_width * (image_height / image_width)
+                if draw_height > 75 * mm:
+                    draw_height = 75 * mm
+                    draw_width = draw_height * (image_width / image_height)
+
+                ensure_pdf_space(draw_height + 8 * mm)
+                pdf.drawImage(image, left, y - draw_height, width=draw_width, height=draw_height, preserveAspectRatio=True, mask="auto")
+                y -= draw_height + 5 * mm
+            except Exception:
+                y = draw_wrapped_text(pdf, f"[Question image could not be rendered: {image_path}]", left, y, right_width, font_size=9)
+                y -= 2 * mm
 
     # Header
     heading("Exam Submission Report", 18)
@@ -213,6 +254,15 @@ def create_submission_pdf(student_session):
 
         y = draw_wrapped_text(pdf, q.question_text, left, y, right_width, font_size=10, leading=14)
         y -= 4 * mm
+
+        draw_question_images(q)
+
+        if getattr(q, "code_snippet", None):
+            pdf.setFont("Helvetica-Bold", 10)
+            pdf.drawString(left, y, "Question Code Snippet:")
+            y -= 5 * mm
+            y = draw_wrapped_text(pdf, q.code_snippet, left, y, right_width, font_name="Courier", font_size=8.5, leading=11)
+            y -= 3 * mm
 
         pdf.setFont("Helvetica-Bold", 10)
         pdf.drawString(left, y, "Student Answer:")

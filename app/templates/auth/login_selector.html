@@ -8,19 +8,10 @@
         <div class="auth-card">
             <div class="auth-header">
                 <h1>Welcome Back</h1>
-                <p>Choose your role to continue</p>
+                <p>Choose your portal to continue</p>
             </div>
 
             <div class="role-selector">
-                <a href="{{ url_for('auth.admin_login') }}" class="role-card role-admin">
-                    <div class="role-icon">
-                        <i class="fas fa-crown"></i>
-                    </div>
-                    <h3>Administrator</h3>
-                    <p>Manage exams, users, and system settings</p>
-                    <div class="role-badge">Full Control</div>
-                </a>
-
                 <a href="{{ url_for('auth.teacher_login') }}" class="role-card role-teacher">
                     <div class="role-icon">
                         <i class="fas fa-chalkboard-user"></i>

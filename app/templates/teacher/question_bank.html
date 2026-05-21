@@ -14,7 +14,7 @@
   <div class="grid-2" style="align-items: start; margin-top: 24px;">
     <section class="card">
       <h2>Add Question</h2>
-      <form method="post" class="student-roster-form">
+      <form method="post" class="student-roster-form" enctype="multipart/form-data">
         <label>Question Type</label>
         <select name="question_type">
           <option value="short">Short</option>
@@ -37,6 +37,15 @@
 
         <label>Model Answer / Review Reference</label>
         <textarea name="model_answer" rows="3"></textarea>
+
+        <label>Question Images</label>
+        <input type="file" name="question_images" accept=".png,.jpg,.jpeg,.gif,.webp" multiple>
+
+        <label>Read-only Code Snippet</label>
+        <textarea name="code_snippet" rows="4"></textarea>
+
+        <label>Snippet Language</label>
+        <input type="text" name="code_language" placeholder="python">
 
         <button class="btn primary" type="submit">
           <i class="fas fa-bookmark"></i> Save to Bank
@@ -63,6 +72,12 @@
             <p class="muted">{{ item.marks }} mark{% if item.marks != 1 %}s{% endif %}</p>
             {% if item.model_answer %}
               <p class="muted">Model answer saved</p>
+            {% endif %}
+            {% if item.image_paths_as_list() %}
+              <p class="muted">{{ item.image_paths_as_list() | length }} image(s) saved</p>
+            {% endif %}
+            {% if item.code_snippet %}
+              <pre class="question-code-snippet">{{ item.code_snippet }}</pre>
             {% endif %}
           </article>
         {% else %}

@@ -1,11 +1,15 @@
 import csv
 from difflib import SequenceMatcher
 import json
+import os
+import secrets
 from datetime import datetime
-from flask import Blueprint, render_template, redirect, url_for, request, session, flash, jsonify
+from flask import Blueprint, current_app, render_template, redirect, url_for, request, session, flash, jsonify
 from sqlalchemy import and_
+from werkzeug.utils import secure_filename
 from app.models.database import db
 from app.models.exam_model import ExamEnrollment, ExamSet, Question, QuestionBankItem
+from app.models.group_model import StudentGroup
 from app.models.submission_model import StudentSession, Answer
 from app.models.result_model import Result, QuestionMark
 from app.services.exam_service import ExamService
@@ -29,6 +33,28 @@ def _parse_datetime_local(raw_value):
         return datetime.fromisoformat(raw_value)
     except ValueError:
         return None
+
+
+def _save_question_images(file_list):
+    allowed = {"png", "jpg", "jpeg", "gif", "webp"}
+    saved_paths = []
+    upload_root = os.path.join(current_app.config["UPLOAD_FOLDER"], "question_images")
+    os.makedirs(upload_root, exist_ok=True)
+
+    for file_storage in file_list or []:
+        if not file_storage or not file_storage.filename:
+            continue
+
+        ext = file_storage.filename.rsplit(".", 1)[-1].lower() if "." in file_storage.filename else ""
+        if ext not in allowed:
+            continue
+
+        base_name = secure_filename(file_storage.filename)
+        stored_name = f"{secrets.token_hex(8)}_{base_name}"
+        file_storage.save(os.path.join(upload_root, stored_name))
+        saved_paths.append(f"uploads/question_images/{stored_name}")
+
+    return saved_paths
 
 
 def _parse_enrollment_line(line):
@@ -130,6 +156,12 @@ def setup_exam(exam_id=None):
         access_code = request.form.get("access_code", "").strip().upper()
         start_time = _parse_datetime_local(request.form.get("start_time"))
         end_time = _parse_datetime_local(request.form.get("end_time"))
+        shuffle_questions = request.form.get("shuffle_questions") == "on"
+        try:
+            random_question_count = int(request.form.get("random_question_count") or 0)
+        except ValueError:
+            random_question_count = 0
+        random_question_count = max(0, random_question_count)
 
         if not exam_name or not set_code or not subject:
             flash("Exam name, set code and subject are required.", "danger")
@@ -164,6 +196,9 @@ def setup_exam(exam_id=None):
         q_options = request.form.getlist("options")
         q_answers = request.form.getlist("correct_answer")
         q_model_answers = request.form.getlist("model_answer")
+        q_existing_images = request.form.getlist("existing_image_paths")
+        q_code_snippets = request.form.getlist("code_snippet")
+        q_code_languages = request.form.getlist("code_language")
 
         question_rows = []
         for i in range(len(q_texts)):
@@ -185,6 +220,15 @@ def setup_exam(exam_id=None):
             options_list = parse_options(raw_options)
             correct_answer = (q_answers[i] if i < len(q_answers) else "").strip()
             model_answer = (q_model_answers[i] if i < len(q_model_answers) else "").strip()
+            existing_images = []
+            if i < len(q_existing_images):
+                try:
+                    existing_images = json.loads(q_existing_images[i] or "[]")
+                except json.JSONDecodeError:
+                    existing_images = []
+            image_paths = existing_images + _save_question_images(request.files.getlist(f"question_images_{i}"))
+            code_snippet = (q_code_snippets[i] if i < len(q_code_snippets) else "").strip()
+            code_language = (q_code_languages[i] if i < len(q_code_languages) else "").strip() or None
 
             if q_type == "mcq" and len(options_list) < 2:
                 flash(f"Question {number} needs at least two MCQ options.", "danger")
@@ -198,6 +242,9 @@ def setup_exam(exam_id=None):
                 "options": options_list,
                 "answer": correct_answer,
                 "model_answer": model_answer,
+                "image_paths": image_paths,
+                "code_snippet": code_snippet,
+                "code_language": code_language,
             })
 
         if not question_rows:
@@ -216,6 +263,8 @@ def setup_exam(exam_id=None):
             exam.total_marks = total_marks
             exam.start_time = start_time
             exam.end_time = end_time
+            exam.shuffle_questions = shuffle_questions
+            exam.random_question_count = random_question_count
             if access_code:
                 exam.access_code = access_code
         else:
@@ -230,6 +279,8 @@ def setup_exam(exam_id=None):
                 created_by=session.get("teacher_id"),
                 start_time=start_time,
                 end_time=end_time,
+                shuffle_questions=shuffle_questions,
+                random_question_count=random_question_count,
             )
             db.session.add(exam)
             db.session.flush()
@@ -243,8 +294,11 @@ def setup_exam(exam_id=None):
                 marks=row["marks"],
                 correct_answer=row["answer"],
                 model_answer=row["model_answer"],
+                code_snippet=row["code_snippet"],
+                code_language=row["code_language"],
             )
             question.set_options(row["options"])
+            question.set_image_paths(row["image_paths"])
             db.session.add(question)
 
         db.session.commit()
@@ -330,6 +384,9 @@ def question_bank():
         question_type = request.form.get("question_type", "short").strip().lower()
         correct_answer = request.form.get("correct_answer", "").strip()
         model_answer = request.form.get("model_answer", "").strip()
+        code_snippet = request.form.get("code_snippet", "").strip()
+        code_language = request.form.get("code_language", "").strip() or None
+        image_paths = _save_question_images(request.files.getlist("question_images"))
         options = parse_options(request.form.get("options", ""))
 
         try:
@@ -353,8 +410,11 @@ def question_bank():
             marks=marks,
             correct_answer=correct_answer,
             model_answer=model_answer,
+            code_snippet=code_snippet,
+            code_language=code_language,
         )
         bank_item.set_options(options)
+        bank_item.set_image_paths(image_paths)
         db.session.add(bank_item)
         db.session.commit()
 
@@ -437,8 +497,11 @@ def import_from_question_bank(exam_id):
                 correct_answer=item.correct_answer,
                 explanation=item.explanation,
                 model_answer=item.model_answer,
+                code_snippet=item.code_snippet,
+                code_language=item.code_language,
             )
             question.set_options(item.options_as_list())
+            question.set_image_paths(item.image_paths_as_list())
             db.session.add(question)
             next_number += 1
 
@@ -462,6 +525,51 @@ def enrollments(exam_id):
         return redirect(url_for("teacher.dashboard"))
 
     if request.method == "POST":
+        group_id = request.form.get("group_id")
+        if group_id:
+            group = StudentGroup.query.get(group_id)
+            if not group:
+                flash("Choose a valid group.", "danger")
+                return redirect(url_for("teacher.enrollments", exam_id=exam.id))
+
+            added_count = 0
+            skipped_count = 0
+            for member in group.members:
+                student = member.student
+                roll_no = _normalize_roll(student.roll_number or student.username)
+                if not roll_no:
+                    skipped_count += 1
+                    continue
+
+                existing = (
+                    ExamEnrollment.query.filter(
+                        ExamEnrollment.exam_set_id == exam.id,
+                        db.func.upper(ExamEnrollment.roll_no) == roll_no,
+                    ).first()
+                )
+                if existing:
+                    skipped_count += 1
+                    continue
+
+                db.session.add(
+                    ExamEnrollment(
+                        exam_set_id=exam.id,
+                        roll_no=roll_no,
+                        student_name=student.name,
+                        extra_time_minutes=0,
+                        created_by=teacher_id,
+                    )
+                )
+                added_count += 1
+
+            if added_count:
+                db.session.commit()
+            flash(
+                f"Group assignment finished: {added_count} added, {skipped_count} skipped.",
+                "success" if added_count else "warning",
+            )
+            return redirect(url_for("teacher.enrollments", exam_id=exam.id))
+
         raw_roster = request.form.get("enrollments", "")
         lines = raw_roster.splitlines()
         seen_rolls = set()
@@ -552,6 +660,7 @@ def enrollments(exam_id):
         exam=exam,
         enrollments=existing_enrollments,
         sessions_by_roll=sessions_by_roll,
+        groups=StudentGroup.query.order_by(StudentGroup.name.asc()).all(),
     )
 
 

@@ -86,6 +86,22 @@ def print_startup_urls(port):
     print()
 
 
+def unlock_admin_account():
+    app = create_app()
+    with app.app_context():
+        from app.models.database import db
+        from app.models.user_model import User
+
+        admin = User.query.filter_by(role="admin").first()
+        if not admin:
+            print("No admin account exists yet.")
+            return
+        admin.failed_login_attempts = 0
+        admin.locked_until = None
+        db.session.commit()
+        print(f"Admin account unlocked: {admin.username}")
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
     app_env = os.environ.get("APP_ENV", os.environ.get("FLASK_ENV", "development")).lower()
@@ -110,6 +126,9 @@ if __name__ == "__main__":
             sys.exit(0)
         if cmd in {"migrations", "migration-status"}:
             show_migrations()
+            sys.exit(0)
+        if cmd in {"unlock-admin", "admin-unlock"}:
+            unlock_admin_account()
             sys.exit(0)
 
     app = create_app()

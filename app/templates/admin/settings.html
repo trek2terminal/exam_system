@@ -65,6 +65,16 @@
             </div>
         </section>
 
+        <section class="card">
+            <div class="card-header">
+                <h2>Database Backup</h2>
+                <p class="muted">Download a timestamped copy before major exams or admin changes.</p>
+            </div>
+            <a class="btn secondary" href="{{ url_for('admin.backup_database') }}">
+                <i class="fas fa-database"></i> Backup Database
+            </a>
+        </section>
+
         <div class="form-actions">
             <button type="submit" class="btn primary">
                 <i class="fas fa-floppy-disk"></i> Save Settings

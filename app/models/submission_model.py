@@ -38,8 +38,13 @@ class StudentSession(db.Model):
     submitted_at = db.Column(db.DateTime, nullable=True)
 
     status = db.Column(db.String(20), default="waiting")
-    # waiting / active / submitted / auto_submitted / terminated / evaluated
+    # waiting / active / pause_requested / paused / submitted / auto_submitted / terminated / evaluated
     extra_time_minutes = db.Column(db.Integer, default=0, nullable=False)
+    question_order = db.Column(db.Text, nullable=True)
+    pause_requested_at = db.Column(db.DateTime, nullable=True)
+    pause_reason = db.Column(db.Text, nullable=True)
+    paused_at = db.Column(db.DateTime, nullable=True)
+    paused_remaining_seconds = db.Column(db.Integer, nullable=True)
 
     # Proctoring & Security
     focus_violations = db.Column(db.Integer, default=0)

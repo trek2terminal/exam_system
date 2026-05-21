@@ -55,6 +55,18 @@
             <div>
               <strong>Q{{ q.question_number }}</strong>
               <p>{{ q.question_text }}</p>
+              {% if q.image_paths_as_list() %}
+                <div class="question-image-grid compact">
+                  {% for image_path in q.image_paths_as_list() %}
+                    <a href="{{ url_for('static', filename=image_path) }}" target="_blank" rel="noopener">
+                      <img src="{{ url_for('static', filename=image_path) }}" alt="Question {{ q.question_number }} image">
+                    </a>
+                  {% endfor %}
+                </div>
+              {% endif %}
+              {% if q.code_snippet %}
+                <pre class="question-code-snippet compact"><code>{{ q.code_snippet }}</code></pre>
+              {% endif %}
             </div>
             <span>{{ question_marks.get(q.id).marks_awarded if question_marks.get(q.id) else 0 }} / {{ q.marks }}</span>
           </div>

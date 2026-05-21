@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, redirect, url_for, request, session, flash
-from datetime import datetime
+from datetime import datetime, timedelta
 from app.models.database import db
 from app.models.user_model import User
 from app.models.audit_model import AuditLog
@@ -147,7 +147,13 @@ def admin_login():
             return redirect(url_for("auth.admin_login"))
 
         if not admin.check_password(password):
-            admin.increment_failed_attempts()
+            admin.failed_login_attempts += 1
+            if admin.failed_login_attempts >= 3:
+                admin.locked_until = datetime.utcnow() + timedelta(days=3650)
+                flash("Admin account is locked. Unlock it from the server CLI.", "danger")
+            else:
+                flash("Invalid credentials.", "danger")
+            db.session.commit()
             AuditLog(
                 user_id=admin.id,
                 action="failed_login",
@@ -156,7 +162,6 @@ def admin_login():
                 status="failed",
                 ip_address=get_client_ip()
             ).save()
-            flash("Invalid credentials.", "danger")
             return redirect(url_for("auth.admin_login"))
 
         # Successful login
@@ -272,10 +277,50 @@ def teacher_login():
             ip_address=get_client_ip()
         ).save()
 
+        if user.must_change_password:
+            flash("Please set a new password before continuing.", "warning")
+            return redirect(url_for("auth.teacher_change_password"))
+
         flash("Login successful. Welcome back!", "success")
         return redirect(url_for("teacher.dashboard"))
 
     return render_template("teacher/login.html")
+
+
+@auth_bp.route("/teacher/change-password", methods=["GET", "POST"])
+def teacher_change_password():
+    teacher_id = session.get("teacher_id")
+    if not teacher_id or session.get("role") != "teacher":
+        flash("Please log in as teacher first.", "danger")
+        return redirect(url_for("auth.teacher_login"))
+
+    user = User.query.get_or_404(teacher_id)
+    if request.method == "POST":
+        current_password = request.form.get("current_password", "")
+        new_password = request.form.get("new_password", "")
+        confirm_password = request.form.get("confirm_password", "")
+
+        if not user.check_password(current_password):
+            flash("Current password is not correct.", "danger")
+            return redirect(url_for("auth.teacher_change_password"))
+        if new_password != confirm_password:
+            flash("New passwords do not match.", "danger")
+            return redirect(url_for("auth.teacher_change_password"))
+        if (
+            len(new_password) < 10
+            or not any(ch.isupper() for ch in new_password)
+            or not any(ch.isdigit() for ch in new_password)
+        ):
+            flash("New password must be at least 10 characters and include uppercase and number.", "danger")
+            return redirect(url_for("auth.teacher_change_password"))
+
+        user.set_password(new_password)
+        user.must_change_password = False
+        db.session.commit()
+        flash("Password updated. You can continue now.", "success")
+        return redirect(url_for("teacher.dashboard"))
+
+    return render_template("teacher/change_password.html")
 
 
 @auth_bp.route("/teacher/logout")

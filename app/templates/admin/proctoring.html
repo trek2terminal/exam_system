@@ -25,6 +25,10 @@
             <div class="stat-value" id="waitingCount">0</div>
         </div>
         <div class="stat-box">
+            <div class="stat-label">Paused</div>
+            <div class="stat-value" id="pausedCount">0</div>
+        </div>
+        <div class="stat-box">
             <div class="stat-label">Flagged</div>
             <div class="stat-value" id="flaggedCount">0</div>
         </div>
@@ -152,6 +156,22 @@ function formatSeconds(seconds) {
 }
 
 function buildActionForms(sessionId, status) {
+    if (status === 'paused') {
+        return `
+            <form method="post" action="/admin/sessions/${sessionId}/resume">
+                <button class="btn primary small" type="submit">Resume</button>
+            </form>
+            <form method="post" action="/admin/sessions/${sessionId}/terminate">
+                <input type="hidden" name="reason" value="Terminated from live proctoring">
+                <button class="btn danger small" type="submit">Terminate</button>
+            </form>
+            <form class="mini-form" method="post" action="/admin/sessions/${sessionId}/reduce-time">
+                <input type="number" name="minutes" min="1" max="60" value="5" aria-label="Minutes">
+                <button class="btn secondary small" type="submit">Reduce</button>
+            </form>
+        `;
+    }
+
     if (status !== 'active' && status !== 'waiting') return '';
 
     const secondChance = `
@@ -170,6 +190,10 @@ function buildActionForms(sessionId, status) {
         <form class="mini-form" method="post" action="/admin/sessions/${sessionId}/reduce-time">
             <input type="number" name="minutes" min="1" max="60" value="5" aria-label="Minutes">
             <button class="btn secondary small" type="submit">Reduce</button>
+        </form>
+        <form method="post" action="/admin/sessions/${sessionId}/pause">
+            <input type="hidden" name="reason" value="Paused from live proctoring">
+            <button class="btn secondary small" type="submit">Pause</button>
         </form>
         ${secondChance}
     `;
@@ -201,7 +225,11 @@ function renderSessions(sessions) {
         node.querySelector('[data-heartbeat]').textContent = session.last_heartbeat_age === null ? '-' : `${session.last_heartbeat_age}s`;
         node.querySelector('[data-latest]').textContent = session.latest_violation
             ? `Latest: ${session.latest_violation.replaceAll('_', ' ')}`
-            : 'No violations recorded.';
+            : session.pause_requested
+                ? `Pause requested: ${session.pause_reason || 'No reason provided.'}`
+                : session.status === 'paused'
+                    ? 'Timer is frozen by admin.'
+                    : 'No violations recorded.';
         node.querySelector('[data-actions]').innerHTML = buildActionForms(session.id, session.status);
         grid.appendChild(node);
     });
@@ -239,6 +267,7 @@ async function refreshProctoring() {
 
         document.getElementById('activeCount').textContent = data.counts.active_sessions;
         document.getElementById('waitingCount').textContent = data.counts.waiting_sessions;
+        document.getElementById('pausedCount').textContent = data.counts.paused_sessions;
         document.getElementById('flaggedCount').textContent = data.counts.flagged_sessions;
         document.getElementById('lastUpdate').textContent = new Date(data.updated_at).toLocaleTimeString();
 

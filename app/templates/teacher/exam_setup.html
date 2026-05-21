@@ -5,7 +5,7 @@
 <div class="card">
   <h1>{% if exam %}Edit Exam Set{% else %}Create Exam Set{% endif %}</h1>
 
-  <form method="post" id="examForm">
+  <form method="post" id="examForm" enctype="multipart/form-data">
     <div class="grid-2">
       <div>
         <label>Exam Name</label>
@@ -39,6 +39,14 @@
         <label>Total Marks</label>
         <input type="number" id="totalMarks" value="{{ exam.total_marks if exam else 0 }}" readonly>
       </div>
+      <div>
+        <label>Random Questions to Deliver</label>
+        <input type="number" name="random_question_count" min="0" value="{{ exam.random_question_count if exam else 0 }}" placeholder="0 means all questions">
+      </div>
+      <label class="checkbox-line">
+        <input type="checkbox" name="shuffle_questions" {% if exam and exam.shuffle_questions %}checked{% endif %}>
+        Shuffle question order per student
+      </label>
     </div>
 
     <hr>
@@ -95,6 +103,23 @@
             <label>Model Answer / Review Reference</label>
             <textarea name="model_answer" rows="3" placeholder="Hidden during the exam. Shown while reviewing answers.">{{ q.model_answer or '' }}</textarea>
 
+            <input type="hidden" name="existing_image_paths" value='{{ q.image_paths or "[]" }}'>
+            {% if q.image_paths_as_list() %}
+              <div class="question-media-preview">
+                {% for image_path in q.image_paths_as_list() %}
+                  <img src="{{ url_for('static', filename=image_path) }}" alt="Question image">
+                {% endfor %}
+              </div>
+            {% endif %}
+            <label>Question Images</label>
+            <input type="file" name="question_images_{{ loop.index0 }}" accept=".png,.jpg,.jpeg,.gif,.webp" multiple>
+
+            <label>Read-only Code Snippet</label>
+            <textarea name="code_snippet" rows="4" placeholder="Optional code shown inside the question body">{{ q.code_snippet or '' }}</textarea>
+
+            <label>Snippet Language</label>
+            <input type="text" name="code_language" value="{{ q.code_language or '' }}" placeholder="python">
+
             <button type="submit" class="btn secondary small" form="saveQuestionToBank{{ q.id }}">
               <i class="fas fa-bookmark"></i> Save to Bank
             </button>
@@ -135,6 +160,16 @@
 
           <label>Model Answer / Review Reference</label>
           <textarea name="model_answer" rows="3" placeholder="Hidden during the exam. Shown while reviewing answers."></textarea>
+
+          <input type="hidden" name="existing_image_paths" value="[]">
+          <label>Question Images</label>
+          <input type="file" name="question_images_0" accept=".png,.jpg,.jpeg,.gif,.webp" multiple>
+
+          <label>Read-only Code Snippet</label>
+          <textarea name="code_snippet" rows="4" placeholder="Optional code shown inside the question body"></textarea>
+
+          <label>Snippet Language</label>
+          <input type="text" name="code_language" placeholder="python">
 
           <button type="button" class="btn danger small" onclick="removeQuestionRow(this)">Remove</button>
         </div>
@@ -194,6 +229,16 @@
 
       <label>Model Answer / Review Reference</label>
       <textarea name="model_answer" rows="3" placeholder="Hidden during the exam. Shown while reviewing answers."></textarea>
+
+      <input type="hidden" name="existing_image_paths" value="[]">
+      <label>Question Images</label>
+      <input type="file" name="question_images_${currentCount}" accept=".png,.jpg,.jpeg,.gif,.webp" multiple>
+
+      <label>Read-only Code Snippet</label>
+      <textarea name="code_snippet" rows="4" placeholder="Optional code shown inside the question body"></textarea>
+
+      <label>Snippet Language</label>
+      <input type="text" name="code_language" placeholder="python">
 
       <button type="button" class="btn danger small" onclick="removeQuestionRow(this)">Remove</button>
     `;

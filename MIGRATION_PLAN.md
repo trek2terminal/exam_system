@@ -79,6 +79,15 @@ This project should follow that same practical model.
 - Teacher question bank with manual saves, copy-from-exam, delete, and import selected bank questions into exams.
 - Teacher per-question side-by-side answer comparison.
 - Teacher similarity flag report for long and coding answers.
+- Question images and read-only code snippets in question bodies, visible during exams, review, comparison, and PDF exports.
+- Per-student randomized question delivery with stored question order for refresh-safe exam attempts.
+- Student pause requests, admin pause/resume controls, and server-side timer freeze while paused.
+- Offline answer buffer in the exam UI using localStorage with automatic sync on reconnect.
+- Admin student groups/batches and teacher one-click group assignment to exams.
+- Admin database backup download from settings for SQLite, with PostgreSQL `pg_dump` support when hosted.
+- Admin suspicious activity report across repeated violation-heavy exam sessions.
+- Admin login hidden from the common role selector, harder admin lockout after 3 failed attempts, and `python run.py unlock-admin` recovery.
+- Forced teacher password change after admin-created temporary credentials.
 
 ## Python Feature Roadmap
 
