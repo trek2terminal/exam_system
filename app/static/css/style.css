@@ -2143,6 +2143,37 @@ html[data-theme="dark"] body.student-mode .theme-toggle {
     gap: 16px;
 }
 
+.student-login-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.student-login-tab {
+    min-height: 42px;
+    border: 1px solid var(--student-border);
+    border-radius: 8px;
+    color: var(--student-muted);
+    background: rgba(255, 255, 255, 0.48);
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.student-login-tab.active {
+    color: #fff;
+    border-color: transparent;
+    background: linear-gradient(135deg, var(--student-teal), var(--student-blue));
+}
+
+.student-login-panel {
+    display: none;
+}
+
+.student-login-panel.active {
+    display: grid;
+}
+
 body.student-mode input,
 body.student-mode textarea,
 body.student-mode select {

@@ -139,7 +139,7 @@ def users():
     page = request.args.get("page", 1, type=int)
     role_filter = request.args.get("role", "all")
 
-    query = User.query.filter(User.role != "student")
+    query = User.query
 
     if role_filter != "all":
         query = query.filter_by(role=role_filter)
@@ -264,6 +264,7 @@ def edit_user(user_id):
         role = request.form.get("role", user.role).strip()
         department = request.form.get("department", "").strip() or None
         designation = request.form.get("designation", "").strip() or None
+        roll_number = request.form.get("roll_number", "").strip().upper() or None
         password = request.form.get("password", "").strip()
         profile_picture = request.form.get("profile_picture", "").strip() or None
         is_active = request.form.get("is_active") == "on"
@@ -288,8 +289,8 @@ def edit_user(user_id):
                 flash("Email already exists.", "danger")
                 return render_template("admin/edit_user.html", user=user, form_data=request.form), 400
 
-        if role not in {"admin", "teacher"}:
-            flash("Role must be admin or teacher.", "danger")
+        if role not in {"admin", "teacher", "student"}:
+            flash("Role must be admin, teacher, or student.", "danger")
             return render_template("admin/edit_user.html", user=user, form_data=request.form), 400
 
         if password and not _validate_password(password):
@@ -303,6 +304,7 @@ def edit_user(user_id):
         user.role = role
         user.department = department
         user.designation = designation
+        user.roll_number = roll_number
         user.profile_picture = profile_picture or user.profile_picture
         user.is_verified = is_verified
 

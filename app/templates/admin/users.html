@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 
-{% block title %}Manage Teachers - Admin{% endblock %}
+{% block title %}Manage Users - Admin{% endblock %}
 
 {% block content %}
 <div class="admin-page">
     <div class="page-header">
         <div>
             <h1><i class="fas fa-users"></i> User Management</h1>
-            <p>Manage teachers and administrators</p>
+            <p>Manage teachers, students, and administrators</p>
         </div>
         <a href="{{ url_for('admin.create_teacher') }}" class="btn btn-primary">
             <i class="fas fa-user-plus"></i> Create Teacher
@@ -16,10 +16,11 @@
 
     <div class="card">
         <div class="card-header">
-            <h2>Teachers & Admins</h2>
+            <h2>All Users</h2>
             <div class="role-filter">
                 <a href="{{ url_for('admin.users', role='all') }}" class="filter-link {% if role_filter == 'all' %}active{% endif %}">All</a>
                 <a href="{{ url_for('admin.users', role='teacher') }}" class="filter-link {% if role_filter == 'teacher' %}active{% endif %}">Teachers</a>
+                <a href="{{ url_for('admin.users', role='student') }}" class="filter-link {% if role_filter == 'student' %}active{% endif %}">Students</a>
                 <a href="{{ url_for('admin.users', role='admin') }}" class="filter-link {% if role_filter == 'admin' %}active{% endif %}">Admins</a>
             </div>
         </div>
@@ -32,7 +33,7 @@
                                 <th>Name</th>
                                 <th>Username</th>
                                 <th>Role</th>
-                                <th>Email</th>
+                                <th>Email / Roll</th>
                                 <th>Status</th>
                                 <th>Joined</th>
                                 <th>Actions</th>
@@ -59,7 +60,12 @@
                                 <td>
                                     <span class="badge badge-{{ user.role }}">{{ user.role | title }}</span>
                                 </td>
-                                <td>{{ user.email or 'N/A' }}</td>
+                                <td>
+                                    {{ user.email or 'N/A' }}
+                                    {% if user.role == 'student' and user.roll_number %}
+                                        <div class="muted">{{ user.roll_number }}</div>
+                                    {% endif %}
+                                </td>
                                 <td>
                                     <span class="status-badge {% if user.is_active %}active{% else %}inactive{% endif %}">
                                         {{ 'Active' if user.is_active else 'Inactive' }}
@@ -278,6 +284,11 @@ code {
 .badge-teacher {
     background: rgba(76, 175, 80, 0.2);
     color: #4caf50;
+}
+
+.badge-student {
+    background: rgba(15, 118, 110, 0.2);
+    color: #0f766e;
 }
 
 .status-badge {

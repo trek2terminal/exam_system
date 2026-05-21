@@ -3,10 +3,35 @@ from datetime import datetime
 from app.models.database import db
 from app.models.user_model import User
 from app.models.audit_model import AuditLog
+from app.services.settings_service import SettingsService
 from app.utils.rate_limiter import rate_limit
 from app.utils.network import get_client_ip
 
 auth_bp = Blueprint("auth", __name__)
+
+
+def _valid_student_password(password):
+    return (
+        len(password or "") >= 8
+        and any(ch.isupper() for ch in password or "")
+        and any(ch.isdigit() for ch in password or "")
+        and any(not ch.isalnum() for ch in password or "")
+    )
+
+
+def _set_student_session(student_name, roll_no, student_id=None, username=None):
+    session.clear()
+    session.permanent = True
+    session["student_id"] = student_id or hash(f"{student_name}_{roll_no}_{datetime.utcnow().isoformat()}")
+    if student_id:
+        session["user_id"] = student_id
+        session["student_user_id"] = student_id
+    if username:
+        session["student_username"] = username
+    session["student_name"] = student_name
+    session["roll_no"] = (roll_no or "").strip().upper()
+    session["role"] = "student"
+    session["login_time"] = datetime.utcnow().isoformat()
 
 
 @auth_bp.route("/")
@@ -276,27 +301,156 @@ def teacher_logout():
 @rate_limit("student_login", methods=("POST",), json_response=False)
 def student_login():
     """Student Login"""
+    platform_settings = SettingsService.get_settings()
+
     if request.method == "POST":
+        login_mode = request.form.get("login_mode", "quick")
+
+        if login_mode == "account":
+            identifier = request.form.get("identifier", "").strip()
+            password = request.form.get("password", "").strip()
+
+            if not identifier or not password:
+                flash("Username/roll number and password are required.", "danger")
+                return redirect(url_for("auth.student_login"))
+
+            user = User.query.filter(
+                User.role == "student",
+                db.or_(
+                    User.username == identifier,
+                    User.email == identifier,
+                    User.roll_number == identifier.upper(),
+                ),
+            ).first()
+
+            if not user:
+                flash("Invalid student login details.", "danger")
+                return redirect(url_for("auth.student_login"))
+
+            if not user.is_active:
+                flash("Your student account is disabled. Contact the administrator.", "danger")
+                return redirect(url_for("auth.student_login"))
+
+            if user.is_account_locked():
+                flash("Account is temporarily locked. Try again later.", "danger")
+                return redirect(url_for("auth.student_login"))
+
+            if not user.check_password(password):
+                user.increment_failed_attempts()
+                AuditLog(
+                    user_id=user.id,
+                    action="failed_student_login",
+                    resource_type="user",
+                    resource_id=user.id,
+                    status="failed",
+                    ip_address=get_client_ip(),
+                ).save()
+                flash("Invalid student login details.", "danger")
+                return redirect(url_for("auth.student_login"))
+
+            user.reset_failed_attempts()
+            _set_student_session(user.name, user.roll_number or user.username, student_id=user.id, username=user.username)
+
+            AuditLog(
+                user_id=user.id,
+                action="student_login",
+                resource_type="user",
+                resource_id=user.id,
+                status="success",
+                ip_address=get_client_ip(),
+            ).save()
+
+            flash(f"Welcome {user.name}!", "success")
+            return redirect(url_for("student.dashboard"))
+
         student_name = request.form.get("student_name", "").strip()
-        roll_no = request.form.get("roll_no", "").strip()
+        roll_no = request.form.get("roll_no", "").strip().upper()
 
         if not student_name or not roll_no:
             flash("Student name and roll number are required.", "danger")
             return redirect(url_for("auth.student_login"))
 
-        # For students, we create a session without persistent account
-        session.clear()
-        session.permanent = True
-        session["student_id"] = hash(f"{student_name}_{roll_no}_{datetime.utcnow().isoformat()}")
-        session["student_name"] = student_name
-        session["roll_no"] = roll_no
-        session["role"] = "student"
-        session["login_time"] = datetime.utcnow().isoformat()
+        _set_student_session(student_name, roll_no)
 
         flash(f"Welcome {student_name}!", "success")
         return redirect(url_for("student.dashboard"))
 
-    return render_template("auth/student_login.html")
+    return render_template("auth/student_login.html", settings=platform_settings)
+
+
+@auth_bp.route("/student/register", methods=["GET", "POST"])
+@rate_limit("student_login", methods=("POST",), json_response=False)
+def student_register():
+    """Student self-registration, controlled by admin settings."""
+    platform_settings = SettingsService.get_settings()
+    if not platform_settings.student_self_registration:
+        flash("Student registration is currently closed. Please use the details provided by your teacher.", "warning")
+        return redirect(url_for("auth.student_login"))
+
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        username = request.form.get("username", "").strip()
+        email = request.form.get("email", "").strip() or None
+        roll_no = request.form.get("roll_no", "").strip().upper()
+        password = request.form.get("password", "").strip()
+        confirm_password = request.form.get("confirm_password", "").strip()
+
+        if not name or not username or not roll_no or not password or not confirm_password:
+            flash("Name, username, roll number, password, and confirmation are required.", "danger")
+            return redirect(url_for("auth.student_register"))
+
+        if len(username) < 4:
+            flash("Username must be at least 4 characters.", "danger")
+            return redirect(url_for("auth.student_register"))
+
+        if password != confirm_password:
+            flash("Passwords do not match.", "danger")
+            return redirect(url_for("auth.student_register"))
+
+        if not _valid_student_password(password):
+            flash("Password must be at least 8 characters and include uppercase, number, and special character.", "danger")
+            return redirect(url_for("auth.student_register"))
+
+        if User.query.filter_by(username=username).first():
+            flash("Username already exists.", "danger")
+            return redirect(url_for("auth.student_register"))
+
+        if email and User.query.filter_by(email=email).first():
+            flash("Email already exists.", "danger")
+            return redirect(url_for("auth.student_register"))
+
+        if User.query.filter_by(role="student", roll_number=roll_no).first():
+            flash("A student account with this roll number already exists.", "danger")
+            return redirect(url_for("auth.student_register"))
+
+        student = User(
+            name=name,
+            username=username,
+            email=email,
+            role="student",
+            roll_number=roll_no,
+            is_active=True,
+            is_verified=True,
+            created_at=datetime.utcnow(),
+        )
+        student.set_password(password)
+        db.session.add(student)
+        db.session.commit()
+
+        AuditLog(
+            user_id=student.id,
+            action="student_self_register",
+            resource_type="user",
+            resource_id=student.id,
+            status="success",
+            ip_address=get_client_ip(),
+        ).save()
+
+        _set_student_session(student.name, student.roll_number, student_id=student.id, username=student.username)
+        flash("Student account created. Welcome!", "success")
+        return redirect(url_for("student.dashboard"))
+
+    return render_template("auth/student_register.html", settings=platform_settings)
 
 
 @auth_bp.route("/student/logout")

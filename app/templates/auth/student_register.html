@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block title %}Student Registration{% endblock %}
+
+{% block content %}
+<div class="student-entry">
+    <section class="student-entry-panel animate-fade-in-up">
+        <div class="student-entry-copy">
+            <span class="student-kicker"><i class="fas fa-user-plus"></i> Registration</span>
+            <h1>Create your student account calmly.</h1>
+            <p>Your account lets you return to assigned exams and published results using the same roll number.</p>
+        </div>
+        <div class="student-calm-strip" aria-hidden="true">
+            <span></span><span></span><span></span><span></span>
+        </div>
+    </section>
+
+    <section class="student-form-card animate-fade-in-up animate-stagger-1">
+        <div class="student-form-head">
+            <div class="student-form-icon"><i class="fas fa-id-badge"></i></div>
+            <div>
+                <h2>Student Registration</h2>
+                <p>{{ settings.welcome_message if settings else 'Calm assessment space' }}</p>
+            </div>
+        </div>
+
+        <form method="POST" class="student-form">
+            <div class="grid-2">
+                <div class="form-group">
+                    <label for="name"><i class="fas fa-user"></i> Full Name</label>
+                    <input id="name" type="text" name="name" required autocomplete="name">
+                </div>
+                <div class="form-group">
+                    <label for="roll_no"><i class="fas fa-id-card"></i> Roll Number</label>
+                    <input id="roll_no" type="text" name="roll_no" required autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <label for="username"><i class="fas fa-user-lock"></i> Username</label>
+                    <input id="username" type="text" name="username" minlength="4" required autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label for="email"><i class="fas fa-envelope"></i> Email Optional</label>
+                    <input id="email" type="email" name="email" autocomplete="email">
+                </div>
+                <div class="form-group">
+                    <label for="password"><i class="fas fa-lock"></i> Password</label>
+                    <input id="password" type="password" name="password" required autocomplete="new-password">
+                </div>
+                <div class="form-group">
+                    <label for="confirm_password"><i class="fas fa-lock"></i> Confirm Password</label>
+                    <input id="confirm_password" type="password" name="confirm_password" required autocomplete="new-password">
+                </div>
+            </div>
+
+            <div class="gentle-alert">
+                <i class="fas fa-circle-info"></i>
+                <span>Password must be at least 8 characters and include uppercase, number, and special character.</span>
+            </div>
+
+            <button type="submit" class="btn primary student-primary-action">
+                Create Account <i class="fas fa-arrow-right"></i>
+            </button>
+        </form>
+
+        <a href="{{ url_for('auth.student_login') }}" class="student-back-link">
+            <i class="fas fa-arrow-left"></i> Back to student login
+        </a>
+    </section>
+</div>
+{% endblock %}

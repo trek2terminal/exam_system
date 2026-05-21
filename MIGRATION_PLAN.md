@@ -63,6 +63,8 @@ This project should follow that same practical model.
 - Pre-exam checklist/start gate for active exams. Timed sessions now start only after the student confirms readiness and rules.
 - CSV exports for teacher all-results, per-exam results with per-question marks/remarks, and admin violation logs.
 - Platform settings table with admin-managed platform name, student welcome message, quote pool, self-registration toggle placeholder, and violation warning threshold.
+- Student self-registration controlled by admin settings, plus account-based student login alongside local quick entry.
+- Admin user management now includes student accounts and roll number editing.
 
 ## Python Feature Roadmap
 

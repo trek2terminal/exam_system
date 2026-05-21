@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Student Entry - Exam System{% endblock %}
+{% block title %}Student Entry - {{ platform_settings.platform_name if platform_settings else 'Exam System' }}{% endblock %}
 
 {% block content %}
 <div class="student-entry">
@@ -8,7 +8,7 @@
         <div class="student-entry-copy">
             <span class="student-kicker"><i class="fas fa-seedling"></i> Student space</span>
             <h1>Start with your name, not the pressure.</h1>
-            <p>Sign in once, then enter the access code your teacher shares with you.</p>
+            <p>Use your account if you registered, or continue with your name and roll number for local classroom exams.</p>
         </div>
         <div class="student-calm-strip" aria-hidden="true">
             <span></span><span></span><span></span><span></span>
@@ -20,11 +20,17 @@
             <div class="student-form-icon"><i class="fas fa-graduation-cap"></i></div>
             <div>
                 <h2>Student Login</h2>
-                <p>Use the details printed on your ID card.</p>
+                <p>{{ settings.welcome_message if settings else 'Calm assessment space' }}</p>
             </div>
         </div>
 
-        <form method="POST" class="student-form">
+        <div class="student-login-tabs" role="tablist">
+            <button type="button" class="student-login-tab active" data-login-tab="quick">Quick Entry</button>
+            <button type="button" class="student-login-tab" data-login-tab="account">Account</button>
+        </div>
+
+        <form method="POST" class="student-form student-login-panel active" data-login-panel="quick">
+            <input type="hidden" name="login_mode" value="quick">
             <div class="form-group">
                 <label for="student_name"><i class="fas fa-user"></i> Full Name</label>
                 <input
@@ -55,9 +61,69 @@
             </button>
         </form>
 
+        <form method="POST" class="student-form student-login-panel" data-login-panel="account">
+            <input type="hidden" name="login_mode" value="account">
+            <div class="form-group">
+                <label for="identifier"><i class="fas fa-user-lock"></i> Username / Email / Roll No</label>
+                <input
+                    type="text"
+                    id="identifier"
+                    name="identifier"
+                    placeholder="Enter username, email, or roll number"
+                    autocomplete="username"
+                >
+            </div>
+
+            <div class="form-group">
+                <label for="password"><i class="fas fa-lock"></i> Password</label>
+                <input
+                    type="password"
+                    id="password"
+                    name="password"
+                    placeholder="Enter your password"
+                    autocomplete="current-password"
+                >
+            </div>
+
+            <button type="submit" class="btn primary student-primary-action">
+                Sign in <i class="fas fa-arrow-right"></i>
+            </button>
+        </form>
+
+        {% if settings and settings.student_self_registration %}
+            <a href="{{ url_for('auth.student_register') }}" class="student-back-link">
+                <i class="fas fa-user-plus"></i> Create student account
+            </a>
+        {% endif %}
+
         <a href="{{ url_for('auth.login_selector') }}" class="student-back-link">
             <i class="fas fa-arrow-left"></i> Back to roles
         </a>
     </section>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelectorAll("[data-login-tab]").forEach(tab => {
+    tab.addEventListener("click", () => {
+        const target = tab.dataset.loginTab;
+        document.querySelectorAll("[data-login-tab]").forEach(item => item.classList.toggle("active", item === tab));
+        document.querySelectorAll("[data-login-panel]").forEach(panel => {
+            const isActive = panel.dataset.loginPanel === target;
+            panel.classList.toggle("active", isActive);
+            panel.querySelectorAll("input").forEach(input => {
+                if (input.type !== "hidden") input.required = isActive;
+            });
+        });
+    });
+});
+
+document.querySelectorAll("[data-login-panel]").forEach(panel => {
+    const isActive = panel.classList.contains("active");
+    panel.querySelectorAll("input").forEach(input => {
+        if (input.type !== "hidden") input.required = isActive;
+    });
+});
+</script>
 {% endblock %}
