@@ -104,7 +104,7 @@
     <section id="questionList" class="question-stream">
       {% for q in questions %}
         {% set q_status = status_map.get(q.id, 'NOT_VISITED') %}
-        <article class="student-question-card" id="question-{{ q.id }}" data-question-number="{{ q.question_number }}" data-question-id="{{ q.id }}" data-visit-status="{{ q_status }}">
+        <article class="student-question-card" id="question-{{ q.id }}" data-question-number="{{ q.question_number }}" data-question-id="{{ q.id }}" data-visit-status="{{ q_status }}" data-time-limit="{{ q.time_limit_seconds or 0 }}">
           <div class="question-card-head">
             <div>
               <span class="question-number">Question {{ q.question_number }}</span>
@@ -127,6 +127,9 @@
                 <i class="fas fa-bookmark"></i>
               </button>
               <span class="badge">{{ q.marks }} mark{% if q.marks != 1 %}s{% endif %}</span>
+              {% if q.time_limit_seconds %}
+                <span class="question-timer" data-question-timer="{{ q.id }}">{{ q.time_limit_seconds }}s</span>
+              {% endif %}
             </div>
           </div>
 

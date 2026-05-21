@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Teacher Proctoring{% endblock %}
+
+{% block content %}
+<div class="admin-page proctor-page">
+  <div class="page-header">
+    <div>
+      <h1><i class="fas fa-display"></i> My Live Proctoring</h1>
+      <p>Read-only monitoring for exams you created.</p>
+    </div>
+    <button class="btn primary" type="button" onclick="refreshTeacherProctoring()">Refresh</button>
+  </div>
+
+  <div class="stats proctor-stats">
+    <div class="stat-box"><div class="stat-label">Active</div><div class="stat-value" id="activeCount">0</div></div>
+    <div class="stat-box"><div class="stat-label">Waiting</div><div class="stat-value" id="waitingCount">0</div></div>
+    <div class="stat-box"><div class="stat-label">Paused</div><div class="stat-value" id="pausedCount">0</div></div>
+    <div class="stat-box"><div class="stat-label">Flagged</div><div class="stat-value" id="flaggedCount">0</div></div>
+  </div>
+
+  <div id="teacherProctorGrid" class="proctor-grid"></div>
+</div>
+
+<script>
+function formatSeconds(seconds) {
+  seconds = Math.max(0, parseInt(seconds || 0, 10));
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  if (h > 0) return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function renderTeacherSessions(sessions) {
+  const grid = document.getElementById('teacherProctorGrid');
+  grid.innerHTML = '';
+  if (!sessions.length) {
+    grid.innerHTML = '<div class="card"><p class="muted">No active or waiting students right now.</p></div>';
+    return;
+  }
+  sessions.forEach(session => {
+    const card = document.createElement('article');
+    card.className = `proctor-card ${session.focus_violations >= 3 ? 'danger' : session.focus_violations ? 'flagged' : ''}`;
+    card.innerHTML = `
+      <div class="row-between">
+        <div>
+          <h3>${session.student_name} (${session.roll_no})</h3>
+          <p class="muted">${session.exam_name} | Set ${session.set_code}</p>
+        </div>
+        <span class="badge ${session.status}">${session.status}</span>
+      </div>
+      <div class="proctor-metrics">
+        <div><span>Time</span><strong>${formatSeconds(session.remaining_seconds)}</strong></div>
+        <div><span>Answers</span><strong>${session.answered_count}/${session.total_questions}</strong></div>
+        <div><span>Violations</span><strong>${session.focus_violations}</strong></div>
+        <div><span>Latest</span><strong>${session.latest_violation || '-'}</strong></div>
+      </div>
+      <p class="muted">Teacher view is read-only. Admin handles termination, second chance, and timer adjustments.</p>
+    `;
+    grid.appendChild(card);
+  });
+}
+
+async function refreshTeacherProctoring() {
+  const response = await fetch('{{ url_for("teacher.proctoring_status") }}');
+  const data = await response.json();
+  if (!data.ok) return;
+  document.getElementById('activeCount').textContent = data.counts.active_sessions;
+  document.getElementById('waitingCount').textContent = data.counts.waiting_sessions;
+  document.getElementById('pausedCount').textContent = data.counts.paused_sessions;
+  document.getElementById('flaggedCount').textContent = data.counts.flagged_sessions;
+  renderTeacherSessions(data.sessions);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  refreshTeacherProctoring();
+  setInterval(refreshTeacherProctoring, 5000);
+});
+</script>
+{% endblock %}

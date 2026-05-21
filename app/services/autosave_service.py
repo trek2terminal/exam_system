@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from app.models.database import db
 from app.models.exam_model import Question
 from app.models.submission_model import StudentSession, Answer
@@ -21,6 +21,24 @@ class AutoSaveService:
         return "ANSWERED" if (answer_text or "").strip() else "VISITED_UNANSWERED"
 
     @staticmethod
+    def ensure_question_timer(answer, question):
+        limit = int(getattr(question, "time_limit_seconds", 0) or 0)
+        if limit <= 0:
+            return False
+        if not answer.question_started_at:
+            answer.question_started_at = datetime.utcnow()
+            answer.question_expires_at = answer.question_started_at + timedelta(seconds=limit)
+        return True
+
+    @staticmethod
+    def answer_timer_expired(answer):
+        return bool(
+            answer
+            and answer.question_expires_at
+            and datetime.utcnow() > answer.question_expires_at
+        )
+
+    @staticmethod
     def save_answer(session_code: str, question_id: int, answer_text: str, visit_status=None):
         """Save or update student answer with autosave"""
         session = StudentSession.query.filter_by(session_code=session_code).first()
@@ -38,13 +56,15 @@ class AutoSaveService:
         session.last_heartbeat = datetime.utcnow()
         session.updated_at = datetime.utcnow()
 
-        # Check if answer already exists
         answer = Answer.query.filter_by(
             session_id=session.id,
             question_id=question_id
         ).first()
 
         if answer:
+            AutoSaveService.ensure_question_timer(answer, question)
+            if answer.question_time_expired:
+                return False, "This question's time limit has expired."
             answer.answer_text = answer_text
             answer.visit_status = AutoSaveService.normalize_visit_status(visit_status, answer_text)
             answer.saved_at = datetime.utcnow()
@@ -55,6 +75,7 @@ class AutoSaveService:
                 answer_text=answer_text,
                 visit_status=AutoSaveService.normalize_visit_status(visit_status, answer_text),
             )
+            AutoSaveService.ensure_question_timer(answer, question)
             db.session.add(answer)
 
         db.session.commit()
@@ -79,12 +100,36 @@ class AutoSaveService:
             answer = Answer(session_id=session.id, question_id=question_id, answer_text="")
             db.session.add(answer)
 
+        AutoSaveService.ensure_question_timer(answer, question)
         answer.visit_status = AutoSaveService.normalize_visit_status(visit_status, answer.answer_text)
         answer.saved_at = datetime.utcnow()
         session.last_heartbeat = datetime.utcnow()
         session.updated_at = datetime.utcnow()
         db.session.commit()
         return True, "Question status saved"
+
+    @staticmethod
+    def mark_question_expired(session_code: str, question_id: int):
+        session = StudentSession.query.filter_by(session_code=session_code).first()
+        if not session or session.status != "active":
+            return False, "This exam attempt is locked."
+
+        question = Question.query.filter_by(id=question_id, exam_set_id=session.exam_set_id).first()
+        if not question:
+            return False, "Question does not belong to this exam."
+
+        answer = Answer.query.filter_by(session_id=session.id, question_id=question_id).first()
+        if not answer:
+            answer = Answer(session_id=session.id, question_id=question_id, answer_text="")
+            db.session.add(answer)
+
+        AutoSaveService.ensure_question_timer(answer, question)
+        answer.question_time_expired = True
+        answer.saved_at = datetime.utcnow()
+        session.last_heartbeat = datetime.utcnow()
+        session.updated_at = datetime.utcnow()
+        db.session.commit()
+        return True, "Question time limit recorded"
 
 
     @staticmethod

@@ -51,6 +51,21 @@ class SecurityService:
             user_agent=(user_agent or "")[:255] or None,
         )
         db.session.add(violation)
+        try:
+            from app.services.notification_service import NotificationService
+            from app.services.settings_service import SettingsService
+
+            threshold = SettingsService.max_violations_allowed()
+            if session.focus_violations >= threshold:
+                NotificationService.notify_role(
+                    "admin",
+                    f"{session.student_name} reached {session.focus_violations} violation(s) in {session.exam_set.exam_name}.",
+                    notification_type="violation_alert",
+                    related_entity_type="student_session",
+                    related_entity_id=session.id,
+                )
+        except Exception:
+            current_app.logger.exception("Failed to create violation notification")
         db.session.commit()
         return violation
 

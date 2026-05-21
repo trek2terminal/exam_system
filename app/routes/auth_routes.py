@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from app.models.database import db
 from app.models.user_model import User
 from app.models.audit_model import AuditLog
+from app.services.notification_service import NotificationService
 from app.services.settings_service import SettingsService
 from app.utils.rate_limiter import rate_limit
 from app.utils.network import get_client_ip
@@ -490,6 +491,14 @@ def student_register():
             status="success",
             ip_address=get_client_ip(),
         ).save()
+        NotificationService.notify_role(
+            "admin",
+            f"New student registered: {student.name} ({student.roll_number}).",
+            notification_type="student_registered",
+            related_entity_type="user",
+            related_entity_id=student.id,
+        )
+        db.session.commit()
 
         _set_student_session(student.name, student.roll_number, student_id=student.id, username=student.username)
         flash("Student account created. Welcome!", "success")

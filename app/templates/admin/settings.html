@@ -70,9 +70,12 @@
                 <h2>Database Backup</h2>
                 <p class="muted">Download a timestamped copy before major exams or admin changes.</p>
             </div>
-            <a class="btn secondary" href="{{ url_for('admin.backup_database') }}">
-                <i class="fas fa-database"></i> Backup Database
-            </a>
+            <div class="mini-form">
+                <input type="password" name="admin_password" placeholder="Admin password">
+                <button class="btn secondary" type="submit" formaction="{{ url_for('admin.backup_database') }}" formmethod="post">
+                    <i class="fas fa-database"></i> Backup Database
+                </button>
+            </div>
         </section>
 
         <div class="form-actions">

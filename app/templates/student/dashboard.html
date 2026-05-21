@@ -66,7 +66,10 @@
               <div><span>Set</span><strong>{{ exam.set_code }}</strong></div>
               <div>
                 <span>Attempt</span>
-                <strong>{{ attempt.status | title if attempt else "Not started" }}</strong>
+                <strong>
+                  {{ item.attempt_count }}{% if exam.attempt_limit %}/{{ exam.attempt_limit }}{% else %}/Unlimited{% endif %}
+                  {% if attempt %} · {{ attempt.status | title }}{% endif %}
+                </strong>
               </div>
               <div>
                 <span>{% if attempt and attempt.result and attempt.result.published %}Score{% else %}Questions{% endif %}</span>
@@ -81,7 +84,7 @@
             </div>
 
             <div class="student-exam-actions">
-              {% if attempt and attempt.status in ["submitted", "evaluated", "terminated", "auto_submitted"] %}
+              {% if attempt and attempt.status in ["submitted", "evaluated", "terminated", "auto_submitted"] and item.attempts_remaining == 0 %}
                 <a class="btn secondary" href="{{ url_for('student.submitted', session_code=attempt.session_code) }}">
                   <i class="fas fa-circle-check"></i> View submission
                 </a>
@@ -91,7 +94,12 @@
                 <form method="post" action="{{ url_for('student.start_assigned_exam', exam_id=exam.id) }}">
                   <button class="btn primary" type="submit">
                     {% if exam.status == "active" and exam_open %}
-                      <i class="fas fa-play"></i> {{ "Resume" if attempt else "Start exam" }}
+                      <i class="fas fa-play"></i>
+                      {% if attempt and attempt.status in ["submitted", "evaluated", "terminated", "auto_submitted"] %}
+                        Start next attempt
+                      {% else %}
+                        {{ "Resume" if attempt else "Start exam" }}
+                      {% endif %}
                     {% else %}
                       <i class="fas fa-door-open"></i> Join waiting room
                     {% endif %}

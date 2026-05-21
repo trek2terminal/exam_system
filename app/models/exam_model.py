@@ -23,6 +23,7 @@ class ExamSet(db.Model):
     total_marks = db.Column(db.Integer, nullable=False, default=0)
     random_question_count = db.Column(db.Integer, default=0, nullable=False)
     shuffle_questions = db.Column(db.Boolean, default=False, nullable=False)
+    attempt_limit = db.Column(db.Integer, default=1, nullable=False)
 
     # Access & Status
     access_code = db.Column(db.String(32), unique=True, nullable=False, default=generate_access_code)
@@ -125,6 +126,7 @@ class Question(db.Model):
     image_paths = db.Column(db.Text, default="[]", nullable=False)
     code_snippet = db.Column(db.Text, nullable=True)
     code_language = db.Column(db.String(40), nullable=True)
+    time_limit_seconds = db.Column(db.Integer, default=0, nullable=False)
 
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
@@ -173,6 +175,7 @@ class QuestionBankItem(db.Model):
     image_paths = db.Column(db.Text, default="[]", nullable=False)
     code_snippet = db.Column(db.Text, nullable=True)
     code_language = db.Column(db.String(40), nullable=True)
+    time_limit_seconds = db.Column(db.Integer, default=0, nullable=False)
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
@@ -207,6 +210,7 @@ class QuestionBankItem(db.Model):
             model_answer=question.model_answer,
             code_snippet=question.code_snippet,
             code_language=question.code_language,
+            time_limit_seconds=question.time_limit_seconds,
         )
         item.set_options(question.options_as_list())
         item.set_image_paths(question.image_paths_as_list())

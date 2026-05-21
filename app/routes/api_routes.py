@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from flask import Blueprint, current_app, jsonify, request
+from flask import Blueprint, current_app, jsonify, request, session
 
 from app.models.audit_model import AuditLog
 from app.models.database import db
@@ -10,6 +10,7 @@ from app.services.autosave_service import AutoSaveService
 from app.services.code_execution_service import CodeExecutionService
 from app.services.exam_service import ExamService
 from app.services.exam_session_guard import ExamSessionGuard, MUTABLE_SESSION_STATUS
+from app.services.notification_service import NotificationService
 from app.services.result_service import ResultService
 from app.services.security_service import SecurityService
 from app.services.settings_service import SettingsService
@@ -89,6 +90,15 @@ def _parse_int_field(payload, field_name):
     value = payload.get(field_name)
     if value in (None, ""):
         return None
+
+
+@api_bp.route("/notifications/mark-read", methods=["POST"])
+def mark_notifications_read():
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"ok": False, "message": "Not logged in"}), 401
+    count = NotificationService.mark_user_notifications_read(user_id)
+    return jsonify({"ok": True, "read": count})
     try:
         return int(value)
     except (TypeError, ValueError):
@@ -190,6 +200,32 @@ def save_question_status(session_code):
     return jsonify({"ok": success, "message": message}), 200 if success else 400
 
 
+@api_bp.route("/student/session/<session_code>/question-expired", methods=["POST"])
+@rate_limit("autosave")
+def mark_question_expired(session_code):
+    data = _get_json_payload()
+    student_session, error_response = _require_attempt(
+        session_code,
+        data,
+        require_active=True,
+        require_window=True,
+    )
+    if error_response:
+        return error_response
+
+    question_id = _parse_int_field(data, "question_id")
+    if question_id is None:
+        return jsonify({"ok": False, "message": "Valid question_id is required"}), 400
+
+    answer_text = (data.get("answer_text", "") or "").strip()
+    visit_status = data.get("visit_status")
+    if answer_text:
+        AutoSaveService.save_answer(session_code, question_id, answer_text, visit_status=visit_status)
+
+    success, message = AutoSaveService.mark_question_expired(session_code, question_id)
+    return jsonify({"ok": success, "message": message}), 200 if success else 400
+
+
 @api_bp.route("/student/session/<session_code>/pause-request", methods=["POST"])
 @rate_limit("autosave")
 def request_pause(session_code):
@@ -261,6 +297,9 @@ def execute_code(session_code):
     if not answer:
         answer = Answer(session_id=student_session.id, question_id=question.id)
         db.session.add(answer)
+    AutoSaveService.ensure_question_timer(answer, question)
+    if answer.question_time_expired:
+        return jsonify({"ok": False, "message": "This question's time limit has expired."}), 403
 
     output_parts = [f"[{result.status.upper()}] {result.message}"]
     if result.stdout:
@@ -326,6 +365,7 @@ def heartbeat(session_code):
             "paused": student_session.status == "paused",
             "pause_requested": bool(student_session.pause_requested_at),
             "pause_reason": student_session.pause_reason,
+            "session_messages": NotificationService.pop_unread_session_messages(student_session.id),
             "should_submit": should_submit,
         }
     )
@@ -414,5 +454,14 @@ def submit_session(session_code):
             ),
             200,
         )
+
+    NotificationService.notify_user(
+        student_session.exam_set.created_by,
+        f"{student_session.student_name} submitted {student_session.exam_set.exam_name}.",
+        notification_type="exam_submitted",
+        related_entity_type="student_session",
+        related_entity_id=student_session.id,
+    )
+    db.session.commit()
 
     return jsonify({"ok": True, "redirect": f"/student/submitted/{session_code}"})

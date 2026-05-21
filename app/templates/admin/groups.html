@@ -68,6 +68,7 @@
             {% endif %}
 
             <form method="post" action="{{ url_for('admin.delete_group', group_id=group.id) }}" onsubmit="return confirm('Delete this group? Student accounts will remain.');">
+              <input type="password" name="admin_password" placeholder="Admin password" required>
               <button class="btn danger small" type="submit">Delete Group</button>
             </form>
           </article>

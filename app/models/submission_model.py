@@ -94,6 +94,9 @@ class Answer(db.Model):
     execution_status = db.Column(db.String(30), nullable=True)
     execution_time_ms = db.Column(db.Integer, nullable=True)
     visit_status = db.Column(db.String(30), default="NOT_VISITED", nullable=False)
+    question_started_at = db.Column(db.DateTime, nullable=True)
+    question_expires_at = db.Column(db.DateTime, nullable=True)
+    question_time_expired = db.Column(db.Boolean, default=False, nullable=False)
     saved_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     def __repr__(self):

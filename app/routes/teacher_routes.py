@@ -12,8 +12,10 @@ from app.models.exam_model import ExamEnrollment, ExamSet, Question, QuestionBan
 from app.models.group_model import StudentGroup
 from app.models.submission_model import StudentSession, Answer
 from app.models.result_model import Result, QuestionMark
+from app.models.audit_model import ViolationLog
 from app.services.exam_service import ExamService
 from app.services.exam_session_guard import LOCKED_SESSION_STATUSES
+from app.services.notification_service import NotificationService
 from app.services.parser_service import QuestionParserService
 from app.utils.export_utils import csv_response, format_datetime
 from app.utils.helpers import teacher_required, parse_options
@@ -82,6 +84,30 @@ def _parse_enrollment_line(line):
         return None
 
     return roll_no, student_name, extra_time_minutes
+
+
+def _teacher_session_snapshot(student_session):
+    exam = student_session.exam_set
+    total_questions = Question.query.filter_by(exam_set_id=exam.id).count()
+    answered_count = Answer.query.filter_by(session_id=student_session.id).filter(Answer.answer_text != "").count()
+    latest_violation = (
+        ViolationLog.query.filter_by(session_id=student_session.id)
+        .order_by(ViolationLog.occurred_at.desc())
+        .first()
+    )
+    return {
+        "id": student_session.id,
+        "student_name": student_session.student_name,
+        "roll_no": student_session.roll_no,
+        "exam_name": exam.exam_name,
+        "set_code": exam.set_code,
+        "status": student_session.status,
+        "remaining_seconds": ExamService.remaining_seconds_for_session(student_session),
+        "answered_count": answered_count,
+        "total_questions": total_questions,
+        "focus_violations": student_session.focus_violations,
+        "latest_violation": latest_violation.violation_type if latest_violation else None,
+    }
 
 
 def _session_result_base_row(student_session):
@@ -158,6 +184,11 @@ def setup_exam(exam_id=None):
         end_time = _parse_datetime_local(request.form.get("end_time"))
         shuffle_questions = request.form.get("shuffle_questions") == "on"
         try:
+            attempt_limit = int(request.form.get("attempt_limit") or 1)
+        except ValueError:
+            attempt_limit = 1
+        attempt_limit = max(0, attempt_limit)
+        try:
             random_question_count = int(request.form.get("random_question_count") or 0)
         except ValueError:
             random_question_count = 0
@@ -199,6 +230,7 @@ def setup_exam(exam_id=None):
         q_existing_images = request.form.getlist("existing_image_paths")
         q_code_snippets = request.form.getlist("code_snippet")
         q_code_languages = request.form.getlist("code_language")
+        q_time_limits = request.form.getlist("time_limit_seconds")
 
         question_rows = []
         for i in range(len(q_texts)):
@@ -229,6 +261,11 @@ def setup_exam(exam_id=None):
             image_paths = existing_images + _save_question_images(request.files.getlist(f"question_images_{i}"))
             code_snippet = (q_code_snippets[i] if i < len(q_code_snippets) else "").strip()
             code_language = (q_code_languages[i] if i < len(q_code_languages) else "").strip() or None
+            try:
+                time_limit_seconds = int(q_time_limits[i]) if i < len(q_time_limits) and q_time_limits[i].strip() else 0
+            except ValueError:
+                time_limit_seconds = 0
+            time_limit_seconds = max(0, time_limit_seconds)
 
             if q_type == "mcq" and len(options_list) < 2:
                 flash(f"Question {number} needs at least two MCQ options.", "danger")
@@ -245,6 +282,7 @@ def setup_exam(exam_id=None):
                 "image_paths": image_paths,
                 "code_snippet": code_snippet,
                 "code_language": code_language,
+                "time_limit_seconds": time_limit_seconds,
             })
 
         if not question_rows:
@@ -265,6 +303,7 @@ def setup_exam(exam_id=None):
             exam.end_time = end_time
             exam.shuffle_questions = shuffle_questions
             exam.random_question_count = random_question_count
+            exam.attempt_limit = attempt_limit
             if access_code:
                 exam.access_code = access_code
         else:
@@ -281,6 +320,7 @@ def setup_exam(exam_id=None):
                 end_time=end_time,
                 shuffle_questions=shuffle_questions,
                 random_question_count=random_question_count,
+                attempt_limit=attempt_limit,
             )
             db.session.add(exam)
             db.session.flush()
@@ -296,6 +336,7 @@ def setup_exam(exam_id=None):
                 model_answer=row["model_answer"],
                 code_snippet=row["code_snippet"],
                 code_language=row["code_language"],
+                time_limit_seconds=row["time_limit_seconds"],
             )
             question.set_options(row["options"])
             question.set_image_paths(row["image_paths"])
@@ -384,9 +425,14 @@ def question_bank():
         question_type = request.form.get("question_type", "short").strip().lower()
         correct_answer = request.form.get("correct_answer", "").strip()
         model_answer = request.form.get("model_answer", "").strip()
-        code_snippet = request.form.get("code_snippet", "").strip()
-        code_language = request.form.get("code_language", "").strip() or None
-        image_paths = _save_question_images(request.files.getlist("question_images"))
+            code_snippet = request.form.get("code_snippet", "").strip()
+            code_language = request.form.get("code_language", "").strip() or None
+            try:
+                time_limit_seconds = int(request.form.get("time_limit_seconds") or 0)
+            except ValueError:
+                time_limit_seconds = 0
+            time_limit_seconds = max(0, time_limit_seconds)
+            image_paths = _save_question_images(request.files.getlist("question_images"))
         options = parse_options(request.form.get("options", ""))
 
         try:
@@ -409,10 +455,11 @@ def question_bank():
             question_type=question_type,
             marks=marks,
             correct_answer=correct_answer,
-            model_answer=model_answer,
-            code_snippet=code_snippet,
-            code_language=code_language,
-        )
+                model_answer=model_answer,
+                code_snippet=code_snippet,
+                code_language=code_language,
+                time_limit_seconds=time_limit_seconds,
+            )
         bank_item.set_options(options)
         bank_item.set_image_paths(image_paths)
         db.session.add(bank_item)
@@ -499,6 +546,7 @@ def import_from_question_bank(exam_id):
                 model_answer=item.model_answer,
                 code_snippet=item.code_snippet,
                 code_language=item.code_language,
+                time_limit_seconds=item.time_limit_seconds,
             )
             question.set_options(item.options_as_list())
             question.set_image_paths(item.image_paths_as_list())
@@ -725,6 +773,45 @@ def results():
     return render_template("teacher/results.html", sessions=sessions)
 
 
+@teacher_bp.route("/proctoring")
+@teacher_required
+def proctoring():
+    return render_template("teacher/proctoring.html")
+
+
+@teacher_bp.route("/proctoring/status")
+@teacher_required
+def proctoring_status():
+    teacher_id = session.get("teacher_id")
+    exam_ids = [exam.id for exam in ExamSet.query.filter_by(created_by=teacher_id).all()]
+    active_sessions = []
+    if exam_ids:
+        active_sessions = (
+            StudentSession.query.filter(
+                StudentSession.exam_set_id.in_(exam_ids),
+                StudentSession.status.in_(["active", "waiting", "paused"]),
+            )
+            .order_by(StudentSession.updated_at.desc())
+            .limit(100)
+            .all()
+        )
+
+    snapshots = [_teacher_session_snapshot(student_session) for student_session in active_sessions]
+    return jsonify(
+        {
+            "ok": True,
+            "updated_at": datetime.utcnow().isoformat(),
+            "counts": {
+                "active_sessions": sum(1 for item in snapshots if item["status"] == "active"),
+                "waiting_sessions": sum(1 for item in snapshots if item["status"] == "waiting"),
+                "paused_sessions": sum(1 for item in snapshots if item["status"] == "paused"),
+                "flagged_sessions": sum(1 for item in snapshots if item["focus_violations"] > 0),
+            },
+            "sessions": snapshots,
+        }
+    )
+
+
 @teacher_bp.route("/results/export")
 @teacher_required
 def export_results():
@@ -937,6 +1024,19 @@ def publish_exam_results(exam_id):
             continue
         result.published = publish
         result.published_at = datetime.utcnow() if publish else None
+        if publish:
+            student = User.query.filter(
+                User.role == "student",
+                db.func.upper(User.roll_number) == (student_session.roll_no or "").upper(),
+            ).first()
+            if student:
+                NotificationService.notify_user(
+                    student.id,
+                    f"Results published for {exam.exam_name}.",
+                    notification_type="result_published",
+                    related_entity_type="exam",
+                    related_entity_id=exam.id,
+                )
         changed_count += 1
 
     db.session.commit()
@@ -1010,6 +1110,19 @@ def student_view(session_id):
         result.evaluated_by = session.get("teacher_id")
         result.published = request.form.get("published") == "on"
         result.published_at = datetime.utcnow() if result.published else None
+        if result.published:
+            student = User.query.filter(
+                User.role == "student",
+                db.func.upper(User.roll_number) == (student_session.roll_no or "").upper(),
+            ).first()
+            if student:
+                NotificationService.notify_user(
+                    student.id,
+                    f"Results published for {student_session.exam_set.exam_name}.",
+                    notification_type="result_published",
+                    related_entity_type="student_session",
+                    related_entity_id=student_session.id,
+                )
         result.calculate_percentage()
 
         for q in questions:

@@ -17,6 +17,7 @@ from app.models.audit_model import AuditLog, ViolationLog
 from app.models.group_model import StudentGroup, StudentGroupMember
 from app.services.exam_service import ExamService
 from app.services.exam_session_guard import LOCKED_SESSION_STATUSES
+from app.services.notification_service import NotificationService
 from app.services.settings_service import SettingsService
 from app.utils.export_utils import csv_response, format_datetime
 from app.utils.helpers import admin_required
@@ -82,6 +83,18 @@ def _find_student_for_group(identifier):
             db.func.upper(User.email) == normalized,
         ),
     ).first()
+
+
+def _admin_password_confirmed():
+    password = request.form.get("admin_password", "")
+    if not password:
+        flash("Enter your admin password to confirm this action.", "danger")
+        return False
+    admin = User.query.get(session.get("admin_id"))
+    if not admin or not admin.check_password(password):
+        flash("Admin password confirmation failed.", "danger")
+        return False
+    return True
 
 
 def _session_snapshot(student_session):
@@ -243,6 +256,8 @@ def add_group_members(group_id):
 @admin_bp.route("/groups/<int:group_id>/delete", methods=["POST"])
 @admin_required
 def delete_group(group_id):
+    if not _admin_password_confirmed():
+        return redirect(url_for("admin.groups"))
     group = StudentGroup.query.get_or_404(group_id)
     group_name = group.name
     db.session.delete(group)
@@ -900,6 +915,8 @@ def suspicious_activity():
 @admin_required
 @rate_limit("admin_action", json_response=False)
 def terminate_session(session_id):
+    if not _admin_password_confirmed():
+        return redirect(request.referrer or url_for("admin.violations"))
     student_session = StudentSession.query.get_or_404(session_id)
     reason = request.form.get("reason", "").strip() or "Terminated by admin"
 
@@ -924,6 +941,8 @@ def terminate_session(session_id):
 @admin_required
 @rate_limit("admin_action", json_response=False)
 def grant_second_chance(session_id):
+    if not _admin_password_confirmed():
+        return redirect(request.referrer or url_for("admin.violations"))
     student_session = StudentSession.query.get_or_404(session_id)
 
     if student_session.status in ["submitted", "evaluated", "terminated"]:
@@ -962,6 +981,8 @@ def grant_second_chance(session_id):
 @admin_required
 @rate_limit("admin_action", json_response=False)
 def reduce_session_time(session_id):
+    if not _admin_password_confirmed():
+        return redirect(request.referrer or url_for("admin.violations"))
     student_session = StudentSession.query.get_or_404(session_id)
     raw_minutes = request.form.get("minutes", "0").strip()
 
@@ -1002,6 +1023,8 @@ def reduce_session_time(session_id):
 @admin_required
 @rate_limit("admin_action", json_response=False)
 def pause_session(session_id):
+    if not _admin_password_confirmed():
+        return redirect(request.referrer or url_for("admin.proctoring"))
     student_session = StudentSession.query.get_or_404(session_id)
     reason = request.form.get("reason", "").strip() or student_session.pause_reason or "Paused by admin"
 
@@ -1027,6 +1050,8 @@ def pause_session(session_id):
 @admin_required
 @rate_limit("admin_action", json_response=False)
 def resume_session(session_id):
+    if not _admin_password_confirmed():
+        return redirect(request.referrer or url_for("admin.proctoring"))
     student_session = StudentSession.query.get_or_404(session_id)
     reason = request.form.get("reason", "").strip() or "Resumed by admin"
 
@@ -1045,6 +1070,40 @@ def resume_session(session_id):
     ).save()
 
     flash(f"Resumed {student_session.student_name}'s exam.", "success")
+    return redirect(request.referrer or url_for("admin.proctoring"))
+
+
+@admin_bp.route("/sessions/<int:session_id>/message", methods=["POST"])
+@admin_required
+@rate_limit("admin_action", json_response=False)
+def send_session_message(session_id):
+    if not _admin_password_confirmed():
+        return redirect(request.referrer or url_for("admin.proctoring"))
+
+    student_session = StudentSession.query.get_or_404(session_id)
+    message = request.form.get("message", "").strip()
+    if not message:
+        flash("Enter a message to send.", "danger")
+        return redirect(request.referrer or url_for("admin.proctoring"))
+
+    NotificationService.notify_session(
+        student_session.id,
+        message[:500],
+        notification_type="admin_message",
+        related_entity_type="student_session",
+        related_entity_id=student_session.id,
+    )
+    AuditLog(
+        user_id=session.get("admin_id"),
+        action="send_student_message",
+        resource_type="student_session",
+        resource_id=student_session.id,
+        changes=message[:500],
+        status="success",
+        ip_address=get_client_ip(),
+    ).save()
+    db.session.commit()
+    flash(f"Message sent to {student_session.student_name}.", "success")
     return redirect(request.referrer or url_for("admin.proctoring"))
 
 
@@ -1076,10 +1135,12 @@ def save_settings():
     return redirect(url_for("admin.settings"))
 
 
-@admin_bp.route("/settings/backup")
+@admin_bp.route("/settings/backup", methods=["POST"])
 @admin_required
 @rate_limit("admin_action", json_response=False)
 def backup_database():
+    if not _admin_password_confirmed():
+        return redirect(url_for("admin.settings"))
     backup_root = current_app.config.get("BACKUP_FOLDER")
     os.makedirs(backup_root, exist_ok=True)
     timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")

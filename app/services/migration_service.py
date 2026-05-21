@@ -165,6 +165,30 @@ class MigrationService:
         )
 
     @staticmethod
+    def _migration_notifications_attempts_timers():
+        from app.models.notification_model import Notification
+
+        Notification.__table__.create(db.engine, checkfirst=True)
+        MigrationService._add_column_if_missing(
+            "exam_sets",
+            "attempt_limit",
+            "INTEGER NOT NULL DEFAULT 1",
+        )
+        for table_name in ("questions", "question_bank_items"):
+            MigrationService._add_column_if_missing(
+                table_name,
+                "time_limit_seconds",
+                "INTEGER NOT NULL DEFAULT 0",
+            )
+        MigrationService._add_column_if_missing("answers", "question_started_at", "DATETIME")
+        MigrationService._add_column_if_missing("answers", "question_expires_at", "DATETIME")
+        MigrationService._add_column_if_missing(
+            "answers",
+            "question_time_expired",
+            "BOOLEAN NOT NULL DEFAULT 0",
+        )
+
+    @staticmethod
     def _migration_platform_settings_seed():
         if PlatformSettings.query.first():
             return
@@ -252,6 +276,11 @@ class MigrationService:
             "Add forced password change flag for temporary teacher credentials",
             _migration_must_change_password.__func__,
         ),
+        (
+            "20260521_014_notifications_attempts_timers",
+            "Add notifications, exam attempt limits, and per-question timer fields",
+            _migration_notifications_attempts_timers.__func__,
+        ),
     ]
 
     @staticmethod
@@ -323,6 +352,16 @@ class MigrationService:
             )
         if version == "20260521_013_must_change_password":
             return MigrationService._has_column("users", "must_change_password")
+        if version == "20260521_014_notifications_attempts_timers":
+            return (
+                MigrationService._has_table("notifications")
+                and MigrationService._has_column("exam_sets", "attempt_limit")
+                and MigrationService._has_column("questions", "time_limit_seconds")
+                and MigrationService._has_column("question_bank_items", "time_limit_seconds")
+                and MigrationService._has_column("answers", "question_started_at")
+                and MigrationService._has_column("answers", "question_expires_at")
+                and MigrationService._has_column("answers", "question_time_expired")
+            )
         return False
 
     @staticmethod

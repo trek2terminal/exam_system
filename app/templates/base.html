@@ -66,6 +66,7 @@
                 {% elif session.get('teacher_id') %}
                     <a href="{{ url_for('teacher.dashboard') }}" class="nav-link">Dashboard</a>
                     <a href="{{ url_for('teacher.results') }}" class="nav-link">Results</a>
+                    <a href="{{ url_for('teacher.proctoring') }}" class="nav-link">Proctoring</a>
                     <a href="{{ url_for('auth.teacher_logout') }}" class="nav-link nav-logout">Logout</a>
                 {% elif session.get('role') == 'student' %}
                     <a href="{{ url_for('student.dashboard') }}" class="nav-link">Dashboard</a>
@@ -74,6 +75,29 @@
                     <a href="{{ url_for('auth.student_logout') }}" class="nav-link nav-logout">Exit</a>
                 {% else %}
                     <a href="{{ url_for('auth.login_selector') }}" class="nav-link">Login</a>
+                {% endif %}
+                {% if session.get('user_id') %}
+                    <div class="notification-bell">
+                        <button type="button" class="theme-toggle notification-toggle" aria-label="Notifications">
+                            <i class="fas fa-bell"></i>
+                            {% if notification_unread_count %}
+                                <span>{{ notification_unread_count }}</span>
+                            {% endif %}
+                        </button>
+                        <div class="notification-menu">
+                            {% if recent_notifications %}
+                                {% for note in recent_notifications %}
+                                    <div class="notification-item">
+                                        <strong>{{ note.notification_type | replace('_', ' ') | title }}</strong>
+                                        <p>{{ note.message }}</p>
+                                    </div>
+                                {% endfor %}
+                                <button type="button" class="btn secondary small" id="markNotificationsRead">Mark read</button>
+                            {% else %}
+                                <p class="muted">No new notifications.</p>
+                            {% endif %}
+                        </div>
+                    </div>
                 {% endif %}
                 <button class="theme-toggle" type="button" title="Toggle theme" aria-label="Toggle theme">
                     <i class="fas fa-moon"></i>
@@ -106,6 +130,15 @@
     <script src="{{ url_for('static', filename='js/exam.js') }}"></script>
     <script src="{{ url_for('static', filename='js/ui.js') }}"></script>
     <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
+    <script>
+      document.querySelector(".notification-toggle")?.addEventListener("click", event => {
+        event.currentTarget.closest(".notification-bell")?.classList.toggle("open");
+      });
+      document.getElementById("markNotificationsRead")?.addEventListener("click", async () => {
+        await fetch("/api/notifications/mark-read", { method: "POST" });
+        window.location.reload();
+      });
+    </script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

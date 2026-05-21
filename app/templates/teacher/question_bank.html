@@ -47,6 +47,9 @@
         <label>Snippet Language</label>
         <input type="text" name="code_language" placeholder="python">
 
+        <label>Per-question Time Limit (seconds)</label>
+        <input type="number" name="time_limit_seconds" min="0" value="0" placeholder="0 means no limit">
+
         <button class="btn primary" type="submit">
           <i class="fas fa-bookmark"></i> Save to Bank
         </button>
@@ -78,6 +81,9 @@
             {% endif %}
             {% if item.code_snippet %}
               <pre class="question-code-snippet">{{ item.code_snippet }}</pre>
+            {% endif %}
+            {% if item.time_limit_seconds %}
+              <p class="muted">Time limit: {{ item.time_limit_seconds }} seconds</p>
             {% endif %}
           </article>
         {% else %}

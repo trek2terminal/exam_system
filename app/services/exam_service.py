@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from app.models.database import db
 from app.models.exam_model import ExamEnrollment, ExamSet, Question
 from app.models.submission_model import StudentSession, generate_session_token
-from app.services.autosave_service import AutoSaveService
+from app.services.exam_session_guard import LOCKED_SESSION_STATUSES
 
 
 class ExamService:
@@ -47,6 +47,7 @@ class ExamService:
         """Create or reuse one student exam session for an exam and roll number."""
         normalized_roll = (roll_no or "").strip().upper()
         clean_name = (student_name or "").strip()
+        exam = ExamSet.query.get(exam_set_id)
 
         existing_session = (
             StudentSession.query.filter(
@@ -58,25 +59,29 @@ class ExamService:
         )
 
         if existing_session:
-            enrollment = (
-                ExamEnrollment.query.filter(
-                    ExamEnrollment.exam_set_id == exam_set_id,
-                    db.func.upper(ExamEnrollment.roll_no) == normalized_roll,
-                ).first()
-            )
-            if clean_name and existing_session.student_name != clean_name and existing_session.status in ["waiting", "active"]:
-                existing_session.student_name = clean_name
-                existing_session.updated_at = datetime.utcnow()
-                db.session.commit()
-            if enrollment and existing_session.status in ["waiting", "active"]:
-                existing_session.extra_time_minutes = enrollment.extra_time_minutes or 0
-                existing_session.updated_at = datetime.utcnow()
-                db.session.commit()
-            if not existing_session.session_token:
-                existing_session.session_token = generate_session_token()
-                existing_session.updated_at = datetime.utcnow()
-                db.session.commit()
-            return existing_session
+            if existing_session.status in ["waiting", "active", "paused"]:
+                enrollment = (
+                    ExamEnrollment.query.filter(
+                        ExamEnrollment.exam_set_id == exam_set_id,
+                        db.func.upper(ExamEnrollment.roll_no) == normalized_roll,
+                    ).first()
+                )
+                if clean_name and existing_session.student_name != clean_name:
+                    existing_session.student_name = clean_name
+                    existing_session.updated_at = datetime.utcnow()
+                    db.session.commit()
+                if enrollment:
+                    existing_session.extra_time_minutes = enrollment.extra_time_minutes or 0
+                    existing_session.updated_at = datetime.utcnow()
+                    db.session.commit()
+                if not existing_session.session_token:
+                    existing_session.session_token = generate_session_token()
+                    existing_session.updated_at = datetime.utcnow()
+                    db.session.commit()
+                return existing_session
+
+            if not ExamService.can_start_new_attempt(exam_set_id, normalized_roll):
+                return existing_session
 
         enrollment = (
             ExamEnrollment.query.filter(
@@ -97,6 +102,45 @@ class ExamService:
         db.session.add(student_session)
         db.session.commit()
         return student_session
+
+    @staticmethod
+    def attempt_count(exam_set_id, roll_no):
+        return StudentSession.query.filter(
+            StudentSession.exam_set_id == exam_set_id,
+            db.func.upper(StudentSession.roll_no) == (roll_no or "").strip().upper(),
+        ).count()
+
+    @staticmethod
+    def can_start_new_attempt(exam_set_id, roll_no):
+        exam = ExamSet.query.get(exam_set_id)
+        if not exam:
+            return False
+        limit = int(exam.attempt_limit or 1)
+        if limit <= 0:
+            return True
+        return ExamService.attempt_count(exam_set_id, roll_no) < limit
+
+    @staticmethod
+    def attempts_remaining(exam_set_id, roll_no):
+        exam = ExamSet.query.get(exam_set_id)
+        if not exam:
+            return 0
+        limit = int(exam.attempt_limit or 1)
+        if limit <= 0:
+            return None
+        return max(limit - ExamService.attempt_count(exam_set_id, roll_no), 0)
+
+    @staticmethod
+    def latest_locked_attempt(exam_set_id, roll_no):
+        return (
+            StudentSession.query.filter(
+                StudentSession.exam_set_id == exam_set_id,
+                db.func.upper(StudentSession.roll_no) == (roll_no or "").strip().upper(),
+                StudentSession.status.in_(LOCKED_SESSION_STATUSES),
+            )
+            .order_by(StudentSession.created_at.desc())
+            .first()
+        )
 
 
     @staticmethod

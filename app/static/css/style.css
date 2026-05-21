@@ -1678,6 +1678,68 @@ textarea:focus::placeholder {
     border: 1px solid rgba(255, 93, 93, 0.3);
 }
 
+.notification-bell {
+    position: relative;
+}
+
+.notification-toggle {
+    position: relative;
+}
+
+.notification-toggle span {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    min-width: 18px;
+    height: 18px;
+    display: grid;
+    place-items: center;
+    border-radius: 999px;
+    background: #ef4444;
+    color: #fff;
+    font-size: 0.68rem;
+    font-weight: 800;
+}
+
+.notification-menu {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 10px);
+    z-index: 1000;
+    display: none;
+    width: min(320px, 90vw);
+    max-height: 420px;
+    overflow: auto;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    background: var(--panel-solid);
+    box-shadow: var(--shadow);
+}
+
+.notification-bell.open .notification-menu {
+    display: grid;
+    gap: 8px;
+}
+
+.notification-item {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.notification-item strong,
+.notification-item p {
+    display: block;
+}
+
+.notification-item p {
+    margin: 4px 0 0;
+    color: var(--muted);
+    line-height: 1.45;
+}
+
 /* ==================== MODERN UI POLISH ==================== */
 
 .topbar {
@@ -2596,6 +2658,32 @@ html[data-theme="dark"] body.student-mode .student-palette .palette-item {
     gap: 10px;
 }
 
+.question-timer {
+    min-width: 64px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(245, 158, 11, 0.34);
+    border-radius: 8px;
+    padding: 8px 10px;
+    background: rgba(245, 158, 11, 0.10);
+    color: #92400e;
+    font-weight: 800;
+    font-size: 0.86rem;
+}
+
+.question-timer.danger {
+    border-color: rgba(239, 68, 68, 0.44);
+    background: rgba(239, 68, 68, 0.10);
+    color: #b91c1c;
+}
+
+.question-timer.expired {
+    border-color: rgba(100, 116, 139, 0.32);
+    background: rgba(100, 116, 139, 0.10);
+    color: var(--student-muted);
+}
+
 .flag-review-button {
     width: 38px;
     height: 38px;
@@ -3242,6 +3330,55 @@ html[data-theme="dark"] body.student-mode .precheck-step {
 .compare-answer-card pre {
     white-space: pre-wrap;
     margin: 0;
+}
+
+.proctor-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 16px;
+    margin: 22px 0;
+}
+
+.proctor-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px;
+    background: var(--panel-solid);
+    box-shadow: var(--shadow);
+}
+
+.proctor-card.flagged {
+    border-color: rgba(245, 158, 11, 0.46);
+}
+
+.proctor-card.danger {
+    border-color: rgba(239, 68, 68, 0.62);
+}
+
+.proctor-metrics {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin: 16px 0;
+}
+
+.proctor-metrics div {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.proctor-metrics span {
+    display: block;
+    color: var(--muted);
+    font-size: 0.76rem;
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+
+.proctor-metrics strong {
+    font-size: 1rem;
 }
 
 .student-dashboard-hero {

@@ -121,6 +121,8 @@ def dashboard():
                 "enrollment": enrollment,
                 "exam": enrollment.exam_set,
                 "session": student_session,
+                "attempt_count": ExamService.attempt_count(enrollment.exam_set_id, normalized_roll),
+                "attempts_remaining": ExamService.attempts_remaining(enrollment.exam_set_id, normalized_roll),
             }
         )
 
@@ -158,8 +160,9 @@ def start_assigned_exam(exam_id):
         return redirect(url_for("student.dashboard"))
 
     existing_session = _latest_session_for_exam(exam.id, roll_no)
-    if existing_session and ExamSessionGuard.is_locked(existing_session):
+    if existing_session and ExamSessionGuard.is_locked(existing_session) and not ExamService.can_start_new_attempt(exam.id, roll_no):
         _remember_student_session(existing_session)
+        flash("Maximum attempts reached for this exam.", "info")
         return redirect(url_for("student.submitted", session_code=existing_session.session_code))
 
     if exam.status == "closed":
@@ -243,6 +246,12 @@ def join_exam():
         if _exam_requires_enrollment(exam.id) and not _is_enrolled(exam.id, roll_no):
             flash("This exam is assigned by roll number and is not available for your login.", "danger")
             return redirect(url_for("student.dashboard"))
+
+        existing_session = _latest_session_for_exam(exam.id, roll_no)
+        if existing_session and ExamSessionGuard.is_locked(existing_session) and not ExamService.can_start_new_attempt(exam.id, roll_no):
+            _remember_student_session(existing_session)
+            flash("Maximum attempts reached for this exam.", "info")
+            return redirect(url_for("student.submitted", session_code=existing_session.session_code))
 
         student_session = ExamService.create_student_session(
             exam_set_id=exam.id,

@@ -92,7 +92,21 @@ def create_app(config_class=None):
             settings = SettingsService.get_settings()
         except Exception:
             settings = None
-        return {"platform_settings": settings}
+        try:
+            from flask import session
+            from app.services.notification_service import NotificationService
+
+            user_id = session.get("user_id")
+            notification_unread_count = NotificationService.unread_count_for_user(user_id)
+            recent_notifications = NotificationService.unread_for_user(user_id, limit=6)
+        except Exception:
+            notification_unread_count = 0
+            recent_notifications = []
+        return {
+            "platform_settings": settings,
+            "notification_unread_count": notification_unread_count,
+            "recent_notifications": recent_notifications,
+        }
 
     # Security Headers
     @app.after_request

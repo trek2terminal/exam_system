@@ -10,6 +10,8 @@ let fullscreenReady = false;
 let MAX_WARNINGS = 3;
 let questionStateMap = {};
 let examPaused = false;
+let questionTimerIntervals = {};
+let questionTimerPauseStarted = null;
 
 const QUESTION_STATES = ["NOT_VISITED", "VISITED_UNANSWERED", "ANSWERED", "MARKED_REVIEW", "ANSWERED_MARKED"];
 
@@ -197,6 +199,7 @@ function updateQuestionState(questionBlock, markVisited = false, persist = false
     const state = computeQuestionState(questionBlock, markVisited);
     const changed = normalizeQuestionState(questionBlock.dataset.visitStatus) !== state;
     applyQuestionState(questionBlock, state);
+    if (markVisited) startQuestionTimer(questionBlock);
     if (persist && changed) persistQuestionState(currentSessionCode, questionBlock.dataset.questionId, state);
     return state;
 }
@@ -314,7 +317,20 @@ async function saveAnswer(sessionCode, questionId, answerText, visitStatus = nul
 }
 
 function setPauseOverlay(paused, message = null) {
+    const wasPaused = examPaused;
     examPaused = Boolean(paused);
+    if (examPaused && !questionTimerPauseStarted) {
+        questionTimerPauseStarted = Date.now();
+    }
+    if (!examPaused && wasPaused && questionTimerPauseStarted) {
+        const pauseDelta = Date.now() - questionTimerPauseStarted;
+        Object.keys(localStorage).forEach(key => {
+            if (!key.startsWith(`exam_question_timer_${currentSessionCode}_`)) return;
+            const startedAt = parseInt(localStorage.getItem(key) || "0", 10);
+            if (startedAt) localStorage.setItem(key, String(startedAt + pauseDelta));
+        });
+        questionTimerPauseStarted = null;
+    }
     const overlay = document.getElementById("pauseOverlay");
     const title = document.getElementById("pauseOverlayTitle");
     const body = document.getElementById("pauseOverlayMessage");
@@ -325,6 +341,95 @@ function setPauseOverlay(paused, message = null) {
     overlay.classList.toggle("active", examPaused);
     overlay.setAttribute("aria-hidden", examPaused ? "false" : "true");
     updateAutoSaveStatus?.(examPaused ? "idle" : "saved", examPaused ? "Timer paused" : "Exam resumed");
+}
+
+function questionTimerStorageKey(questionId) {
+    return `exam_question_timer_${currentSessionCode}_${questionId}`;
+}
+
+function formatShortSeconds(seconds) {
+    seconds = Math.max(0, parseInt(seconds || 0, 10));
+    const minutes = Math.floor(seconds / 60);
+    const remainder = seconds % 60;
+    return minutes > 0 ? `${minutes}:${String(remainder).padStart(2, "0")}` : `${remainder}s`;
+}
+
+function disableQuestionInputs(questionBlock) {
+    questionBlock.querySelectorAll("input, textarea, button.run-code-button").forEach(element => {
+        if (element.classList.contains("flag-review-button")) return;
+        element.disabled = true;
+    });
+}
+
+async function markQuestionTimeExpired(questionBlock) {
+    const questionId = questionBlock.dataset.questionId;
+    if (questionBlock.dataset.timeExpired === "1") return;
+    questionBlock.dataset.timeExpired = "1";
+
+    const state = updateQuestionState(questionBlock, true, false);
+    const answerText = getQuestionAnswerValue(questionBlock);
+    await saveAnswer(currentSessionCode, questionId, answerText, state);
+
+    try {
+        await fetch(`/api/student/session/${currentSessionCode}/question-expired`, {
+            method: "POST",
+            headers: examRequestHeaders(),
+            body: JSON.stringify(examPayload({
+                question_id: questionId,
+                answer_text: answerText,
+                visit_status: state
+            }))
+        });
+    } catch (error) {
+        console.error("Question expiry save failed:", error);
+    }
+
+    const timerNode = document.querySelector(`[data-question-timer="${questionId}"]`);
+    if (timerNode) {
+        timerNode.textContent = "Expired";
+        timerNode.classList.add("expired");
+    }
+    disableQuestionInputs(questionBlock);
+
+    const next = questionBlock.nextElementSibling;
+    if (next?.classList?.contains("student-question-card")) {
+        next.scrollIntoView({ behavior: "smooth", block: "start" });
+        updateQuestionState(next, true, true);
+    }
+}
+
+function startQuestionTimer(questionBlock) {
+    if (!questionBlock || examSubmitted || examPaused) return;
+    const questionId = questionBlock.dataset.questionId;
+    const limit = parseInt(questionBlock.dataset.timeLimit || "0", 10);
+    if (!questionId || !limit || limit <= 0 || questionTimerIntervals[questionId]) return;
+    if (questionBlock.dataset.timeExpired === "1") return;
+
+    const key = questionTimerStorageKey(questionId);
+    let startedAt = parseInt(localStorage.getItem(key) || "0", 10);
+    if (!startedAt) {
+        startedAt = Date.now();
+        localStorage.setItem(key, String(startedAt));
+    }
+
+    const timerNode = document.querySelector(`[data-question-timer="${questionId}"]`);
+    const tick = () => {
+        if (examPaused) return;
+        const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+        const remaining = Math.max(limit - elapsed, 0);
+        if (timerNode) {
+            timerNode.textContent = formatShortSeconds(remaining);
+            timerNode.classList.toggle("danger", remaining <= 30);
+        }
+        if (remaining <= 0) {
+            clearInterval(questionTimerIntervals[questionId]);
+            delete questionTimerIntervals[questionId];
+            markQuestionTimeExpired(questionBlock);
+        }
+    };
+
+    tick();
+    questionTimerIntervals[questionId] = setInterval(tick, 1000);
 }
 
 async function requestExamPause(sessionCode) {
@@ -465,6 +570,12 @@ async function sendHeartbeat(sessionCode, focused = true) {
                     ? "An admin has paused your exam timer. Stay on this screen until it resumes."
                     : "Your exam has resumed."
             );
+        }
+        if (Array.isArray(data.session_messages)) {
+            data.session_messages.forEach(item => {
+                showToast?.(item.message, item.type === "admin_message" ? "warning" : "info", 8000);
+                showProctorWarning("Admin message", item.message);
+            });
         }
         if (typeof window.syncExamStatus === "function") {
             window.syncExamStatus(data);
@@ -855,6 +966,11 @@ async function initExamPage(sessionCode, remainingSeconds, sessionToken = null) 
     }
 
     refreshQuestionStates();
+    document.querySelectorAll(".student-question-card[data-question-id]").forEach(block => {
+        if (normalizeQuestionState(block.dataset.visitStatus) !== "NOT_VISITED") {
+            startQuestionTimer(block);
+        }
+    });
     setPauseOverlay(examPaused, examPaused ? "An admin has paused your exam timer. Stay on this screen until it resumes." : null);
     updateAnswerProgress();
     updateAutoSaveStatus?.("idle");
