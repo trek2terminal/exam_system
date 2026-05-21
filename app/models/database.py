@@ -1,27 +1,6 @@
-from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
-from sqlalchemy import inspect, text
 
-
-def apply_lightweight_schema_updates(app):
-    """Apply safe additive schema updates for the local SQLite-first app."""
-    inspector = inspect(db.engine)
-    if "answers" not in inspector.get_table_names():
-        return
-
-    existing_columns = {column["name"] for column in inspector.get_columns("answers")}
-    additive_columns = {
-        "code_output": "TEXT",
-        "execution_status": "VARCHAR(30)",
-        "execution_time_ms": "INTEGER",
-    }
-
-    for column_name, column_type in additive_columns.items():
-        if column_name in existing_columns:
-            continue
-        with db.engine.begin() as connection:
-            connection.execute(text(f"ALTER TABLE answers ADD COLUMN {column_name} {column_type}"))
-        app.logger.info("Added missing answers.%s column.", column_name)
+from flask_sqlalchemy import SQLAlchemy
 
 # Initialize SQLAlchemy (only once)
 db = SQLAlchemy()
@@ -59,7 +38,10 @@ def init_db(app):
         from app.models.result_model import Result, QuestionMark
         from app.models.audit_model import AuditLog, ViolationLog
         from app.models.settings_model import PlatformSettings
+        from app.models.migration_model import SchemaMigration
 
         db.create_all()
-        apply_lightweight_schema_updates(app)
+        from app.services.migration_service import MigrationService
+
+        MigrationService.run_pending(app)
         app.logger.info("✅ Database tables created/verified successfully.")

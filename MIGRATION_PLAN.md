@@ -65,6 +65,7 @@ This project should follow that same practical model.
 - Platform settings table with admin-managed platform name, student welcome message, quote pool, self-registration toggle placeholder, and violation warning threshold.
 - Student self-registration controlled by admin settings, plus account-based student login alongside local quick entry.
 - Admin user management now includes student accounts and roll number editing.
+- Recorded schema migration runner with `schema_migrations` table plus `python run.py migrate` and `python run.py migrations` commands.
 
 ## Python Feature Roadmap
 

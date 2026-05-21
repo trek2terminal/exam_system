@@ -4,7 +4,7 @@ import socket
 import sys
 
 from app import create_app
-from app.utils.db_manager import init_database, reset_database, show_tables
+from app.utils.db_manager import init_database, migrate_database, reset_database, show_migrations, show_tables
 
 
 # Fix Unicode output on Windows.
@@ -104,6 +104,12 @@ if __name__ == "__main__":
             sys.exit(0)
         if cmd == "tables":
             show_tables()
+            sys.exit(0)
+        if cmd == "migrate":
+            migrate_database()
+            sys.exit(0)
+        if cmd in {"migrations", "migration-status"}:
+            show_migrations()
             sys.exit(0)
 
     app = create_app()
