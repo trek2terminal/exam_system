@@ -76,6 +76,9 @@ class Answer(db.Model):
     question = db.relationship("Question")
 
     answer_text = db.Column(db.Text, default="")
+    code_output = db.Column(db.Text, nullable=True)
+    execution_status = db.Column(db.String(30), nullable=True)
+    execution_time_ms = db.Column(db.Integer, nullable=True)
     saved_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     def __repr__(self):

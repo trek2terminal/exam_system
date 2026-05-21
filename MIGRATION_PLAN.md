@@ -57,6 +57,9 @@ This project should follow that same practical model.
 - Teacher smart question import from pasted text, .txt, .docx, .csv, and .json with preview before import.
 - Bulk publish/hide evaluated results per exam.
 - Student results page for published marks and feedback.
+- Python coding-question execution endpoint with timeout, restricted imports/functions, stdin support, captured stdout/stderr, and per-session authorization.
+- Student coding-question UI with code textarea, stdin box, run button, and saved output panel.
+- Code execution output stored with answers and shown to teacher/student/PDF review surfaces.
 
 ## Python Feature Roadmap
 

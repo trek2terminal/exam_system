@@ -3,8 +3,11 @@ from datetime import datetime
 from flask import Blueprint, current_app, jsonify, request, session
 
 from app.models.audit_model import AuditLog
-from app.models.submission_model import StudentSession
+from app.models.database import db
+from app.models.exam_model import Question
+from app.models.submission_model import Answer, StudentSession
 from app.services.autosave_service import AutoSaveService
+from app.services.code_execution_service import CodeExecutionService
 from app.services.exam_service import ExamService
 from app.services.result_service import ResultService
 from app.services.security_service import SecurityService
@@ -88,6 +91,63 @@ def save_answer(session_code):
     success, message = AutoSaveService.save_answer(session_code, question_id, answer_text)
 
     return jsonify({"ok": success, "message": message}), 200 if success else 400
+
+
+@api_bp.route("/student/session/<session_code>/execute", methods=["POST"])
+@rate_limit("code_execution")
+def execute_code(session_code):
+    """Run Python code for an authorized coding question."""
+    if not _student_session_authorized(session_code):
+        return _forbidden_session_response()
+
+    student_session = _get_student_session(session_code)
+    if student_session.status != "active":
+        return jsonify({"ok": False, "message": "Code can only run during an active exam."}), 400
+
+    data = _get_json_payload()
+    question_id = _parse_int_field(data, "question_id")
+    code = data.get("code") or ""
+    stdin_text = data.get("stdin") or ""
+
+    if question_id is None:
+        return jsonify({"ok": False, "message": "Valid question_id is required"}), 400
+
+    question = Question.query.filter_by(id=question_id, exam_set_id=student_session.exam_set_id).first()
+    if not question:
+        return jsonify({"ok": False, "message": "Question not found for this exam."}), 404
+    if question.question_type != "coding":
+        return jsonify({"ok": False, "message": "This question is not a coding question."}), 400
+
+    result = CodeExecutionService.run_python(
+        code=code,
+        stdin_text=stdin_text,
+        timeout_seconds=current_app.config.get("CODE_EXECUTION_TIMEOUT_SECONDS", 10),
+        max_chars=current_app.config.get("CODE_EXECUTION_MAX_CHARS", 12000),
+        output_max_chars=current_app.config.get("CODE_EXECUTION_OUTPUT_MAX_CHARS", 8000),
+    )
+
+    answer = Answer.query.filter_by(session_id=student_session.id, question_id=question.id).first()
+    if not answer:
+        answer = Answer(session_id=student_session.id, question_id=question.id)
+        db.session.add(answer)
+
+    output_parts = [f"[{result.status.upper()}] {result.message}"]
+    if result.stdout:
+        output_parts.append(f"STDOUT:\n{result.stdout}")
+    if result.stderr:
+        output_parts.append(f"STDERR:\n{result.stderr}")
+
+    answer.answer_text = code
+    answer.code_output = "\n".join(part for part in output_parts if part)
+    answer.execution_status = result.status
+    answer.execution_time_ms = result.execution_time_ms
+    student_session.last_heartbeat = datetime.utcnow()
+    student_session.updated_at = datetime.utcnow()
+    db.session.commit()
+
+    payload = result.as_dict()
+    payload["message"] = result.message
+    return jsonify(payload), 200 if result.status in ["success", "error", "timeout", "rejected"] else 400
 
 
 @api_bp.route("/student/session/<session_code>/heartbeat", methods=["POST"])

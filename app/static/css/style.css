@@ -2525,6 +2525,91 @@ html[data-theme="dark"] body.student-mode .student-options .mcq-option {
     line-height: 1.7;
 }
 
+.coding-workspace {
+    display: grid;
+    gap: 12px;
+}
+
+.coding-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--student-border);
+    border-radius: 8px;
+    background: rgba(15, 118, 110, 0.08);
+}
+
+.coding-toolbar span {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--student-teal);
+    font-weight: 800;
+}
+
+.code-answer,
+.code-stdin,
+.code-output-panel {
+    font-family: "Consolas", "Courier New", monospace;
+}
+
+.code-answer {
+    min-height: 320px;
+    tab-size: 4;
+}
+
+.code-stdin-label {
+    margin: 4px 0 -6px;
+    color: var(--student-muted);
+    font-size: 0.82rem;
+}
+
+.code-stdin {
+    min-height: 92px;
+    resize: vertical;
+}
+
+.code-output-panel {
+    min-height: 130px;
+    max-height: 360px;
+    overflow: auto;
+    border: 1px solid var(--student-border);
+    border-radius: 8px;
+    padding: 14px;
+    background: #0f172a;
+    color: #d7ffe5;
+    line-height: 1.55;
+    white-space: pre-wrap;
+}
+
+.code-output-panel.running {
+    color: #bfdbfe;
+}
+
+.code-output-panel.error {
+    color: #fecaca;
+}
+
+.code-output-panel.success {
+    color: #d7ffe5;
+}
+
+.code-review-output {
+    margin: 10px 0 0;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px;
+    background: #0f172a;
+    color: #d7ffe5;
+    font-family: "Consolas", "Courier New", monospace;
+    font-size: 0.9rem;
+    line-height: 1.55;
+    overflow: auto;
+    white-space: pre-wrap;
+}
+
 .warning-dots {
     display: flex;
     gap: 7px;

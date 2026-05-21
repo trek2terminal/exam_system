@@ -97,10 +97,67 @@ function snapshotAnswers() {
     return saves;
 }
 
+function isCodeEditingTarget(target) {
+    return Boolean(target?.closest?.(".coding-workspace"));
+}
+
 function queueTextSave(sessionCode, questionId, answerText) {
     const key = `${sessionCode}_${questionId}`;
     if (debounceTimers[key]) clearTimeout(debounceTimers[key]);
     debounceTimers[key] = setTimeout(() => saveAnswer(sessionCode, questionId, answerText), 800);
+}
+
+async function runCodeForQuestion(button) {
+    const questionId = button.dataset.questionId;
+    const sessionCode = button.dataset.sessionCode;
+    const workspace = button.closest(".coding-workspace");
+    const codeField = workspace?.querySelector(".code-answer");
+    const stdinField = workspace?.querySelector(".code-stdin");
+    const outputPanel = document.getElementById(`code-output-${questionId}`);
+
+    if (!codeField || !outputPanel) return;
+
+    button.disabled = true;
+    button.classList.add("loading");
+    outputPanel.classList.add("running");
+    outputPanel.textContent = "Running code...";
+
+    try {
+        await saveAnswer(sessionCode, questionId, codeField.value);
+        const response = await fetch(`/api/student/session/${sessionCode}/execute`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                question_id: questionId,
+                code: codeField.value,
+                stdin: stdinField ? stdinField.value : ""
+            })
+        });
+        const data = await response.json();
+        const parts = [];
+        parts.push(`[${(data.status || "unknown").toUpperCase()}] ${data.message || ""}`.trim());
+        if (typeof data.execution_time_ms === "number") {
+            parts.push(`Time: ${data.execution_time_ms} ms`);
+        }
+        if (data.stdout) {
+            parts.push(`\nSTDOUT:\n${data.stdout}`);
+        }
+        if (data.stderr) {
+            parts.push(`\nSTDERR:\n${data.stderr}`);
+        }
+        outputPanel.textContent = parts.join("\n");
+        outputPanel.classList.toggle("success", data.status === "success");
+        outputPanel.classList.toggle("error", data.status !== "success");
+        updateAutoSaveStatus?.("saved", "Code run saved");
+    } catch (error) {
+        outputPanel.textContent = `Run failed: ${error.message || "Check connection"}`;
+        outputPanel.classList.add("error");
+        updateAutoSaveStatus?.("error", "Run failed");
+    } finally {
+        button.disabled = false;
+        button.classList.remove("loading");
+        outputPanel.classList.remove("running");
+    }
 }
 
 async function sendHeartbeat(sessionCode, focused = true) {
@@ -313,13 +370,16 @@ function initExamPage(sessionCode, remainingSeconds) {
             return false;
         }
         const key = e.key.toLowerCase();
+        const editingCode = isCodeEditingTarget(e.target);
+        const codeAllowedShortcut = editingCode && (e.ctrlKey || e.metaKey) && ["a", "c", "v", "x"].includes(key);
         const blocked =
-            (e.ctrlKey && ["c", "x", "v", "s", "p", "u", "i", "r", "w", "n", "t"].includes(key)) ||
-            (e.metaKey && ["c", "x", "v", "s", "p", "u", "r", "w", "n", "t"].includes(key)) ||
+            !codeAllowedShortcut && (
+            (e.ctrlKey && ["a", "c", "x", "v", "s", "p", "u", "i", "r", "w", "n", "t"].includes(key)) ||
+            (e.metaKey && ["a", "c", "x", "v", "s", "p", "u", "r", "w", "n", "t"].includes(key)) ||
             e.key === "F12" ||
             (e.altKey && e.key === "F4") ||
             (e.altKey && e.key === "Tab") ||
-            (e.ctrlKey && e.shiftKey && ["i", "j", "c", "k"].includes(key));
+            (e.ctrlKey && e.shiftKey && ["i", "j", "c", "k"].includes(key)));
         if (blocked) {
             e.preventDefault();
             registerViolation(sessionCode, "Blocked shortcut", "This keyboard shortcut is disabled during the exam.");
@@ -327,9 +387,21 @@ function initExamPage(sessionCode, remainingSeconds) {
         }
     });
 
-    document.addEventListener("copy", e => { e.preventDefault(); registerViolation(sessionCode, "Copy blocked", "Copy is disabled during exams."); });
-    document.addEventListener("cut", e => { e.preventDefault(); registerViolation(sessionCode, "Cut blocked", "Cut is disabled during exams."); });
-    document.addEventListener("paste", e => { e.preventDefault(); registerViolation(sessionCode, "Paste blocked", "Paste is disabled during exams."); });
+    document.addEventListener("copy", e => {
+        if (isCodeEditingTarget(e.target)) return;
+        e.preventDefault();
+        registerViolation(sessionCode, "Copy blocked", "Copy is disabled during exams.");
+    });
+    document.addEventListener("cut", e => {
+        if (isCodeEditingTarget(e.target)) return;
+        e.preventDefault();
+        registerViolation(sessionCode, "Cut blocked", "Cut is disabled during exams.");
+    });
+    document.addEventListener("paste", e => {
+        if (isCodeEditingTarget(e.target)) return;
+        e.preventDefault();
+        registerViolation(sessionCode, "Paste blocked", "Paste is disabled during exams.");
+    });
     document.addEventListener("contextmenu", e => { e.preventDefault(); registerViolation(sessionCode, "Right-click blocked", "Right-click is disabled during exams."); });
 
     document.addEventListener("visibilitychange", () => {
@@ -390,6 +462,9 @@ function initExamPage(sessionCode, remainingSeconds) {
             saveAnswer(sessionCode, radio.dataset.questionId, radio.value);
             updateAnswerProgress();
         });
+    });
+    document.querySelectorAll(".run-code-button").forEach(button => {
+        button.addEventListener("click", () => runCodeForQuestion(button));
     });
 
     document.getElementById("questionPalette")?.addEventListener("click", event => {

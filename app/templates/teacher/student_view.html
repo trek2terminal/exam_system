@@ -34,6 +34,13 @@
           <div class="answer-text">{{ answers_map.get(q.id, "No answer submitted") }}</div>
         </div>
 
+        {% if q.question_type == "coding" and answer_objects_map.get(q.id) and answer_objects_map.get(q.id).code_output %}
+          <div class="answer-box">
+            <strong>Last Code Output</strong>
+            <pre class="code-review-output">{{ answer_objects_map.get(q.id).code_output }}</pre>
+          </div>
+        {% endif %}
+
         <div class="grid-2">
           <div>
             <label>Marks Awarded</label>

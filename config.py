@@ -41,6 +41,10 @@ class Config:
     MAX_VIOLATIONS_ALLOWED = 3
     AUTO_SUBMIT_ON_VIOLATION = False
 
+    CODE_EXECUTION_TIMEOUT_SECONDS = int(os.environ.get("CODE_EXECUTION_TIMEOUT_SECONDS", "10"))
+    CODE_EXECUTION_MAX_CHARS = int(os.environ.get("CODE_EXECUTION_MAX_CHARS", "12000"))
+    CODE_EXECUTION_OUTPUT_MAX_CHARS = int(os.environ.get("CODE_EXECUTION_OUTPUT_MAX_CHARS", "8000"))
+
     # Local-first in-memory rate limits. For hosted multi-process deployment,
     # move these buckets to Redis or a reverse proxy limiter.
     RATE_LIMITS = {
@@ -50,6 +54,7 @@ class Config:
         "heartbeat": {"limit": 30, "window": 60},
         "violation": {"limit": 30, "window": 60},
         "submit": {"limit": 10, "window": 60},
+        "code_execution": {"limit": 5, "window": 60},
         "admin_action": {"limit": 40, "window": 60},
     }
 

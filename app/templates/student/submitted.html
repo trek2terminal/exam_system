@@ -58,6 +58,9 @@
           {% if question_marks.get(q.id) and question_marks.get(q.id).teacher_remark %}
             <p class="muted feedback-remark">{{ question_marks.get(q.id).teacher_remark }}</p>
           {% endif %}
+          {% if q.question_type == "coding" and answer_objects_map.get(q.id) and answer_objects_map.get(q.id).code_output %}
+            <pre class="code-review-output">{{ answer_objects_map.get(q.id).code_output }}</pre>
+          {% endif %}
         {% endfor %}
       </div>
     {% else %}

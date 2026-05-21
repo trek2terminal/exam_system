@@ -276,6 +276,7 @@ def exam(session_code):
 
     saved_answers = Answer.query.filter_by(session_id=student_session.id).all()
     saved_map = {a.question_id: a.answer_text for a in saved_answers}
+    code_output_map = {a.question_id: a.code_output for a in saved_answers if getattr(a, "code_output", None)}
 
     # Calculate remaining time
     remaining_seconds = 0
@@ -289,6 +290,7 @@ def exam(session_code):
         exam=exam,
         questions=questions,
         saved_map=saved_map,
+        code_output_map=code_output_map,
         remaining_seconds=remaining_seconds,
         max_violations_allowed=current_app.config.get("MAX_VIOLATIONS_ALLOWED", 3),
     )
@@ -311,12 +313,16 @@ def submitted(session_code):
         for qm in result.question_marks:
             question_marks[qm.question_id] = qm
 
+    answers = Answer.query.filter_by(session_id=student_session.id).all()
+    answer_objects_map = {a.question_id: a for a in answers}
+
     return render_template(
         "student/submitted.html",
         student_session=student_session,
         result=result,
         questions=questions,
         question_marks=question_marks,
+        answer_objects_map=answer_objects_map,
     )
 
 

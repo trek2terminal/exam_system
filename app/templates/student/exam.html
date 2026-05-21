@@ -105,6 +105,44 @@
                 </label>
               {% endfor %}
             </div>
+          {% elif q.question_type == 'coding' %}
+            <div class="coding-workspace">
+              <div class="coding-toolbar">
+                <span><i class="fas fa-code"></i> Python</span>
+                <button
+                  class="btn primary small run-code-button"
+                  type="button"
+                  data-session-code="{{ student_session.session_code }}"
+                  data-question-id="{{ q.id }}"
+                >
+                  <i class="fas fa-play"></i> Run Code
+                </button>
+              </div>
+              <textarea
+                class="answer-field student-answer code-answer"
+                data-session-code="{{ student_session.session_code }}"
+                data-question-id="{{ q.id }}"
+                rows="12"
+                spellcheck="false"
+                placeholder="Write Python code here"
+              >{{ saved_map.get(q.id, '') }}</textarea>
+
+              <label class="code-stdin-label" for="stdin-{{ q.id }}">Optional input for input()</label>
+              <textarea
+                id="stdin-{{ q.id }}"
+                class="code-stdin"
+                rows="3"
+                placeholder="Each line is sent to stdin"
+              ></textarea>
+
+              <div class="code-output-panel" id="code-output-{{ q.id }}" aria-live="polite">
+                {% if code_output_map.get(q.id) %}
+                  {{ code_output_map.get(q.id) }}
+                {% else %}
+                  Run output will appear here.
+                {% endif %}
+              </div>
+            </div>
           {% else %}
             <textarea
               class="answer-field student-answer"

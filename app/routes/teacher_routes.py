@@ -468,6 +468,7 @@ def student_view(session_id):
                 .order_by(Question.question_number.asc()).all()
     answers = Answer.query.filter_by(session_id=student_session.id).all()
     answers_map = {a.question_id: a.answer_text for a in answers}
+    answer_objects_map = {a.question_id: a for a in answers}
 
     result = Result.query.filter_by(session_id=student_session.id).first()
     marks_map = {}
@@ -541,6 +542,7 @@ def student_view(session_id):
         student_session=student_session,
         questions=questions,
         answers_map=answers_map,
+        answer_objects_map=answer_objects_map,
         result=result,
         marks_map=marks_map,
         remarks_map=remarks_map,

@@ -144,6 +144,7 @@ def create_submission_pdf(student_session):
         .order_by(Question.question_number.asc()).all()
     answers = Answer.query.filter_by(session_id=student_session.id).all()
     answers_map = {a.question_id: a.answer_text for a in answers}
+    code_output_map = {a.question_id: a.code_output for a in answers if getattr(a, "code_output", None)}
 
     result = Result.query.filter_by(session_id=student_session.id).first()
     marks_map = {}
@@ -188,6 +189,13 @@ def create_submission_pdf(student_session):
 
         answer_text = answers_map.get(q.id, "[No answer submitted]")
         y = draw_wrapped_text(pdf, answer_text, left, y, right_width, font_size=10, leading=13)
+
+        if q.question_type == "coding" and code_output_map.get(q.id):
+            pdf.setFont("Helvetica-Bold", 10)
+            y -= 3 * mm
+            pdf.drawString(left, y, "Last Code Output:")
+            y -= 5 * mm
+            y = draw_wrapped_text(pdf, code_output_map[q.id], left, y, right_width, font_size=9, leading=12)
 
         # Show marks if evaluated
         if result:
