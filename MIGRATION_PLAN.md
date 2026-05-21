@@ -66,6 +66,9 @@ This project should follow that same practical model.
 - Student self-registration controlled by admin settings, plus account-based student login alongside local quick entry.
 - Admin user management now includes student accounts and roll number editing.
 - Recorded schema migration runner with `schema_migrations` table plus `python run.py migrate` and `python run.py migrations` commands.
+- Post-submit exam lock for submitted/evaluated/terminated attempts across student pages and mutation APIs.
+- Private per-attempt `session_token` stored on `StudentSession`, remembered in the browser session, and required for autosave, heartbeat, violation, code-run, and submit APIs.
+- Role session checks now re-validate active admin/teacher/student database accounts on protected requests and force logout if an account is deactivated mid-session.
 
 ## Python Feature Roadmap
 

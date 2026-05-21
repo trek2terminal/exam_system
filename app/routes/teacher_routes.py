@@ -7,6 +7,7 @@ from app.models.exam_model import ExamEnrollment, ExamSet, Question
 from app.models.submission_model import StudentSession, Answer
 from app.models.result_model import Result, QuestionMark
 from app.services.exam_service import ExamService
+from app.services.exam_session_guard import LOCKED_SESSION_STATUSES
 from app.services.parser_service import QuestionParserService
 from app.utils.export_utils import csv_response, format_datetime
 from app.utils.helpers import teacher_required, parse_options
@@ -74,7 +75,7 @@ def dashboard():
     their_exam_ids = [e.id for e in exams]
     submitted_count = StudentSession.query.filter(
         StudentSession.exam_set_id.in_(their_exam_ids) if their_exam_ids else False,
-        StudentSession.status.in_(["submitted", "evaluated"])
+        StudentSession.status.in_(LOCKED_SESSION_STATUSES)
     ).count()
 
     return render_template(
@@ -593,7 +594,7 @@ def student_view(session_id):
             remarks_map[qm.question_id] = qm.teacher_remark or ""
 
     if request.method == "POST":
-        if student_session.status not in ["submitted", "evaluated"]:
+        if student_session.status not in LOCKED_SESSION_STATUSES:
             flash("This attempt is still in progress. Marks can be saved after submission.", "warning")
             return redirect(url_for("teacher.student_view", session_id=session_id))
 

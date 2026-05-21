@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from app.models.database import db
 from app.models.exam_model import ExamSet, Question
-from app.models.submission_model import StudentSession
+from app.models.submission_model import StudentSession, generate_session_token
 from app.services.autosave_service import AutoSaveService
 
 
@@ -58,6 +58,10 @@ class ExamService:
                 existing_session.student_name = clean_name
                 existing_session.updated_at = datetime.utcnow()
                 db.session.commit()
+            if not existing_session.session_token:
+                existing_session.session_token = generate_session_token()
+                existing_session.updated_at = datetime.utcnow()
+                db.session.commit()
             return existing_session
 
         student_session = StudentSession(
@@ -66,6 +70,7 @@ class ExamService:
             exam_set_id=exam_set_id,
             status="waiting",
             start_time=None,
+            session_token=generate_session_token(),
         )
         db.session.add(student_session)
         db.session.commit()
@@ -92,10 +97,10 @@ class ExamService:
 
 
     @staticmethod
-    def end_exam(session_code: str, reason="Manual"):
+    def end_exam(session_code: str, reason="Manual", status="submitted"):
         session = StudentSession.query.filter_by(session_code=session_code).first()
         if session:
-            session.status = "submitted"
+            session.status = status
             session.end_time = datetime.utcnow()
             session.submitted_at = datetime.utcnow()
             session.autosubmit_reason = reason

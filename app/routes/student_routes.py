@@ -4,7 +4,9 @@ from app.models.database import db
 from app.models.exam_model import ExamEnrollment, ExamSet, Question
 from app.models.submission_model import StudentSession, Answer
 from app.models.result_model import Result
+from app.models.user_model import User
 from app.services.exam_service import ExamService
+from app.services.exam_session_guard import ExamSessionGuard
 from app.services.settings_service import SettingsService
 from app.utils.helpers import create_submission_pdf
 
@@ -13,7 +15,8 @@ student_bp = Blueprint("student", __name__, url_prefix="/student")
 
 def _owns_session(session_code):
     """Keep student exam URLs bound to the browser session that joined them."""
-    return session.get("student_session_code") == session_code
+    student_session = StudentSession.query.filter_by(session_code=session_code).first()
+    return bool(student_session and ExamSessionGuard.browser_owns_attempt(student_session))
 
 
 def _redirect_if_not_owner(session_code):
@@ -24,6 +27,14 @@ def _redirect_if_not_owner(session_code):
 
 
 def _require_student_details():
+    student_user_id = session.get("student_user_id")
+    if student_user_id:
+        user = User.query.get(student_user_id)
+        if not user or user.role != "student" or not user.is_active:
+            session.clear()
+            flash("Your student account is no longer active. Please contact the administrator.", "danger")
+            return None, None, redirect(url_for("auth.student_login"))
+
     student_name = session.get("student_name", "").strip()
     roll_no = session.get("roll_no", "").strip()
     if not student_name or not roll_no:
@@ -67,7 +78,7 @@ def _remember_student_session(student_session):
     session["student_id"] = student_session.id
     session["student_name"] = student_session.student_name
     session["roll_no"] = student_session.roll_no
-    session["student_session_code"] = student_session.session_code
+    ExamSessionGuard.remember_browser_attempt(student_session)
 
 
 def _precheck_key(session_code):
@@ -146,6 +157,11 @@ def start_assigned_exam(exam_id):
         flash("This exam is not assigned to your roll number.", "danger")
         return redirect(url_for("student.dashboard"))
 
+    existing_session = _latest_session_for_exam(exam.id, roll_no)
+    if existing_session and ExamSessionGuard.is_locked(existing_session):
+        _remember_student_session(existing_session)
+        return redirect(url_for("student.submitted", session_code=existing_session.session_code))
+
     if exam.status == "closed":
         flash("This exam has been closed by the teacher.", "danger")
         return redirect(url_for("student.dashboard"))
@@ -157,7 +173,7 @@ def start_assigned_exam(exam_id):
     )
     _remember_student_session(student_session)
 
-    if student_session.status in ["submitted", "evaluated"]:
+    if ExamSessionGuard.is_locked(student_session):
         return redirect(url_for("student.submitted", session_code=student_session.session_code))
 
     if exam.status == "active" and not student_session.start_time:
@@ -213,6 +229,10 @@ def join_exam():
             return redirect(url_for("student.join_exam"))
 
         if exam.status == "closed":
+            existing_session = _latest_session_for_exam(exam.id, roll_no)
+            if existing_session and ExamSessionGuard.is_locked(existing_session):
+                _remember_student_session(existing_session)
+                return redirect(url_for("student.submitted", session_code=existing_session.session_code))
             flash("This exam has been closed by the teacher.", "danger")
             return redirect(url_for("student.join_exam"))
 
@@ -227,7 +247,7 @@ def join_exam():
         )
         _remember_student_session(student_session)
 
-        if student_session.status in ["submitted", "evaluated"]:
+        if ExamSessionGuard.is_locked(student_session):
             return redirect(url_for("student.submitted", session_code=student_session.session_code))
 
         if exam.status == "active" and not student_session.start_time:
@@ -250,7 +270,7 @@ def waiting(session_code):
     student_session = StudentSession.query.filter_by(session_code=session_code).first_or_404()
     exam = student_session.exam_set
 
-    if student_session.status == "submitted":
+    if ExamSessionGuard.is_locked(student_session):
         return redirect(url_for("student.submitted", session_code=session_code))
 
     if exam.status == "active":
@@ -258,9 +278,12 @@ def waiting(session_code):
             return redirect(url_for("student.exam", session_code=session_code))
         return redirect(url_for("student.precheck", session_code=session_code))
 
-    return render_template("student/waiting.html",
-                           student_session=student_session,
-                           exam=exam)
+    return render_template(
+        "student/waiting.html",
+        student_session=student_session,
+        exam=exam,
+        attempt_token=ExamSessionGuard.ensure_token(student_session),
+    )
 
 
 @student_bp.route("/precheck/<session_code>", methods=["GET", "POST"])
@@ -273,7 +296,7 @@ def precheck(session_code):
     exam = student_session.exam_set
     question_count = Question.query.filter_by(exam_set_id=exam.id).count()
 
-    if student_session.status in ["submitted", "evaluated"]:
+    if ExamSessionGuard.is_locked(student_session):
         return redirect(url_for("student.submitted", session_code=session_code))
 
     if exam.status != "active":
@@ -311,7 +334,7 @@ def exam(session_code):
     student_session = StudentSession.query.filter_by(session_code=session_code).first_or_404()
     exam = student_session.exam_set
 
-    if student_session.status == "submitted":
+    if ExamSessionGuard.is_locked(student_session):
         return redirect(url_for("student.submitted", session_code=session_code))
 
     if exam.status != "active":
@@ -344,6 +367,7 @@ def exam(session_code):
         code_output_map=code_output_map,
         remaining_seconds=remaining_seconds,
         max_violations_allowed=SettingsService.max_violations_allowed(),
+        attempt_token=ExamSessionGuard.ensure_token(student_session),
     )
 
 
@@ -355,6 +379,13 @@ def submitted(session_code):
 
     student_session = StudentSession.query.filter_by(session_code=session_code).first_or_404()
     result = Result.query.filter_by(session_id=student_session.id).first()
+
+    if not ExamSessionGuard.is_locked(student_session):
+        if student_session.status == "active":
+            return redirect(url_for("student.exam", session_code=session_code))
+        if student_session.exam_set.status == "active":
+            return redirect(url_for("student.precheck", session_code=session_code))
+        return redirect(url_for("student.waiting", session_code=session_code))
 
     questions = Question.query.filter_by(exam_set_id=student_session.exam_set_id) \
         .order_by(Question.question_number.asc()).all()
@@ -384,6 +415,10 @@ def export_pdf(session_code):
         return owner_redirect
 
     student_session = StudentSession.query.filter_by(session_code=session_code).first_or_404()
+    if not ExamSessionGuard.is_locked(student_session):
+        flash("Answer copies are available after the exam is submitted.", "info")
+        return redirect(url_for("student.exam", session_code=session_code))
+
     pdf_buffer = create_submission_pdf(student_session)
     filename = f"submission_{student_session.roll_no}_{student_session.session_code}.pdf"
 

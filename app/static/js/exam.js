@@ -2,6 +2,7 @@ let examTimerInterval = null;
 let heartbeatInterval = null;
 let debounceTimers = {};
 let currentSessionCode = null;
+let currentSessionToken = null;
 let examSubmitted = false;
 let violationCount = 0;
 let fullscreenReady = false;
@@ -34,15 +35,34 @@ function formatTime(seconds) {
     return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
+function examRequestHeaders() {
+    const headers = { "Content-Type": "application/json" };
+    if (currentSessionToken) headers["X-Exam-Token"] = currentSessionToken;
+    return headers;
+}
+
+function examPayload(payload = {}) {
+    return { ...payload, session_token: currentSessionToken };
+}
+
+function redirectIfLocked(data) {
+    if (data?.redirect) {
+        window.location.replace(data.redirect);
+        return true;
+    }
+    return false;
+}
+
 async function saveAnswer(sessionCode, questionId, answerText) {
     updateAutoSaveStatus?.("saving");
     try {
         const response = await fetch(`/api/student/session/${sessionCode}/save`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ question_id: questionId, answer_text: answerText })
+            headers: examRequestHeaders(),
+            body: JSON.stringify(examPayload({ question_id: questionId, answer_text: answerText }))
         });
         const data = await response.json();
+        if (response.status === 403 && redirectIfLocked(data)) return;
         if (!response.ok || !data.ok) {
             throw new Error(data.message || "Autosave failed");
         }
@@ -126,14 +146,15 @@ async function runCodeForQuestion(button) {
         await saveAnswer(sessionCode, questionId, codeField.value);
         const response = await fetch(`/api/student/session/${sessionCode}/execute`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
+            headers: examRequestHeaders(),
+            body: JSON.stringify(examPayload({
                 question_id: questionId,
                 code: codeField.value,
                 stdin: stdinField ? stdinField.value : ""
-            })
+            }))
         });
         const data = await response.json();
+        if (response.status === 403 && redirectIfLocked(data)) return;
         const parts = [];
         parts.push(`[${(data.status || "unknown").toUpperCase()}] ${data.message || ""}`.trim());
         if (typeof data.execution_time_ms === "number") {
@@ -164,10 +185,11 @@ async function sendHeartbeat(sessionCode, focused = true) {
     try {
         const response = await fetch(`/api/student/session/${sessionCode}/heartbeat`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ focused, violation_count: violationCount })
+            headers: examRequestHeaders(),
+            body: JSON.stringify(examPayload({ focused, violation_count: violationCount }))
         });
         const data = await response.json();
+        if (response.status === 403 && redirectIfLocked(data)) return;
         if (typeof data.max_violations_allowed === "number") {
             MAX_WARNINGS = data.max_violations_allowed;
         }
@@ -177,6 +199,10 @@ async function sendHeartbeat(sessionCode, focused = true) {
         }
         if (typeof window.syncExamStatus === "function") {
             window.syncExamStatus(data);
+        }
+        if (data.redirect && data.submitted) {
+            window.location.replace(data.redirect);
+            return;
         }
         if (data.submitted && !examSubmitted) forceSubmit(sessionCode);
     } catch (e) {
@@ -188,10 +214,11 @@ async function reportViolation(sessionCode, type, detail) {
     try {
         const response = await fetch(`/api/student/session/${sessionCode}/violation`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ type, detail, violation_count: violationCount })
+            headers: examRequestHeaders(),
+            body: JSON.stringify(examPayload({ type, detail, violation_count: violationCount }))
         });
         const data = await response.json();
+        if (response.status === 403 && redirectIfLocked(data)) return data;
         if (typeof data.max_violations_allowed === "number") {
             MAX_WARNINGS = data.max_violations_allowed;
         }
@@ -209,7 +236,7 @@ async function reportViolation(sessionCode, type, detail) {
 function forceSubmit(sessionCode) {
     if (examSubmitted) return;
     examSubmitted = true;
-    window.location.href = `/student/submitted/${sessionCode}`;
+    window.location.replace(`/student/submitted/${sessionCode}`);
 }
 
 async function submitExam(sessionCode, manual = false, reason = null) {
@@ -219,14 +246,14 @@ async function submitExam(sessionCode, manual = false, reason = null) {
         await Promise.allSettled(snapshotAnswers());
         const response = await fetch(`/api/student/session/${sessionCode}/submit`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ reason: reason || (manual ? "Manual submission" : "Auto submission") })
+            headers: examRequestHeaders(),
+            body: JSON.stringify(examPayload({ reason: reason || (manual ? "Manual submission" : "Auto submission") }))
         });
         const data = await response.json();
-        window.location.href = data.redirect || `/student/submitted/${sessionCode}`;
+        window.location.replace(data.redirect || `/student/submitted/${sessionCode}`);
     } catch (e) {
         console.error("Submit failed:", e);
-        window.location.href = `/student/submitted/${sessionCode}`;
+        window.location.replace(`/student/submitted/${sessionCode}`);
     }
 }
 
@@ -304,14 +331,22 @@ function registerViolation(sessionCode, type, detail) {
     showProctorWarning(type, `${detail} ${suffix}`);
 }
 
-function initWaitingPage(sessionCode) {
+function initWaitingPage(sessionCode, sessionToken = null) {
     currentSessionCode = sessionCode;
+    currentSessionToken = sessionToken;
     setInterval(async () => {
         try {
-            const res = await fetch(`/api/student/session/${sessionCode}/status`);
+            const res = await fetch(`/api/student/session/${sessionCode}/status`, {
+                headers: currentSessionToken ? { "X-Exam-Token": currentSessionToken } : {}
+            });
             const data = await res.json();
+            if (res.status === 403 && redirectIfLocked(data)) return;
+            if (data.redirect && data.submitted) {
+                window.location.replace(data.redirect);
+                return;
+            }
             if (data.exam_status === "active" && data.session_status !== "submitted") {
-                window.location.href = `/student/precheck/${sessionCode}`;
+                window.location.replace(`/student/precheck/${sessionCode}`);
             }
         } catch (e) {
             console.error("Waiting poll failed:", e);
@@ -319,8 +354,9 @@ function initWaitingPage(sessionCode) {
     }, 3000);
 }
 
-function initExamPage(sessionCode, remainingSeconds) {
+function initExamPage(sessionCode, remainingSeconds, sessionToken = null) {
     currentSessionCode = sessionCode;
+    currentSessionToken = sessionToken;
     const shell = document.querySelector(".exam-shell");
     const configuredLimit = parseInt(shell?.dataset.warningLimit || "3", 10);
     if (configuredLimit > 0) MAX_WARNINGS = configuredLimit;
@@ -349,7 +385,11 @@ function initExamPage(sessionCode, remainingSeconds) {
             updateTimer();
         }
         if (data.session_status === "submitted" || data.session_status === "evaluated" || data.submitted) {
-            forceSubmit(sessionCode);
+            if (data.redirect) {
+                window.location.replace(data.redirect);
+            } else {
+                forceSubmit(sessionCode);
+            }
         }
     };
 
@@ -428,7 +468,8 @@ function initExamPage(sessionCode, remainingSeconds) {
             const blob = new Blob([JSON.stringify({
                 type: "PAGE_CLOSE_ATTEMPT",
                 detail: "Repeated page close/refresh attempts",
-                violation_count: attempts
+                violation_count: attempts,
+                session_token: currentSessionToken
             })], { type: "application/json" });
             navigator.sendBeacon(`/api/student/session/${sessionCode}/violation`, blob);
             return;
@@ -445,7 +486,8 @@ function initExamPage(sessionCode, remainingSeconds) {
             const blob = new Blob([JSON.stringify({
                 type: "PAGE_CLOSE_ATTEMPT",
                 detail: "Repeated page close/refresh attempts",
-                violation_count: attempts
+                violation_count: attempts,
+                session_token: currentSessionToken
             })], { type: "application/json" });
             navigator.sendBeacon(`/api/student/session/${sessionCode}/violation`, blob);
         }

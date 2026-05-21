@@ -28,6 +28,6 @@
 
 {% block scripts %}
 <script>
-  initWaitingPage("{{ student_session.session_code }}");
+  initWaitingPage("{{ student_session.session_code }}", {{ attempt_token|tojson }});
 </script>
 {% endblock %}

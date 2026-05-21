@@ -9,6 +9,11 @@ def generate_session_code():
     return code[:16]
 
 
+def generate_session_token():
+    """Generate the private per-attempt token stored in the browser session."""
+    return secrets.token_urlsafe(32)
+
+
 class StudentSession(db.Model):
     __tablename__ = "student_sessions"
 
@@ -24,13 +29,14 @@ class StudentSession(db.Model):
 
     # Session Info
     session_code = db.Column(db.String(64), unique=True, nullable=False, default=generate_session_code)
+    session_token = db.Column(db.String(128), unique=True, nullable=True, index=True)
 
     start_time = db.Column(db.DateTime, nullable=True)
     end_time = db.Column(db.DateTime, nullable=True)
     submitted_at = db.Column(db.DateTime, nullable=True)
 
     status = db.Column(db.String(20), default="waiting")
-    # waiting / active / submitted / auto_submitted / evaluated
+    # waiting / active / submitted / auto_submitted / terminated / evaluated
 
     # Proctoring & Security
     focus_violations = db.Column(db.Integer, default=0)

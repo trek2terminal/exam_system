@@ -33,10 +33,39 @@ class MigrationService:
         return True
 
     @staticmethod
+    def _has_index(table_name, index_name):
+        if not MigrationService._has_table(table_name):
+            return False
+        indexes = MigrationService._inspector().get_indexes(table_name)
+        return index_name in {index["name"] for index in indexes}
+
+    @staticmethod
+    def _create_index_if_missing(table_name, index_name, column_name, unique=False):
+        if MigrationService._has_index(table_name, index_name):
+            return False
+
+        unique_sql = "UNIQUE " if unique else ""
+        with db.engine.begin() as connection:
+            connection.execute(
+                text(f"CREATE {unique_sql}INDEX IF NOT EXISTS {index_name} ON {table_name} ({column_name})")
+            )
+        return True
+
+    @staticmethod
     def _migration_answer_code_execution_columns():
         MigrationService._add_column_if_missing("answers", "code_output", "TEXT")
         MigrationService._add_column_if_missing("answers", "execution_status", "VARCHAR(30)")
         MigrationService._add_column_if_missing("answers", "execution_time_ms", "INTEGER")
+
+    @staticmethod
+    def _migration_student_session_tokens():
+        MigrationService._add_column_if_missing("student_sessions", "session_token", "VARCHAR(128)")
+        MigrationService._create_index_if_missing(
+            "student_sessions",
+            "ix_student_sessions_session_token",
+            "session_token",
+            unique=True,
+        )
 
     @staticmethod
     def _migration_platform_settings_seed():
@@ -71,6 +100,11 @@ class MigrationService:
             "Seed default platform settings row",
             _migration_platform_settings_seed.__func__,
         ),
+        (
+            "20260521_003_student_session_tokens",
+            "Add private attempt token to student exam sessions",
+            _migration_student_session_tokens.__func__,
+        ),
     ]
 
     @staticmethod
@@ -88,6 +122,11 @@ class MigrationService:
             )
         if version == "20260521_002_platform_settings_seed":
             return PlatformSettings.query.first() is not None
+        if version == "20260521_003_student_session_tokens":
+            return (
+                MigrationService._has_column("student_sessions", "session_token")
+                and MigrationService._has_index("student_sessions", "ix_student_sessions_session_token")
+            )
         return False
 
     @staticmethod

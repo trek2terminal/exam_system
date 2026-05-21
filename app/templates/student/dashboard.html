@@ -62,7 +62,7 @@
             </div>
 
             <div class="student-exam-actions">
-              {% if attempt and attempt.status in ["submitted", "evaluated"] %}
+              {% if attempt and attempt.status in ["submitted", "evaluated", "terminated", "auto_submitted"] %}
                 <a class="btn secondary" href="{{ url_for('student.submitted', session_code=attempt.session_code) }}">
                   <i class="fas fa-circle-check"></i> View submission
                 </a>

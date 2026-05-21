@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from flask import Blueprint, current_app, jsonify, request, session
+from flask import Blueprint, current_app, jsonify, request
 
 from app.models.audit_model import AuditLog
 from app.models.database import db
@@ -9,6 +9,7 @@ from app.models.submission_model import Answer, StudentSession
 from app.services.autosave_service import AutoSaveService
 from app.services.code_execution_service import CodeExecutionService
 from app.services.exam_service import ExamService
+from app.services.exam_session_guard import ExamSessionGuard, MUTABLE_SESSION_STATUS
 from app.services.result_service import ResultService
 from app.services.security_service import SecurityService
 from app.services.settings_service import SettingsService
@@ -19,12 +20,11 @@ from app.utils.rate_limiter import rate_limit
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 
 
-def _student_session_authorized(session_code):
-    return session.get("student_session_code") == session_code
-
-
-def _forbidden_session_response():
-    return jsonify({"ok": False, "message": "Unauthorized exam session"}), 403
+def _forbidden_session_response(message="Unauthorized exam session", redirect=None):
+    payload = {"ok": False, "message": message}
+    if redirect:
+        payload["redirect"] = redirect
+    return jsonify(payload), 403
 
 
 def _get_student_session(session_code):
@@ -34,6 +34,30 @@ def _get_student_session(session_code):
 def _get_json_payload():
     payload = request.get_json(silent=True)
     return payload if isinstance(payload, dict) else {}
+
+
+def _submitted_redirect(session_code):
+    return f"/student/submitted/{session_code}"
+
+
+def _locked_session_response(student_session):
+    return _forbidden_session_response(
+        "This exam attempt is already locked.",
+        redirect=_submitted_redirect(student_session.session_code),
+    )
+
+
+def _require_attempt(session_code, payload=None, require_active=False):
+    student_session = _get_student_session(session_code)
+    payload = payload or {}
+
+    if not ExamSessionGuard.request_owns_attempt(student_session, payload):
+        return None, _forbidden_session_response()
+
+    if require_active and student_session.status != MUTABLE_SESSION_STATUS:
+        return None, _locked_session_response(student_session)
+
+    return student_session, None
 
 
 def _parse_int_field(payload, field_name):
@@ -48,13 +72,14 @@ def _parse_int_field(payload, field_name):
 
 @api_bp.route("/student/session/<session_code>/status")
 def session_status(session_code):
-    if not _student_session_authorized(session_code):
-        return _forbidden_session_response()
+    student_session, error_response = _require_attempt(session_code)
+    if error_response:
+        return error_response
 
-    student_session = _get_student_session(session_code)
     exam = student_session.exam_set
 
     remaining_seconds = get_remaining_seconds(exam, student_session.start_time)
+    is_locked = ExamSessionGuard.is_locked(student_session)
 
     return jsonify(
         {
@@ -65,7 +90,8 @@ def session_status(session_code):
             "focus_violations": student_session.focus_violations,
             "max_violations_allowed": SettingsService.max_violations_allowed(),
             "suspicion_score": getattr(student_session, "suspicion_score", 0),
-            "submitted": student_session.status in ["submitted", "evaluated"],
+            "submitted": is_locked,
+            "redirect": _submitted_redirect(session_code) if is_locked else None,
         }
     )
 
@@ -74,15 +100,11 @@ def session_status(session_code):
 @rate_limit("autosave")
 def save_answer(session_code):
     """Autosave answer using service"""
-    if not _student_session_authorized(session_code):
-        return _forbidden_session_response()
-
-    student_session = _get_student_session(session_code)
-
-    if student_session.status not in ["active", "waiting"]:
-        return jsonify({"ok": False, "message": "Session is not active"}), 400
-
     data = _get_json_payload()
+    student_session, error_response = _require_attempt(session_code, data, require_active=True)
+    if error_response:
+        return error_response
+
     question_id = _parse_int_field(data, "question_id")
     answer_text = (data.get("answer_text", "") or "").strip()
 
@@ -98,14 +120,11 @@ def save_answer(session_code):
 @rate_limit("code_execution")
 def execute_code(session_code):
     """Run Python code for an authorized coding question."""
-    if not _student_session_authorized(session_code):
-        return _forbidden_session_response()
-
-    student_session = _get_student_session(session_code)
-    if student_session.status != "active":
-        return jsonify({"ok": False, "message": "Code can only run during an active exam."}), 400
-
     data = _get_json_payload()
+    student_session, error_response = _require_attempt(session_code, data, require_active=True)
+    if error_response:
+        return error_response
+
     question_id = _parse_int_field(data, "question_id")
     code = data.get("code") or ""
     stdin_text = data.get("stdin") or ""
@@ -155,11 +174,11 @@ def execute_code(session_code):
 @rate_limit("heartbeat")
 def heartbeat(session_code):
     """Handle heartbeat and proctoring violations"""
-    if not _student_session_authorized(session_code):
-        return _forbidden_session_response()
-
-    student_session = _get_student_session(session_code)
     data = _get_json_payload()
+    student_session, error_response = _require_attempt(session_code, data, require_active=True)
+    if error_response:
+        return error_response
+
     remaining_seconds = get_remaining_seconds(student_session.exam_set, student_session.start_time)
 
     focused = bool(data.get("focused", True))
@@ -190,14 +209,11 @@ def heartbeat(session_code):
 @rate_limit("violation")
 def record_violation(session_code):
     """Record an append-only browser integrity violation."""
-    if not _student_session_authorized(session_code):
-        return _forbidden_session_response()
-
-    student_session = _get_student_session(session_code)
-    if student_session.status != "active":
-        return jsonify({"ok": False, "message": "Session is not active"}), 400
-
     data = _get_json_payload()
+    student_session, error_response = _require_attempt(session_code, data, require_active=True)
+    if error_response:
+        return error_response
+
     violation_type = (data.get("type") or "UNKNOWN").strip()
     detail = (data.get("detail") or "").strip()
     client_count = _parse_int_field(data, "violation_count") or 0
@@ -229,26 +245,24 @@ def record_violation(session_code):
 @rate_limit("submit")
 def submit_session(session_code):
     """Manual or auto exam submission"""
-    if not _student_session_authorized(session_code):
-        return _forbidden_session_response()
-
-    student_session = _get_student_session(session_code)
-
     data = _get_json_payload()
+    student_session, error_response = _require_attempt(session_code, data, require_active=True)
+    if error_response:
+        return error_response
+
     reason = (data.get("reason") or "Manual submission").strip()
 
-    if student_session.status not in ["submitted", "evaluated"]:
-        ExamService.end_exam(session_code, reason=reason)
-        AuditLog(
-            user_id=None,
-            action="submit_exam_session",
-            resource_type="student_session",
-            resource_id=student_session.id,
-            reason=reason,
-            status="success",
-            ip_address=get_client_ip(),
-            user_agent=request.headers.get("User-Agent"),
-        ).save()
+    ExamService.end_exam(session_code, reason=reason)
+    AuditLog(
+        user_id=None,
+        action="submit_exam_session",
+        resource_type="student_session",
+        resource_id=student_session.id,
+        reason=reason,
+        status="success",
+        ip_address=get_client_ip(),
+        user_agent=request.headers.get("User-Agent"),
+    ).save()
 
     try:
         ResultService.calculate_result(session_code)

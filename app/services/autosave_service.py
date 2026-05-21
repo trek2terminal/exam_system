@@ -1,5 +1,6 @@
 from datetime import datetime
 from app.models.database import db
+from app.models.exam_model import Question
 from app.models.submission_model import StudentSession, Answer
 
 
@@ -11,6 +12,13 @@ class AutoSaveService:
         session = StudentSession.query.filter_by(session_code=session_code).first()
         if not session:
             return False, "Invalid session"
+
+        if session.status != "active":
+            return False, "This exam attempt is locked."
+
+        question = Question.query.filter_by(id=question_id, exam_set_id=session.exam_set_id).first()
+        if not question:
+            return False, "Question does not belong to this exam."
 
         # Update last heartbeat
         session.last_heartbeat = datetime.utcnow()

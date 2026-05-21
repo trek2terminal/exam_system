@@ -14,6 +14,18 @@ from app.models.submission_model import Answer
 from app.models.result_model import Result
 
 
+def _active_user(user_id, expected_role):
+    if not user_id:
+        return None
+
+    from app.models.user_model import User
+
+    user = User.query.get(user_id)
+    if not user or user.role != expected_role or not user.is_active:
+        return None
+    return user
+
+
 def teacher_required(view):
     """Decorator to protect teacher-only routes"""
 
@@ -24,6 +36,10 @@ def teacher_required(view):
             return redirect(url_for("auth.teacher_login"))
         if session.get("role") != "teacher":
             flash("Unauthorized access.", "danger")
+            return redirect(url_for("auth.teacher_login"))
+        if not _active_user(session.get("teacher_id"), "teacher"):
+            session.clear()
+            flash("Your teacher account is no longer active. Please contact the administrator.", "danger")
             return redirect(url_for("auth.teacher_login"))
         return view(*args, **kwargs)
 
@@ -41,6 +57,10 @@ def admin_required(view):
         if session.get("role") != "admin":
             flash("Unauthorized access. Admin privileges required.", "danger")
             return redirect(url_for("auth.admin_login"))
+        if not _active_user(session.get("admin_id"), "admin"):
+            session.clear()
+            flash("Your admin session is no longer active. Please log in again.", "danger")
+            return redirect(url_for("auth.admin_login"))
         return view(*args, **kwargs)
 
     return wrapper
@@ -56,6 +76,11 @@ def student_required(view):
             return redirect(url_for("auth.student_login"))
         if session.get("role") != "student":
             flash("Unauthorized access.", "danger")
+            return redirect(url_for("auth.student_login"))
+        student_user_id = session.get("student_user_id")
+        if student_user_id and not _active_user(student_user_id, "student"):
+            session.clear()
+            flash("Your student account is no longer active. Please contact the administrator.", "danger")
             return redirect(url_for("auth.student_login"))
         return view(*args, **kwargs)
 

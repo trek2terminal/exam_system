@@ -2,7 +2,7 @@
 {% block title %}Exam Window{% endblock %}
 
 {% block content %}
-<div class="exam-shell student-exam-shell" data-session-code="{{ student_session.session_code }}" data-remaining="{{ remaining_seconds }}" data-warning-limit="{{ max_violations_allowed }}">
+<div class="exam-shell student-exam-shell" data-session-code="{{ student_session.session_code }}" data-session-token="{{ attempt_token }}" data-remaining="{{ remaining_seconds }}" data-warning-limit="{{ max_violations_allowed }}">
   <div id="fullscreenGate" class="fullscreen-gate">
     <div class="fullscreen-panel">
       <i class="fas fa-expand"></i>
@@ -171,6 +171,6 @@
 
 {% block scripts %}
 <script>
-  initExamPage("{{ student_session.session_code }}", {{ remaining_seconds }});
+  initExamPage("{{ student_session.session_code }}", {{ remaining_seconds }}, {{ attempt_token|tojson }});
 </script>
 {% endblock %}

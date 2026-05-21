@@ -69,3 +69,11 @@
   </section>
 </div>
 {% endblock %}
+
+{% block scripts %}
+<script>
+  if (window.history && window.history.replaceState) {
+    window.history.replaceState({ examLocked: true }, "", window.location.href);
+  }
+</script>
+{% endblock %}

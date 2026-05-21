@@ -10,6 +10,7 @@ from app.models.submission_model import StudentSession, Answer
 from app.models.result_model import Result
 from app.models.audit_model import AuditLog, ViolationLog
 from app.services.exam_service import ExamService
+from app.services.exam_session_guard import LOCKED_SESSION_STATUSES
 from app.services.settings_service import SettingsService
 from app.utils.export_utils import csv_response, format_datetime
 from app.utils.helpers import admin_required, get_remaining_seconds
@@ -97,7 +98,7 @@ def dashboard():
     total_exams = ExamSet.query.count()
     active_exams = ExamSet.query.filter_by(status="active").count()
     total_sessions = StudentSession.query.count()
-    completed_sessions = StudentSession.query.filter_by(status="submitted").count()
+    completed_sessions = StudentSession.query.filter(StudentSession.status.in_(LOCKED_SESSION_STATUSES)).count()
     violation_alerts = ViolationLog.query.count()
 
     # Recent activity
@@ -456,7 +457,7 @@ def view_exam(exam_id):
 
     # Statistics
     total_sessions = len(sessions)
-    submitted = sum(1 for s in sessions if s.status in ["submitted", "evaluated"])
+    submitted = sum(1 for s in sessions if s.status in LOCKED_SESSION_STATUSES)
     active_sessions = sum(1 for s in sessions if s.status == "active")
 
     return render_template(
@@ -682,8 +683,8 @@ def terminate_session(session_id):
     student_session = StudentSession.query.get_or_404(session_id)
     reason = request.form.get("reason", "").strip() or "Terminated by admin"
 
-    if student_session.status not in ["submitted", "evaluated"]:
-        ExamService.end_exam(student_session.session_code, reason=reason)
+    if student_session.status not in ["submitted", "evaluated", "terminated"]:
+        ExamService.end_exam(student_session.session_code, reason=reason, status="terminated")
 
     AuditLog(
         user_id=session.get("admin_id"),
@@ -705,8 +706,8 @@ def terminate_session(session_id):
 def grant_second_chance(session_id):
     student_session = StudentSession.query.get_or_404(session_id)
 
-    if student_session.status in ["submitted", "evaluated"]:
-        flash("Submitted sessions cannot be resumed.", "danger")
+    if student_session.status in ["submitted", "evaluated", "terminated"]:
+        flash("Locked sessions cannot be resumed.", "danger")
         return redirect(request.referrer or url_for("admin.violations"))
 
     student_session.status = "active"
