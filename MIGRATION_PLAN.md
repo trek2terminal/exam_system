@@ -61,6 +61,7 @@ This project should follow that same practical model.
 - Student coding-question UI with code textarea, stdin box, run button, and saved output panel.
 - Code execution output stored with answers and shown to teacher/student/PDF review surfaces.
 - Pre-exam checklist/start gate for active exams. Timed sessions now start only after the student confirms readiness and rules.
+- CSV exports for teacher all-results, per-exam results with per-question marks/remarks, and admin violation logs.
 
 ## Python Feature Roadmap
 

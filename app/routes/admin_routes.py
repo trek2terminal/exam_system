@@ -10,6 +10,7 @@ from app.models.submission_model import StudentSession, Answer
 from app.models.result_model import Result
 from app.models.audit_model import AuditLog, ViolationLog
 from app.services.exam_service import ExamService
+from app.utils.export_utils import csv_response, format_datetime
 from app.utils.helpers import admin_required, get_remaining_seconds
 from app.utils.network import get_client_ip
 from app.utils.rate_limiter import rate_limit
@@ -611,6 +612,64 @@ def violations():
         pagination=logs_paginated,
         active_only=active_only,
     )
+
+
+@admin_bp.route("/violations/export")
+@admin_required
+def export_violations():
+    """Export violation logs for audit/offline review."""
+    active_only = request.args.get("active", "0") == "1"
+
+    query = ViolationLog.query.join(StudentSession)
+    if active_only:
+        query = query.filter(StudentSession.status == "active")
+
+    violations = query.order_by(ViolationLog.occurred_at.desc()).all()
+
+    headers = [
+        "Violation ID",
+        "Occurred At",
+        "Student Name",
+        "Roll No",
+        "Exam",
+        "Set Code",
+        "Session Code",
+        "Session Status",
+        "Violation Type",
+        "Detail",
+        "Client Count",
+        "Session Violation Count",
+        "Suspicion Score",
+        "IP Address",
+        "User Agent",
+    ]
+
+    rows = []
+    for violation in violations:
+        student_session = violation.student_session
+        exam = student_session.exam_set
+        rows.append(
+            [
+                violation.id,
+                format_datetime(violation.occurred_at),
+                student_session.student_name,
+                student_session.roll_no,
+                exam.exam_name,
+                exam.set_code,
+                student_session.session_code,
+                student_session.status,
+                violation.violation_type,
+                violation.detail,
+                violation.client_count,
+                student_session.focus_violations,
+                student_session.suspicion_score,
+                violation.ip_address,
+                violation.user_agent,
+            ]
+        )
+
+    filename = "active_violation_logs.csv" if active_only else "violation_logs.csv"
+    return csv_response(filename, headers, rows)
 
 
 @admin_bp.route("/sessions/<int:session_id>/terminate", methods=["POST"])

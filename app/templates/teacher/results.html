@@ -8,7 +8,12 @@
       <h1>All Submissions</h1>
       <p class="muted">Student sessions from exams created by {{ session.get('teacher_name') }}.</p>
     </div>
-    <a href="{{ url_for('teacher.dashboard') }}" class="btn secondary">Back</a>
+    <div class="actions">
+      <a href="{{ url_for('teacher.export_results') }}" class="btn secondary">
+        <i class="fas fa-file-csv"></i> Export CSV
+      </a>
+      <a href="{{ url_for('teacher.dashboard') }}" class="btn secondary">Back</a>
+    </div>
   </div>
 
   {% if sessions %}

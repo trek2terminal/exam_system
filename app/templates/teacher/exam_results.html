@@ -9,6 +9,9 @@
       <p class="muted">{{ exam.subject }} | Set {{ exam.set_code }} | Access Code {{ exam.access_code }}</p>
     </div>
     <div class="actions">
+      <a href="{{ url_for('teacher.export_exam_results', exam_id=exam.id) }}" class="btn secondary">
+        <i class="fas fa-file-csv"></i> Export CSV
+      </a>
       <form method="post" action="{{ url_for('teacher.publish_exam_results', exam_id=exam.id) }}">
         <input type="hidden" name="publish" value="1">
         <button class="btn primary" type="submit" {% if evaluated_count == 0 %}disabled{% endif %}>Publish All Evaluated</button>

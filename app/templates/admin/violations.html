@@ -10,6 +10,9 @@
             <p>Append-only exam integrity events from active and submitted sessions.</p>
         </div>
         <div class="actions">
+            <a class="btn primary" href="{{ url_for('admin.export_violations', active=1 if active_only else 0) }}">
+                <i class="fas fa-file-csv"></i> Export CSV
+            </a>
             <a class="btn secondary" href="{{ url_for('admin.violations', active=1 if not active_only else 0) }}">
                 {% if active_only %}Show All{% else %}Active Only{% endif %}
             </a>

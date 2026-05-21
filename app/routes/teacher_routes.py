@@ -8,6 +8,7 @@ from app.models.submission_model import StudentSession, Answer
 from app.models.result_model import Result, QuestionMark
 from app.services.exam_service import ExamService
 from app.services.parser_service import QuestionParserService
+from app.utils.export_utils import csv_response, format_datetime
 from app.utils.helpers import teacher_required, parse_options
 
 teacher_bp = Blueprint("teacher", __name__, url_prefix="/teacher")
@@ -37,6 +38,27 @@ def _parse_enrollment_line(line):
         return None
 
     return roll_no, student_name
+
+
+def _session_result_base_row(student_session):
+    result = student_session.result
+    return [
+        student_session.exam_set.exam_name,
+        student_session.exam_set.subject,
+        student_session.exam_set.set_code,
+        student_session.student_name,
+        student_session.roll_no,
+        student_session.status,
+        format_datetime(student_session.start_time),
+        format_datetime(student_session.submitted_at),
+        result.total_marks_obtained if result else "",
+        result.total_marks if result else "",
+        result.percentage if result else "",
+        "yes" if result and result.published else "no",
+        format_datetime(result.published_at) if result else "",
+        student_session.focus_violations,
+        result.teacher_remarks if result else "",
+    ]
 
 
 @teacher_bp.route("/dashboard")
@@ -407,6 +429,41 @@ def results():
     return render_template("teacher/results.html", sessions=sessions)
 
 
+@teacher_bp.route("/results/export")
+@teacher_required
+def export_results():
+    teacher_id = session.get("teacher_id")
+    their_exam_ids = [e.id for e in ExamSet.query.filter_by(created_by=teacher_id).all()]
+    sessions = []
+    if their_exam_ids:
+        sessions = (
+            StudentSession.query.filter(StudentSession.exam_set_id.in_(their_exam_ids))
+            .order_by(StudentSession.created_at.desc())
+            .all()
+        )
+
+    headers = [
+        "Exam",
+        "Subject",
+        "Set Code",
+        "Student Name",
+        "Roll No",
+        "Session Status",
+        "Started At",
+        "Submitted At",
+        "Marks Obtained",
+        "Total Marks",
+        "Percentage",
+        "Published",
+        "Published At",
+        "Violation Count",
+        "Teacher Remarks",
+    ]
+
+    rows = [_session_result_base_row(student_session) for student_session in sessions]
+    return csv_response("teacher_results.csv", headers, rows)
+
+
 @teacher_bp.route("/exam/<int:exam_id>/results")
 @teacher_required
 def exam_results(exam_id):
@@ -426,6 +483,62 @@ def exam_results(exam_id):
         evaluated_count=evaluated_count,
         published_count=published_count,
     )
+
+
+@teacher_bp.route("/exam/<int:exam_id>/results/export")
+@teacher_required
+def export_exam_results(exam_id):
+    exam = ExamSet.query.get_or_404(exam_id)
+    if exam.created_by != session.get("teacher_id"):
+        flash("You do not have permission to export this exam.", "danger")
+        return redirect(url_for("teacher.dashboard"))
+
+    sessions = (
+        StudentSession.query.filter_by(exam_set_id=exam.id)
+        .order_by(StudentSession.created_at.desc())
+        .all()
+    )
+    questions = Question.query.filter_by(exam_set_id=exam.id).order_by(Question.question_number.asc()).all()
+
+    headers = [
+        "Exam",
+        "Subject",
+        "Set Code",
+        "Student Name",
+        "Roll No",
+        "Session Status",
+        "Started At",
+        "Submitted At",
+        "Marks Obtained",
+        "Total Marks",
+        "Percentage",
+        "Published",
+        "Published At",
+        "Violation Count",
+        "Teacher Remarks",
+    ]
+    for question in questions:
+        headers.extend([f"Q{question.question_number} Marks", f"Q{question.question_number} Remark"])
+
+    rows = []
+    for student_session in sessions:
+        row = _session_result_base_row(student_session)
+        marks_by_question = {}
+        if student_session.result:
+            marks_by_question = {qm.question_id: qm for qm in student_session.result.question_marks}
+
+        for question in questions:
+            question_mark = marks_by_question.get(question.id)
+            row.extend(
+                [
+                    question_mark.marks_awarded if question_mark else "",
+                    question_mark.teacher_remark if question_mark else "",
+                ]
+            )
+        rows.append(row)
+
+    safe_name = "".join(ch if ch.isalnum() else "_" for ch in exam.set_code or exam.id)
+    return csv_response(f"results_{safe_name}.csv", headers, rows)
 
 
 @teacher_bp.route("/exam/<int:exam_id>/publish-results", methods=["POST"])
