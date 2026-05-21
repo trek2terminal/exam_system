@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Compare Answers{% endblock %}
+
+{% block content %}
+<div class="card">
+  <div class="row-between">
+    <div>
+      <p class="muted">{{ exam.exam_name }}</p>
+      <h1>Q{{ question.question_number }} Answer Comparison</h1>
+    </div>
+    <a class="btn secondary" href="{{ url_for('teacher.exam_results', exam_id=exam.id) }}">Back</a>
+  </div>
+
+  <div class="answer-box">
+    <strong>Question</strong>
+    <div class="answer-text">{{ question.question_text }}</div>
+    {% if question.model_answer %}
+      <div class="answer-text"><strong>Model answer:</strong> {{ question.model_answer }}</div>
+    {% endif %}
+  </div>
+
+  <div class="compare-answer-grid">
+    {% for student_session, answer in rows %}
+      <article class="compare-answer-card">
+        <div class="row-between">
+          <div>
+            <strong>{{ student_session.student_name }}</strong>
+            <p class="muted">Roll No {{ student_session.roll_no }}</p>
+          </div>
+          <span class="badge {{ student_session.status }}">{{ student_session.status | title }}</span>
+        </div>
+        {% if answer and answer.answer_text %}
+          <pre>{{ answer.answer_text }}</pre>
+        {% else %}
+          <p class="muted">No answer submitted.</p>
+        {% endif %}
+        {% if answer and answer.code_output %}
+          <pre class="code-review-output">{{ answer.code_output }}</pre>
+        {% endif %}
+      </article>
+    {% else %}
+      <p class="muted">No submitted answers yet.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

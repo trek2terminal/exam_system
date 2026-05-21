@@ -12,6 +12,9 @@
       <a href="{{ url_for('teacher.export_exam_results', exam_id=exam.id) }}" class="btn secondary">
         <i class="fas fa-file-csv"></i> Export CSV
       </a>
+      <a href="{{ url_for('teacher.similarity_report', exam_id=exam.id) }}" class="btn secondary">
+        <i class="fas fa-magnifying-glass-chart"></i> Similarity
+      </a>
       <form method="post" action="{{ url_for('teacher.publish_exam_results', exam_id=exam.id) }}">
         <input type="hidden" name="publish" value="1">
         <button class="btn primary" type="submit" {% if evaluated_count == 0 %}disabled{% endif %}>Publish All Evaluated</button>
@@ -40,6 +43,19 @@
   </div>
 
   {% if sessions %}
+    {% if questions %}
+      <div class="card inner">
+        <h2>Compare By Question</h2>
+        <div class="actions">
+          {% for q in questions %}
+            <a class="btn secondary small" href="{{ url_for('teacher.compare_question_answers', exam_id=exam.id, question_id=q.id) }}">
+              Q{{ q.question_number }}
+            </a>
+          {% endfor %}
+        </div>
+      </div>
+    {% endif %}
+
     <div class="table-wrap">
       <table>
         <thead>

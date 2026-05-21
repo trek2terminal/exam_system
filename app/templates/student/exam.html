@@ -69,23 +69,45 @@
 
       <div class="student-side-panel question-map">
         <span class="side-panel-label">Questions</span>
+        <div class="question-legend" aria-label="Question status legend">
+          <span><i class="legend-dot not-visited"></i>Not Visited</span>
+          <span><i class="legend-dot visited-unanswered"></i>Not Answered</span>
+          <span><i class="legend-dot answered"></i>Answered</span>
+          <span><i class="legend-dot marked-review"></i>Review</span>
+          <span><i class="legend-dot answered-marked"></i>Answered + Review</span>
+        </div>
         <div id="questionPalette" class="question-palette student-palette">
           {% for q in questions %}
-            <button type="button" class="palette-item" data-question="{{ q.question_number }}">{{ q.question_number }}</button>
+            {% set q_status = status_map.get(q.id, 'NOT_VISITED') %}
+            <button type="button" class="palette-item status-{{ q_status | lower | replace('_', '-') }}" data-question="{{ q.question_number }}" data-question-id="{{ q.id }}" data-status="{{ q_status }}">{{ q.question_number }}</button>
           {% endfor %}
+        </div>
+        <div class="question-status-summary" id="questionStatusSummary">
+          <div><span>Answered</span><strong data-summary="ANSWERED">0</strong></div>
+          <div><span>Not Answered</span><strong data-summary="VISITED_UNANSWERED">0</strong></div>
+          <div><span>Not Visited</span><strong data-summary="NOT_VISITED">0</strong></div>
+          <div><span>Review</span><strong data-summary="MARKED_REVIEW">0</strong></div>
+          <div><span>Answered + Review</span><strong data-summary="ANSWERED_MARKED">0</strong></div>
+          <div><span>Total</span><strong>{{ questions|length }}</strong></div>
         </div>
       </div>
     </aside>
 
     <section id="questionList" class="question-stream">
       {% for q in questions %}
-        <article class="student-question-card" id="question-{{ q.id }}" data-question-number="{{ q.question_number }}" data-question-id="{{ q.id }}">
+        {% set q_status = status_map.get(q.id, 'NOT_VISITED') %}
+        <article class="student-question-card" id="question-{{ q.id }}" data-question-number="{{ q.question_number }}" data-question-id="{{ q.id }}" data-visit-status="{{ q_status }}">
           <div class="question-card-head">
             <div>
               <span class="question-number">Question {{ q.question_number }}</span>
               <h2>{{ q.question_text }}</h2>
             </div>
-            <span class="badge">{{ q.marks }} mark{% if q.marks != 1 %}s{% endif %}</span>
+            <div class="question-card-tools">
+              <button type="button" class="flag-review-button {% if q_status in ['MARKED_REVIEW', 'ANSWERED_MARKED'] %}active{% endif %}" data-question-id="{{ q.id }}" aria-label="Flag question for review">
+                <i class="fas fa-bookmark"></i>
+              </button>
+              <span class="badge">{{ q.marks }} mark{% if q.marks != 1 %}s{% endif %}</span>
+            </div>
           </div>
 
           {% if q.question_type == 'mcq' %}

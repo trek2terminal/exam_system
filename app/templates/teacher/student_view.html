@@ -29,6 +29,13 @@
         <h3>Q{{ q.question_number }}. {{ q.question_text }}</h3>
         <p><strong>Max Marks:</strong> {{ q.marks }}</p>
 
+        {% if q.model_answer %}
+          <div class="answer-box model-answer-box">
+            <strong>Model Answer / Review Reference</strong>
+            <div class="answer-text">{{ q.model_answer }}</div>
+          </div>
+        {% endif %}
+
         <div class="answer-box">
           <strong>Student Answer</strong>
           <div class="answer-text">{{ answers_map.get(q.id, "No answer submitted") }}</div>

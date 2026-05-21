@@ -68,6 +68,55 @@ class MigrationService:
         )
 
     @staticmethod
+    def _migration_student_session_window_lock():
+        MigrationService._add_column_if_missing("student_sessions", "active_window_token", "VARCHAR(128)")
+        MigrationService._add_column_if_missing("student_sessions", "active_window_heartbeat_at", "DATETIME")
+        MigrationService._create_index_if_missing(
+            "student_sessions",
+            "ix_student_sessions_active_window_token",
+            "active_window_token",
+        )
+
+    @staticmethod
+    def _migration_exam_time_windows():
+        MigrationService._add_column_if_missing("exam_sets", "start_time", "DATETIME")
+        MigrationService._add_column_if_missing("exam_sets", "end_time", "DATETIME")
+
+    @staticmethod
+    def _migration_answer_visit_status():
+        MigrationService._add_column_if_missing(
+            "answers",
+            "visit_status",
+            "VARCHAR(30) NOT NULL DEFAULT 'NOT_VISITED'",
+        )
+
+    @staticmethod
+    def _migration_model_answers_and_time_extensions():
+        MigrationService._add_column_if_missing("questions", "model_answer", "TEXT")
+        MigrationService._add_column_if_missing(
+            "exam_enrollments",
+            "extra_time_minutes",
+            "INTEGER NOT NULL DEFAULT 0",
+        )
+
+    @staticmethod
+    def _migration_announcement_message():
+        MigrationService._add_column_if_missing("platform_settings", "announcement_message", "TEXT")
+
+    @staticmethod
+    def _migration_question_bank_items():
+        if MigrationService._has_table("question_bank_items"):
+            return
+        from app.models.exam_model import QuestionBankItem
+
+        QuestionBankItem.__table__.create(db.engine, checkfirst=True)
+        MigrationService._add_column_if_missing(
+            "student_sessions",
+            "extra_time_minutes",
+            "INTEGER NOT NULL DEFAULT 0",
+        )
+
+    @staticmethod
     def _migration_platform_settings_seed():
         if PlatformSettings.query.first():
             return
@@ -105,6 +154,36 @@ class MigrationService:
             "Add private attempt token to student exam sessions",
             _migration_student_session_tokens.__func__,
         ),
+        (
+            "20260521_004_student_session_window_lock",
+            "Add active browser window lock for student exam attempts",
+            _migration_student_session_window_lock.__func__,
+        ),
+        (
+            "20260521_005_exam_time_windows",
+            "Add optional start and end windows to exams",
+            _migration_exam_time_windows.__func__,
+        ),
+        (
+            "20260521_006_answer_visit_status",
+            "Track per-question navigator state on answers",
+            _migration_answer_visit_status.__func__,
+        ),
+        (
+            "20260521_007_model_answers_time_extensions",
+            "Add model answers and per-student extra time",
+            _migration_model_answers_and_time_extensions.__func__,
+        ),
+        (
+            "20260521_008_announcement_message",
+            "Add admin announcement banner message",
+            _migration_announcement_message.__func__,
+        ),
+        (
+            "20260521_009_question_bank_items",
+            "Add teacher question bank table",
+            _migration_question_bank_items.__func__,
+        ),
     ]
 
     @staticmethod
@@ -127,6 +206,29 @@ class MigrationService:
                 MigrationService._has_column("student_sessions", "session_token")
                 and MigrationService._has_index("student_sessions", "ix_student_sessions_session_token")
             )
+        if version == "20260521_004_student_session_window_lock":
+            return (
+                MigrationService._has_column("student_sessions", "active_window_token")
+                and MigrationService._has_column("student_sessions", "active_window_heartbeat_at")
+                and MigrationService._has_index("student_sessions", "ix_student_sessions_active_window_token")
+            )
+        if version == "20260521_005_exam_time_windows":
+            return (
+                MigrationService._has_column("exam_sets", "start_time")
+                and MigrationService._has_column("exam_sets", "end_time")
+            )
+        if version == "20260521_006_answer_visit_status":
+            return MigrationService._has_column("answers", "visit_status")
+        if version == "20260521_007_model_answers_time_extensions":
+            return (
+                MigrationService._has_column("questions", "model_answer")
+                and MigrationService._has_column("exam_enrollments", "extra_time_minutes")
+                and MigrationService._has_column("student_sessions", "extra_time_minutes")
+            )
+        if version == "20260521_008_announcement_message":
+            return MigrationService._has_column("platform_settings", "announcement_message")
+        if version == "20260521_009_question_bank_items":
+            return MigrationService._has_table("question_bank_items")
         return False
 
     @staticmethod

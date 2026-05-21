@@ -1,6 +1,7 @@
 import secrets
+from datetime import datetime, timedelta
 
-from flask import request, session as browser_session
+from flask import current_app, request, session as browser_session
 
 from app.models.database import db
 
@@ -68,3 +69,54 @@ class ExamSessionGuard:
             and submitted_token == ExamSessionGuard.ensure_token(student_session)
             and ExamSessionGuard.browser_owns_attempt(student_session)
         )
+
+    @staticmethod
+    def window_lock_ttl_seconds():
+        return int(current_app.config.get("EXAM_WINDOW_LOCK_TTL_SECONDS", 30))
+
+    @staticmethod
+    def window_lock_is_stale(student_session):
+        if not student_session.active_window_token or not student_session.active_window_heartbeat_at:
+            return True
+        age = datetime.utcnow() - student_session.active_window_heartbeat_at
+        return age > timedelta(seconds=ExamSessionGuard.window_lock_ttl_seconds())
+
+    @staticmethod
+    def request_window_token(payload=None):
+        payload = payload or {}
+        return (
+            request.headers.get("X-Exam-Window-Token")
+            or payload.get("window_token")
+            or request.form.get("window_token")
+        )
+
+    @staticmethod
+    def acquire_window_lock(student_session, window_token):
+        window_token = (window_token or "").strip()
+        if not window_token:
+            return False
+
+        if (
+            student_session.active_window_token
+            and student_session.active_window_token != window_token
+            and not ExamSessionGuard.window_lock_is_stale(student_session)
+        ):
+            return False
+
+        student_session.active_window_token = window_token
+        student_session.active_window_heartbeat_at = datetime.utcnow()
+        student_session.updated_at = datetime.utcnow()
+        db.session.commit()
+        return True
+
+    @staticmethod
+    def request_window_owns_attempt(student_session, payload=None, refresh=True):
+        submitted_token = ExamSessionGuard.request_window_token(payload)
+        if not submitted_token or submitted_token != student_session.active_window_token:
+            return False
+
+        if refresh:
+            student_session.active_window_heartbeat_at = datetime.utcnow()
+            student_session.updated_at = datetime.utcnow()
+            db.session.commit()
+        return True

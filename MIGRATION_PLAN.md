@@ -69,6 +69,16 @@ This project should follow that same practical model.
 - Post-submit exam lock for submitted/evaluated/terminated attempts across student pages and mutation APIs.
 - Private per-attempt `session_token` stored on `StudentSession`, remembered in the browser session, and required for autosave, heartbeat, violation, code-run, and submit APIs.
 - Role session checks now re-validate active admin/teacher/student database accounts on protected requests and force logout if an account is deactivated mid-session.
+- One-active-exam-window protection with per-tab window locks, stale-lock recovery, and a student-facing "already open" screen.
+- Optional exam start/end windows with teacher form fields, student entry enforcement, API enforcement, and periodic expired-session auto-submit.
+- IBPS-style persisted question navigator states: not visited, visited unanswered, answered, marked for review, and answered marked for review.
+- Model answers per question for teacher review and published student feedback/PDF copies.
+- Per-student extra time at enrollment level, carried into the exam session timer and proctoring timer.
+- Admin announcement banner on student dashboards with per-session dismiss.
+- Admin bulk student CSV import for onboarding batches.
+- Teacher question bank with manual saves, copy-from-exam, delete, and import selected bank questions into exams.
+- Teacher per-question side-by-side answer comparison.
+- Teacher similarity flag report for long and coding answers.
 
 ## Python Feature Roadmap
 

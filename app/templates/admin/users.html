@@ -25,6 +25,18 @@
             </div>
         </div>
         <div class="card-body">
+            <form method="post" action="{{ url_for('admin.import_students') }}" enctype="multipart/form-data" class="bulk-import-form">
+                <div>
+                    <strong>Bulk Student Import</strong>
+                    <p class="muted">CSV columns: name, email, roll_number, username, password. Password is optional.</p>
+                </div>
+                <input type="file" name="students_file" accept=".csv" required>
+                <button class="btn secondary" type="submit">
+                    <i class="fas fa-file-csv"></i> Import CSV
+                </button>
+            </form>
+        </div>
+        <div class="card-body">
             {% if users %}
                 <div class="table-responsive">
                     <table class="data-table">

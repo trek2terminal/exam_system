@@ -1,4 +1,5 @@
 import os
+from time import monotonic
 from flask import Flask
 from config import DevelopmentConfig, ProductionConfig
 
@@ -62,6 +63,26 @@ def create_app(config_class=None):
     app.register_blueprint(teacher_bp)
     app.register_blueprint(student_bp)
     app.register_blueprint(api_bp)
+
+    app.config["_LAST_EXPIRED_EXAM_SWEEP"] = 0
+
+    @app.before_request
+    def auto_submit_expired_exam_windows():
+        sweep_interval = app.config.get("EXPIRED_EXAM_SWEEP_SECONDS", 30)
+        now = monotonic()
+        if now - app.config.get("_LAST_EXPIRED_EXAM_SWEEP", 0) < sweep_interval:
+            return None
+
+        app.config["_LAST_EXPIRED_EXAM_SWEEP"] = now
+        try:
+            from app.services.exam_service import ExamService
+
+            submitted_count = ExamService.auto_submit_expired_sessions()
+            if submitted_count:
+                app.logger.info("Auto-submitted %s expired exam session(s).", submitted_count)
+        except Exception:
+            app.logger.exception("Expired exam auto-submit sweep failed.")
+        return None
 
     @app.context_processor
     def inject_platform_settings():

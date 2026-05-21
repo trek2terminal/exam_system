@@ -28,6 +28,8 @@ class ExamSet(db.Model):
 
     activated_at = db.Column(db.DateTime, nullable=True)
     closed_at = db.Column(db.DateTime, nullable=True)
+    start_time = db.Column(db.DateTime, nullable=True)
+    end_time = db.Column(db.DateTime, nullable=True)
 
     # Relationships
     created_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
@@ -46,6 +48,17 @@ class ExamSet(db.Model):
 
     def is_active(self):
         return self.status == "active"
+
+    def has_started(self, now=None):
+        now = now or datetime.utcnow()
+        return not self.start_time or now >= self.start_time
+
+    def has_ended(self, now=None):
+        now = now or datetime.utcnow()
+        return bool(self.end_time and now >= self.end_time)
+
+    def is_open_for_student(self, now=None):
+        return self.status == "active" and self.has_started(now) and not self.has_ended(now)
 
     def activate(self):
         self.status = "active"
@@ -74,6 +87,7 @@ class ExamEnrollment(db.Model):
 
     roll_no = db.Column(db.String(50), nullable=False, index=True)
     student_name = db.Column(db.String(100), nullable=True)
+    extra_time_minutes = db.Column(db.Integer, default=0, nullable=False)
 
     created_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     creator = db.relationship("User")
@@ -105,6 +119,7 @@ class Question(db.Model):
     options = db.Column(db.Text, default="[]")          # JSON string for MCQ options
     correct_answer = db.Column(db.Text, nullable=True)  # Can be JSON for complex answers
     explanation = db.Column(db.Text, nullable=True)
+    model_answer = db.Column(db.Text, nullable=True)
 
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
@@ -124,3 +139,46 @@ class Question(db.Model):
 
     def is_mcq(self):
         return self.question_type == "mcq"
+
+
+class QuestionBankItem(db.Model):
+    __tablename__ = "question_bank_items"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    teacher_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    teacher = db.relationship("User")
+
+    question_text = db.Column(db.Text, nullable=False)
+    question_type = db.Column(db.String(20), nullable=False, default="short")
+    marks = db.Column(db.Integer, nullable=False, default=1)
+    options = db.Column(db.Text, default="[]")
+    correct_answer = db.Column(db.Text, nullable=True)
+    explanation = db.Column(db.Text, nullable=True)
+    model_answer = db.Column(db.Text, nullable=True)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    def options_as_list(self):
+        try:
+            return json.loads(self.options or "[]")
+        except Exception:
+            return []
+
+    def set_options(self, options_list):
+        self.options = json.dumps(options_list or [])
+
+    @classmethod
+    def from_question(cls, question, teacher_id):
+        item = cls(
+            teacher_id=teacher_id,
+            question_text=question.question_text,
+            question_type=question.question_type,
+            marks=question.marks,
+            correct_answer=question.correct_answer,
+            explanation=question.explanation,
+            model_answer=question.model_answer,
+        )
+        item.set_options(question.options_as_list())
+        return item

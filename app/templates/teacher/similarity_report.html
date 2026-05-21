@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Similarity Report{% endblock %}
+
+{% block content %}
+<div class="card">
+  <div class="row-between">
+    <div>
+      <p class="muted">{{ exam.exam_name }}</p>
+      <h1>Similarity Flags</h1>
+      <p class="muted">Pairs at or above {{ threshold }}% similarity for long and coding answers.</p>
+    </div>
+    <a class="btn secondary" href="{{ url_for('teacher.exam_results', exam_id=exam.id) }}">Back</a>
+  </div>
+
+  {% if flags %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Question</th>
+            <th>Student A</th>
+            <th>Student B</th>
+            <th>Similarity</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in flags %}
+            <tr>
+              <td>Q{{ item.question.question_number }}</td>
+              <td>{{ item.left_session.student_name }} <span class="muted">({{ item.left_session.roll_no }})</span></td>
+              <td>{{ item.right_session.student_name }} <span class="muted">({{ item.right_session.roll_no }})</span></td>
+              <td><span class="badge closed">{{ item.score }}%</span></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="muted">No high-similarity pairs found.</p>
+  {% endif %}
+</div>
+{% endblock %}

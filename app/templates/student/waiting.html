@@ -16,6 +16,15 @@
       <div><span>Exam</span><strong>{{ exam.exam_name }}</strong></div>
       <div><span>Set</span><strong>{{ exam.set_code }}</strong></div>
       <div><span>Subject</span><strong>{{ exam.subject }}</strong></div>
+      {% if student_session.extra_time_minutes %}
+        <div><span>Extra Time</span><strong>+{{ student_session.extra_time_minutes }} min</strong></div>
+      {% endif %}
+      {% if exam.start_time %}
+        <div><span>Starts</span><strong>{{ exam.start_time.strftime("%d %b %Y %H:%M") }}</strong></div>
+      {% endif %}
+      {% if exam.end_time %}
+        <div><span>Closes</span><strong>{{ exam.end_time.strftime("%d %b %Y %H:%M") }}</strong></div>
+      {% endif %}
     </div>
 
     <div class="waiting-status">

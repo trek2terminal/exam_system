@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Import From Question Bank{% endblock %}
+
+{% block content %}
+<div class="card">
+  <div class="row-between">
+    <div>
+      <p class="muted">Import reusable questions</p>
+      <h1>{{ exam.exam_name }}</h1>
+    </div>
+    <div class="actions">
+      <a class="btn secondary" href="{{ url_for('teacher.question_bank') }}">Question Bank</a>
+      <a class="btn secondary" href="{{ url_for('teacher.setup_exam', exam_id=exam.id) }}">Back</a>
+    </div>
+  </div>
+
+  <form method="post" class="question-bank-import">
+    {% for item in bank_items %}
+      <label class="bank-select-row">
+        <input type="checkbox" name="bank_item_id" value="{{ item.id }}">
+        <span>
+          <strong>{{ item.question_text }}</strong>
+          <small>{{ item.question_type | title }} · {{ item.marks }} mark{% if item.marks != 1 %}s{% endif %}</small>
+        </span>
+      </label>
+    {% else %}
+      <p class="muted">Your question bank is empty.</p>
+    {% endfor %}
+
+    <button class="btn primary" type="submit" {% if not bank_items %}disabled{% endif %}>
+      <i class="fas fa-file-import"></i> Add Selected
+    </button>
+  </form>
+</div>
+{% endblock %}

@@ -45,6 +45,7 @@
             <th>Subject</th>
             <th>Set Code</th>
             <th>Duration</th>
+            <th>Window</th>
             <th>Assigned</th>
             <th>Status</th>
             <th>Actions</th>
@@ -60,6 +61,17 @@
             <td>{{ exam.subject }}</td>
             <td>{{ exam.set_code }}</td>
             <td>{{ exam.duration_minutes }} min</td>
+            <td>
+              {% if exam.start_time or exam.end_time %}
+                <span class="muted">
+                  {{ exam.start_time.strftime("%d %b %H:%M") if exam.start_time else "Open" }}
+                  -
+                  {{ exam.end_time.strftime("%d %b %H:%M") if exam.end_time else "No close" }}
+                </span>
+              {% else %}
+                <span class="muted">Open window</span>
+              {% endif %}
+            </td>
             <td>{{ exam.enrollments | length }}</td>
             <td>
               <span class="badge {{ exam.status }}">{{ exam.status|capitalize }}</span>
@@ -80,7 +92,7 @@
           </tr>
           {% else %}
           <tr>
-            <td colspan="7" style="text-align: center; padding: 40px;">
+            <td colspan="8" style="text-align: center; padding: 40px;">
               <div class="muted">No exams created yet. Create your first exam to get started!</div>
             </td>
           </tr>
@@ -98,6 +110,9 @@
       </button>
       <button class="btn secondary" onclick="window.location.href='{{ url_for('teacher.results') }}'">
         <i class="fas fa-chart-simple"></i> View All Results
+      </button>
+      <button class="btn secondary" onclick="window.location.href='{{ url_for('teacher.question_bank') }}'">
+        <i class="fas fa-bookmark"></i> Question Bank
       </button>
     </div>
   </div>

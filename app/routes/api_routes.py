@@ -20,11 +20,11 @@ from app.utils.rate_limiter import rate_limit
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 
 
-def _forbidden_session_response(message="Unauthorized exam session", redirect=None):
+def _forbidden_session_response(message="Unauthorized exam session", redirect=None, status_code=403):
     payload = {"ok": False, "message": message}
     if redirect:
         payload["redirect"] = redirect
-    return jsonify(payload), 403
+    return jsonify(payload), status_code
 
 
 def _get_student_session(session_code):
@@ -40,6 +40,10 @@ def _submitted_redirect(session_code):
     return f"/student/submitted/{session_code}"
 
 
+def _active_elsewhere_redirect(session_code):
+    return f"/student/session-active/{session_code}"
+
+
 def _locked_session_response(student_session):
     return _forbidden_session_response(
         "This exam attempt is already locked.",
@@ -47,15 +51,36 @@ def _locked_session_response(student_session):
     )
 
 
-def _require_attempt(session_code, payload=None, require_active=False):
+def _window_lock_response(student_session):
+    return _forbidden_session_response(
+        "This exam is already open in another tab or device.",
+        redirect=_active_elsewhere_redirect(student_session.session_code),
+        status_code=409,
+    )
+
+
+def _require_attempt(session_code, payload=None, require_active=False, require_window=False):
     student_session = _get_student_session(session_code)
     payload = payload or {}
 
     if not ExamSessionGuard.request_owns_attempt(student_session, payload):
         return None, _forbidden_session_response()
 
+    if require_active:
+        time_state = ExamService.enforce_time_window(student_session)
+        if time_state == "ended":
+            return None, _locked_session_response(student_session)
+        if time_state == "not_started":
+            return None, _forbidden_session_response(
+                "This exam has not opened yet.",
+                redirect=f"/student/waiting/{student_session.session_code}",
+            )
+
     if require_active and student_session.status != MUTABLE_SESSION_STATUS:
         return None, _locked_session_response(student_session)
+
+    if require_window and not ExamSessionGuard.request_window_owns_attempt(student_session, payload):
+        return None, _window_lock_response(student_session)
 
     return student_session, None
 
@@ -77,8 +102,13 @@ def session_status(session_code):
         return error_response
 
     exam = student_session.exam_set
+    time_state = ExamService.enforce_time_window(student_session)
 
-    remaining_seconds = get_remaining_seconds(exam, student_session.start_time)
+    remaining_seconds = get_remaining_seconds(
+        exam,
+        student_session.start_time,
+        getattr(student_session, "extra_time_minutes", 0),
+    )
     is_locked = ExamSessionGuard.is_locked(student_session)
 
     return jsonify(
@@ -86,6 +116,7 @@ def session_status(session_code):
             "ok": True,
             "exam_status": exam.status,
             "session_status": student_session.status,
+            "time_state": time_state,
             "remaining_seconds": remaining_seconds,
             "focus_violations": student_session.focus_violations,
             "max_violations_allowed": SettingsService.max_violations_allowed(),
@@ -96,23 +127,67 @@ def session_status(session_code):
     )
 
 
-@api_bp.route("/student/session/<session_code>/save", methods=["POST"])
-@rate_limit("autosave")
-def save_answer(session_code):
-    """Autosave answer using service"""
+@api_bp.route("/student/session/<session_code>/window-lock", methods=["POST"])
+@rate_limit("heartbeat")
+def acquire_window_lock(session_code):
     data = _get_json_payload()
     student_session, error_response = _require_attempt(session_code, data, require_active=True)
     if error_response:
         return error_response
 
+    window_token = ExamSessionGuard.request_window_token(data)
+    if not ExamSessionGuard.acquire_window_lock(student_session, window_token):
+        return _window_lock_response(student_session)
+
+    return jsonify({"ok": True, "message": "Exam window locked"})
+
+
+@api_bp.route("/student/session/<session_code>/save", methods=["POST"])
+@rate_limit("autosave")
+def save_answer(session_code):
+    """Autosave answer using service"""
+    data = _get_json_payload()
+    student_session, error_response = _require_attempt(
+        session_code,
+        data,
+        require_active=True,
+        require_window=True,
+    )
+    if error_response:
+        return error_response
+
     question_id = _parse_int_field(data, "question_id")
     answer_text = (data.get("answer_text", "") or "").strip()
+    visit_status = data.get("visit_status")
 
     if question_id is None:
         return jsonify({"ok": False, "message": "Valid question_id is required"}), 400
 
-    success, message = AutoSaveService.save_answer(session_code, question_id, answer_text)
+    success, message = AutoSaveService.save_answer(session_code, question_id, answer_text, visit_status=visit_status)
 
+    return jsonify({"ok": success, "message": message}), 200 if success else 400
+
+
+@api_bp.route("/student/session/<session_code>/question-status", methods=["POST"])
+@rate_limit("autosave")
+def save_question_status(session_code):
+    data = _get_json_payload()
+    student_session, error_response = _require_attempt(
+        session_code,
+        data,
+        require_active=True,
+        require_window=True,
+    )
+    if error_response:
+        return error_response
+
+    question_id = _parse_int_field(data, "question_id")
+    visit_status = data.get("visit_status")
+
+    if question_id is None:
+        return jsonify({"ok": False, "message": "Valid question_id is required"}), 400
+
+    success, message = AutoSaveService.save_visit_status(session_code, question_id, visit_status)
     return jsonify({"ok": success, "message": message}), 200 if success else 400
 
 
@@ -121,7 +196,12 @@ def save_answer(session_code):
 def execute_code(session_code):
     """Run Python code for an authorized coding question."""
     data = _get_json_payload()
-    student_session, error_response = _require_attempt(session_code, data, require_active=True)
+    student_session, error_response = _require_attempt(
+        session_code,
+        data,
+        require_active=True,
+        require_window=True,
+    )
     if error_response:
         return error_response
 
@@ -161,6 +241,7 @@ def execute_code(session_code):
     answer.code_output = "\n".join(part for part in output_parts if part)
     answer.execution_status = result.status
     answer.execution_time_ms = result.execution_time_ms
+    answer.visit_status = AutoSaveService.normalize_visit_status(data.get("visit_status"), code)
     student_session.last_heartbeat = datetime.utcnow()
     student_session.updated_at = datetime.utcnow()
     db.session.commit()
@@ -175,11 +256,20 @@ def execute_code(session_code):
 def heartbeat(session_code):
     """Handle heartbeat and proctoring violations"""
     data = _get_json_payload()
-    student_session, error_response = _require_attempt(session_code, data, require_active=True)
+    student_session, error_response = _require_attempt(
+        session_code,
+        data,
+        require_active=True,
+        require_window=True,
+    )
     if error_response:
         return error_response
 
-    remaining_seconds = get_remaining_seconds(student_session.exam_set, student_session.start_time)
+    remaining_seconds = get_remaining_seconds(
+        student_session.exam_set,
+        student_session.start_time,
+        getattr(student_session, "extra_time_minutes", 0),
+    )
 
     focused = bool(data.get("focused", True))
     violation_count = _parse_int_field(data, "violation_count")
@@ -195,8 +285,9 @@ def heartbeat(session_code):
     return jsonify(
         {
             "ok": True,
-            "submitted": student_session.status in ["submitted", "evaluated"],
+            "submitted": ExamSessionGuard.is_locked(student_session),
             "session_status": student_session.status,
+            "redirect": _submitted_redirect(session_code) if ExamSessionGuard.is_locked(student_session) else None,
             "remaining_seconds": remaining_seconds,
             "focus_violations": student_session.focus_violations,
             "max_violations_allowed": SettingsService.max_violations_allowed(),
@@ -210,7 +301,12 @@ def heartbeat(session_code):
 def record_violation(session_code):
     """Record an append-only browser integrity violation."""
     data = _get_json_payload()
-    student_session, error_response = _require_attempt(session_code, data, require_active=True)
+    student_session, error_response = _require_attempt(
+        session_code,
+        data,
+        require_active=True,
+        require_window=True,
+    )
     if error_response:
         return error_response
 
@@ -246,7 +342,12 @@ def record_violation(session_code):
 def submit_session(session_code):
     """Manual or auto exam submission"""
     data = _get_json_payload()
-    student_session, error_response = _require_attempt(session_code, data, require_active=True)
+    student_session, error_response = _require_attempt(
+        session_code,
+        data,
+        require_active=True,
+        require_window=True,
+    )
     if error_response:
         return error_response
 

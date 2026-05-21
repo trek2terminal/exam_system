@@ -15,8 +15,11 @@
 
     <div class="student-exam-summary">
       <div><span>Exam</span><strong>{{ exam.exam_name }}</strong></div>
-      <div><span>Duration</span><strong>{{ exam.duration_minutes }} min</strong></div>
+      <div><span>Duration</span><strong>{{ exam.duration_minutes + student_session.extra_time_minutes }} min</strong></div>
       <div><span>Questions</span><strong>{{ question_count }}</strong></div>
+      {% if student_session.extra_time_minutes %}
+        <div><span>Extra Time</span><strong>+{{ student_session.extra_time_minutes }} min</strong></div>
+      {% endif %}
     </div>
 
     <div class="precheck-grid">

@@ -24,6 +24,14 @@
         <input type="number" name="duration_minutes" min="1" value="{{ exam.duration_minutes if exam else 60 }}" required>
       </div>
       <div>
+        <label>Start Time (optional)</label>
+        <input type="datetime-local" name="start_time" value="{{ exam.start_time.strftime('%Y-%m-%dT%H:%M') if exam and exam.start_time else '' }}">
+      </div>
+      <div>
+        <label>End Time (optional)</label>
+        <input type="datetime-local" name="end_time" value="{{ exam.end_time.strftime('%Y-%m-%dT%H:%M') if exam and exam.end_time else '' }}">
+      </div>
+      <div>
         <label>Access Code for Students</label>
         <input type="text" name="access_code" value="{{ exam.access_code if exam else '' }}" placeholder="Auto-generated if blank">
       </div>
@@ -41,6 +49,9 @@
         {% if exam %}
           <a class="btn secondary" href="{{ url_for('teacher.import_questions', exam_id=exam.id) }}">
             <i class="fas fa-file-import"></i> Import Questions
+          </a>
+          <a class="btn secondary" href="{{ url_for('teacher.import_from_question_bank', exam_id=exam.id) }}">
+            <i class="fas fa-bookmark"></i> From Bank
           </a>
         {% endif %}
         <button type="button" class="btn secondary" onclick="addQuestionRow()">Add Question</button>
@@ -81,6 +92,12 @@
             <label>Options for MCQ (use | between options)</label>
             <input type="text" name="options" value="{{ q.options_as_list() | join('|') }}" placeholder="Option A|Option B|Option C|Option D">
 
+            <label>Model Answer / Review Reference</label>
+            <textarea name="model_answer" rows="3" placeholder="Hidden during the exam. Shown while reviewing answers.">{{ q.model_answer or '' }}</textarea>
+
+            <button type="submit" class="btn secondary small" form="saveQuestionToBank{{ q.id }}">
+              <i class="fas fa-bookmark"></i> Save to Bank
+            </button>
             <button type="button" class="btn danger small" onclick="removeQuestionRow(this)">Remove</button>
           </div>
         {% endfor %}
@@ -116,6 +133,9 @@
           <label>Options for MCQ (use | between options)</label>
           <input type="text" name="options" placeholder="Option A|Option B|Option C|Option D">
 
+          <label>Model Answer / Review Reference</label>
+          <textarea name="model_answer" rows="3" placeholder="Hidden during the exam. Shown while reviewing answers."></textarea>
+
           <button type="button" class="btn danger small" onclick="removeQuestionRow(this)">Remove</button>
         </div>
       {% endif %}
@@ -124,6 +144,11 @@
     <hr>
     <button type="submit" class="btn primary">Save Exam Set</button>
   </form>
+  {% if questions %}
+    {% for q in questions %}
+      <form id="saveQuestionToBank{{ q.id }}" method="post" action="{{ url_for('teacher.save_question_to_bank', question_id=q.id) }}"></form>
+    {% endfor %}
+  {% endif %}
 </div>
 {% endblock %}
 
@@ -166,6 +191,9 @@
 
       <label>Options for MCQ (use | between options)</label>
       <input type="text" name="options" placeholder="Option A|Option B|Option C|Option D">
+
+      <label>Model Answer / Review Reference</label>
+      <textarea name="model_answer" rows="3" placeholder="Hidden during the exam. Shown while reviewing answers."></textarea>
 
       <button type="button" class="btn danger small" onclick="removeQuestionRow(this)">Remove</button>
     `;

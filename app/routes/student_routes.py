@@ -8,7 +8,7 @@ from app.models.user_model import User
 from app.services.exam_service import ExamService
 from app.services.exam_session_guard import ExamSessionGuard
 from app.services.settings_service import SettingsService
-from app.utils.helpers import create_submission_pdf
+from app.utils.helpers import create_submission_pdf, get_remaining_seconds
 
 student_bp = Blueprint("student", __name__, url_prefix="/student")
 
@@ -172,9 +172,13 @@ def start_assigned_exam(exam_id):
         roll_no=roll_no,
     )
     _remember_student_session(student_session)
+    time_state = ExamService.enforce_time_window(student_session)
 
-    if ExamSessionGuard.is_locked(student_session):
+    if ExamSessionGuard.is_locked(student_session) or time_state == "ended":
         return redirect(url_for("student.submitted", session_code=student_session.session_code))
+
+    if exam.status == "active" and time_state == "not_started":
+        return redirect(url_for("student.waiting", session_code=student_session.session_code))
 
     if exam.status == "active" and not student_session.start_time:
         return redirect(url_for("student.precheck", session_code=student_session.session_code))
@@ -246,9 +250,13 @@ def join_exam():
             roll_no=roll_no
         )
         _remember_student_session(student_session)
+        time_state = ExamService.enforce_time_window(student_session)
 
-        if ExamSessionGuard.is_locked(student_session):
+        if ExamSessionGuard.is_locked(student_session) or time_state == "ended":
             return redirect(url_for("student.submitted", session_code=student_session.session_code))
+
+        if exam.status == "active" and time_state == "not_started":
+            return redirect(url_for("student.waiting", session_code=student_session.session_code))
 
         if exam.status == "active" and not student_session.start_time:
             return redirect(url_for("student.precheck", session_code=student_session.session_code))
@@ -273,7 +281,11 @@ def waiting(session_code):
     if ExamSessionGuard.is_locked(student_session):
         return redirect(url_for("student.submitted", session_code=session_code))
 
-    if exam.status == "active":
+    time_state = ExamService.enforce_time_window(student_session)
+    if time_state == "ended":
+        return redirect(url_for("student.submitted", session_code=session_code))
+
+    if exam.status == "active" and time_state == "open":
         if student_session.start_time:
             return redirect(url_for("student.exam", session_code=session_code))
         return redirect(url_for("student.precheck", session_code=session_code))
@@ -299,7 +311,11 @@ def precheck(session_code):
     if ExamSessionGuard.is_locked(student_session):
         return redirect(url_for("student.submitted", session_code=session_code))
 
-    if exam.status != "active":
+    time_state = ExamService.enforce_time_window(student_session)
+    if time_state == "ended":
+        return redirect(url_for("student.submitted", session_code=session_code))
+
+    if exam.status != "active" or time_state == "not_started":
         flash("Your teacher has not started this exam yet.", "info")
         return redirect(url_for("student.waiting", session_code=session_code))
 
@@ -313,7 +329,12 @@ def precheck(session_code):
             return redirect(url_for("student.precheck", session_code=session_code))
 
         _grant_precheck_clearance(session_code)
-        ExamService.start_exam(session_code)
+        if not ExamService.start_exam(session_code):
+            time_state = ExamService.enforce_time_window(student_session)
+            if time_state == "ended":
+                return redirect(url_for("student.submitted", session_code=session_code))
+            flash("This exam is not open yet.", "info")
+            return redirect(url_for("student.waiting", session_code=session_code))
         return redirect(url_for("student.exam", session_code=session_code))
 
     return render_template(
@@ -337,13 +358,21 @@ def exam(session_code):
     if ExamSessionGuard.is_locked(student_session):
         return redirect(url_for("student.submitted", session_code=session_code))
 
-    if exam.status != "active":
+    time_state = ExamService.enforce_time_window(student_session)
+    if time_state == "ended":
+        return redirect(url_for("student.submitted", session_code=session_code))
+
+    if exam.status != "active" or time_state == "not_started":
         return redirect(url_for("student.waiting", session_code=session_code))
 
     if not student_session.start_time:
         if not _has_precheck_clearance(session_code):
             return redirect(url_for("student.precheck", session_code=session_code))
-        ExamService.start_exam(session_code)
+        if not ExamService.start_exam(session_code):
+            time_state = ExamService.enforce_time_window(student_session)
+            if time_state == "ended":
+                return redirect(url_for("student.submitted", session_code=session_code))
+            return redirect(url_for("student.waiting", session_code=session_code))
 
     questions = Question.query.filter_by(exam_set_id=exam.id) \
         .order_by(Question.question_number.asc()).all()
@@ -351,12 +380,25 @@ def exam(session_code):
     saved_answers = Answer.query.filter_by(session_id=student_session.id).all()
     saved_map = {a.question_id: a.answer_text for a in saved_answers}
     code_output_map = {a.question_id: a.code_output for a in saved_answers if getattr(a, "code_output", None)}
+    saved_answer_objects = {a.question_id: a for a in saved_answers}
+    status_map = {}
+    for question in questions:
+        answer = saved_answer_objects.get(question.id)
+        if not answer:
+            status_map[question.id] = "NOT_VISITED"
+        elif answer.visit_status:
+            status_map[question.id] = answer.visit_status
+        elif (answer.answer_text or "").strip():
+            status_map[question.id] = "ANSWERED"
+        else:
+            status_map[question.id] = "VISITED_UNANSWERED"
 
     # Calculate remaining time
-    remaining_seconds = 0
-    if student_session.start_time:
-        elapsed = (datetime.utcnow() - student_session.start_time).total_seconds()
-        remaining_seconds = max((exam.duration_minutes * 60) - int(elapsed), 0)
+    remaining_seconds = get_remaining_seconds(
+        exam,
+        student_session.start_time,
+        getattr(student_session, "extra_time_minutes", 0),
+    )
 
     return render_template(
         "student/exam.html",
@@ -365,6 +407,7 @@ def exam(session_code):
         questions=questions,
         saved_map=saved_map,
         code_output_map=code_output_map,
+        status_map=status_map,
         remaining_seconds=remaining_seconds,
         max_violations_allowed=SettingsService.max_violations_allowed(),
         attempt_token=ExamSessionGuard.ensure_token(student_session),
@@ -406,6 +449,19 @@ def submitted(session_code):
         question_marks=question_marks,
         answer_objects_map=answer_objects_map,
     )
+
+
+@student_bp.route("/session-active/<session_code>")
+def session_active_elsewhere(session_code):
+    owner_redirect = _redirect_if_not_owner(session_code)
+    if owner_redirect:
+        return owner_redirect
+
+    student_session = StudentSession.query.filter_by(session_code=session_code).first_or_404()
+    if ExamSessionGuard.is_locked(student_session):
+        return redirect(url_for("student.submitted", session_code=session_code))
+
+    return render_template("student/session_active.html", student_session=student_session)
 
 
 @student_bp.route("/export/<session_code>")

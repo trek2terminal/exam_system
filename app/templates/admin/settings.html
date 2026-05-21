@@ -27,6 +27,10 @@
                     <label for="welcome_message">Student Welcome Message</label>
                     <input id="welcome_message" type="text" name="welcome_message" maxlength="255" value="{{ settings.welcome_message }}" required>
                 </div>
+                <div class="form-group">
+                    <label for="announcement_message">Student Announcement Banner</label>
+                    <textarea id="announcement_message" name="announcement_message" rows="3" maxlength="600" placeholder="Optional message shown on student dashboards">{{ settings.announcement_message or '' }}</textarea>
+                </div>
             </div>
         </section>
 

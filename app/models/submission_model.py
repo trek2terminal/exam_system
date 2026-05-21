@@ -30,6 +30,8 @@ class StudentSession(db.Model):
     # Session Info
     session_code = db.Column(db.String(64), unique=True, nullable=False, default=generate_session_code)
     session_token = db.Column(db.String(128), unique=True, nullable=True, index=True)
+    active_window_token = db.Column(db.String(128), nullable=True, index=True)
+    active_window_heartbeat_at = db.Column(db.DateTime, nullable=True)
 
     start_time = db.Column(db.DateTime, nullable=True)
     end_time = db.Column(db.DateTime, nullable=True)
@@ -37,6 +39,7 @@ class StudentSession(db.Model):
 
     status = db.Column(db.String(20), default="waiting")
     # waiting / active / submitted / auto_submitted / terminated / evaluated
+    extra_time_minutes = db.Column(db.Integer, default=0, nullable=False)
 
     # Proctoring & Security
     focus_violations = db.Column(db.Integer, default=0)
@@ -85,6 +88,7 @@ class Answer(db.Model):
     code_output = db.Column(db.Text, nullable=True)
     execution_status = db.Column(db.String(30), nullable=True)
     execution_time_ms = db.Column(db.Integer, nullable=True)
+    visit_status = db.Column(db.String(30), default="NOT_VISITED", nullable=False)
     saved_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     def __repr__(self):

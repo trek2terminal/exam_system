@@ -123,17 +123,23 @@ def parse_options(raw_value):
     return []
 
 
-def get_remaining_seconds(exam_set, start_time=None):
+def get_remaining_seconds(exam_set, start_time=None, extra_minutes=0):
     """Calculate remaining exam time in seconds"""
     if not exam_set:
         return 0
 
     reference_time = start_time or exam_set.activated_at
     if not reference_time:
-        return exam_set.duration_minutes * 60
+        duration_remaining = (exam_set.duration_minutes + int(extra_minutes or 0)) * 60
+    else:
+        elapsed = (datetime.utcnow() - reference_time).total_seconds()
+        duration_remaining = max(((exam_set.duration_minutes + int(extra_minutes or 0)) * 60) - int(elapsed), 0)
 
-    elapsed = (datetime.utcnow() - reference_time).total_seconds()
-    return max((exam_set.duration_minutes * 60) - int(elapsed), 0)
+    if getattr(exam_set, "end_time", None):
+        window_remaining = max(int((exam_set.end_time - datetime.utcnow()).total_seconds()), 0)
+        return min(duration_remaining, window_remaining)
+
+    return duration_remaining
 
 
 def draw_wrapped_text(pdf, text, x, y, width, font_name="Helvetica", font_size=10, leading=13):
@@ -214,6 +220,13 @@ def create_submission_pdf(student_session):
 
         answer_text = answers_map.get(q.id, "[No answer submitted]")
         y = draw_wrapped_text(pdf, answer_text, left, y, right_width, font_size=10, leading=13)
+
+        if result and getattr(q, "model_answer", None):
+            pdf.setFont("Helvetica-Bold", 10)
+            y -= 3 * mm
+            pdf.drawString(left, y, "Model Answer:")
+            y -= 5 * mm
+            y = draw_wrapped_text(pdf, q.model_answer, left, y, right_width, font_size=10, leading=13)
 
         if q.question_type == "coding" and code_output_map.get(q.id):
             pdf.setFont("Helvetica-Bold", 10)

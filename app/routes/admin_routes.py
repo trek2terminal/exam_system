@@ -1,5 +1,8 @@
+import csv
+import io
 import re
 import os
+import secrets
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash, session, current_app
 from datetime import datetime, timedelta
 from werkzeug.utils import secure_filename
@@ -54,6 +57,15 @@ def _render_create_teacher(status_code=200):
     return render_template("admin/create_teacher.html", form_data=request.form), status_code
 
 
+def _row_value(row, *keys):
+    normalized = {str(key).strip().lower().replace(" ", "_"): value for key, value in row.items()}
+    for key in keys:
+        value = normalized.get(key)
+        if value is not None:
+            return str(value).strip()
+    return ""
+
+
 def _session_snapshot(student_session):
     exam = student_session.exam_set
     total_questions = Question.query.filter_by(exam_set_id=exam.id).count()
@@ -75,7 +87,11 @@ def _session_snapshot(student_session):
         "exam_name": exam.exam_name,
         "set_code": exam.set_code,
         "status": student_session.status,
-        "remaining_seconds": get_remaining_seconds(exam, student_session.start_time),
+        "remaining_seconds": get_remaining_seconds(
+            exam,
+            student_session.start_time,
+            getattr(student_session, "extra_time_minutes", 0),
+        ),
         "answered_count": answered_count,
         "total_questions": total_questions,
         "focus_violations": student_session.focus_violations,
@@ -153,6 +169,93 @@ def users():
         pagination=users_paginated,
         role_filter=role_filter
     )
+
+
+@admin_bp.route("/users/import-students", methods=["POST"])
+@admin_required
+@rate_limit("admin_action", json_response=False)
+def import_students():
+    upload = request.files.get("students_file")
+    if not upload or not upload.filename:
+        flash("Choose a CSV file to import students.", "danger")
+        return redirect(url_for("admin.users", role="student"))
+
+    if not upload.filename.lower().endswith(".csv"):
+        flash("Only CSV files are supported for student import.", "danger")
+        return redirect(url_for("admin.users", role="student"))
+
+    try:
+        raw = upload.stream.read().decode("utf-8-sig")
+        reader = csv.DictReader(io.StringIO(raw))
+    except Exception:
+        flash("Could not read that CSV file.", "danger")
+        return redirect(url_for("admin.users", role="student"))
+
+    created_count = 0
+    skipped_count = 0
+    failed_rows = []
+
+    for index, row in enumerate(reader, start=2):
+        name = _row_value(row, "name", "full_name", "student_name")
+        email = _row_value(row, "email", "email_address") or None
+        roll_no = _row_value(row, "roll", "roll_no", "roll_number", "registration").upper()
+        username = _row_value(row, "username", "user_name") or roll_no or (email.split("@")[0] if email else "")
+        password = _row_value(row, "password", "temporary_password")
+
+        if not name or not username or not roll_no:
+            failed_rows.append(f"row {index}: missing name, username/roll, or roll number")
+            continue
+
+        if not _validate_username(username):
+            failed_rows.append(f"row {index}: invalid username")
+            continue
+
+        if User.query.filter_by(username=username).first():
+            skipped_count += 1
+            continue
+
+        if email and User.query.filter_by(email=email).first():
+            skipped_count += 1
+            continue
+
+        if User.query.filter_by(role="student", roll_number=roll_no).first():
+            skipped_count += 1
+            continue
+
+        if not password:
+            password = f"{secrets.token_urlsafe(8)}A1!"
+
+        student = User(
+            name=name,
+            username=username,
+            email=email,
+            role="student",
+            roll_number=roll_no,
+            is_active=True,
+            is_verified=True,
+            created_at=datetime.utcnow(),
+        )
+        student.set_password(password)
+        db.session.add(student)
+        created_count += 1
+
+    if created_count:
+        db.session.commit()
+
+    AuditLog(
+        user_id=session.get("admin_id"),
+        action="bulk_import_students",
+        resource_type="user",
+        changes=f"created={created_count}, skipped={skipped_count}, failed={len(failed_rows)}",
+        status="success" if not failed_rows else "warning",
+        ip_address=get_client_ip(),
+    ).save()
+
+    flash(f"Student import finished: {created_count} created, {skipped_count} skipped, {len(failed_rows)} failed.", "success" if not failed_rows else "warning")
+    if failed_rows:
+        flash("; ".join(failed_rows[:5]), "warning")
+
+    return redirect(url_for("admin.users", role="student"))
 
 
 @admin_bp.route("/users/create-teacher", methods=["GET", "POST"])
@@ -715,6 +818,8 @@ def grant_second_chance(session_id):
     student_session.tab_switch_count = 0
     student_session.suspicion_score = 0
     student_session.last_heartbeat = datetime.utcnow()
+    student_session.active_window_token = None
+    student_session.active_window_heartbeat_at = None
     if not student_session.start_time:
         student_session.start_time = datetime.utcnow()
     db.session.commit()

@@ -24,6 +24,7 @@ class SettingsService:
         settings = PlatformSettings(
             platform_name="Exam System",
             welcome_message="Calm assessment space",
+            announcement_message="",
             student_self_registration=False,
             max_violations_before_alert=current_app.config.get("MAX_VIOLATIONS_ALLOWED", 3),
             quote_pool="\n".join(SettingsService.DEFAULT_QUOTES),
@@ -38,6 +39,7 @@ class SettingsService:
 
         platform_name = (data.get("platform_name") or "Exam System").strip()
         welcome_message = (data.get("welcome_message") or "Calm assessment space").strip()
+        announcement_message = (data.get("announcement_message") or "").strip()
         quote_pool = (data.get("quote_pool") or "").strip()
 
         try:
@@ -48,6 +50,7 @@ class SettingsService:
 
         settings.platform_name = platform_name[:120]
         settings.welcome_message = welcome_message[:255]
+        settings.announcement_message = announcement_message[:600]
         settings.student_self_registration = data.get("student_self_registration") == "on"
         settings.max_violations_before_alert = max_violations
         settings.quote_pool = quote_pool or "\n".join(SettingsService.DEFAULT_QUOTES)

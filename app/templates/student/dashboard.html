@@ -3,6 +3,14 @@
 
 {% block content %}
 <div class="student-dashboard-shell">
+  {% if platform_settings and platform_settings.announcement_message %}
+    <section class="student-announcement-banner" data-announcement="{{ platform_settings.announcement_message | trim }}">
+      <i class="fas fa-bullhorn"></i>
+      <span>{{ platform_settings.announcement_message }}</span>
+      <button type="button" aria-label="Dismiss announcement"><i class="fas fa-xmark"></i></button>
+    </section>
+  {% endif %}
+
   <section class="student-dashboard-hero animate-fade-in-up">
     <div>
       <p class="student-kicker">Your exam space</p>
@@ -31,12 +39,23 @@
         {% for item in assigned_exams %}
           {% set exam = item.exam %}
           {% set attempt = item.session %}
+          {% set exam_open = exam.is_open_for_student() %}
+          {% set exam_ended = exam.has_ended() %}
           <article class="student-exam-card animate-fade-in-up">
             <div class="student-exam-card-head">
               <div>
                 <span class="badge {{ exam.status }}">{{ exam.status | title }}</span>
                 <h3>{{ exam.exam_name }}</h3>
-                <p>{{ exam.subject }} · {{ exam.duration_minutes }} min · {{ exam.total_marks }} marks</p>
+                <p>{{ exam.subject }} · {{ exam.duration_minutes + item.enrollment.extra_time_minutes }} min · {{ exam.total_marks }} marks</p>
+                {% if item.enrollment.extra_time_minutes %}
+                  <p>Includes +{{ item.enrollment.extra_time_minutes }} min approved extra time</p>
+                {% endif %}
+                {% if exam.start_time %}
+                  <p>Starts {{ exam.start_time.strftime("%d %b %H:%M") }}</p>
+                {% endif %}
+                {% if exam.end_time %}
+                  <p>Closes {{ exam.end_time.strftime("%d %b %H:%M") }}</p>
+                {% endif %}
               </div>
               <div class="student-exam-icon">
                 <i class="fas fa-file-lines"></i>
@@ -66,12 +85,12 @@
                 <a class="btn secondary" href="{{ url_for('student.submitted', session_code=attempt.session_code) }}">
                   <i class="fas fa-circle-check"></i> View submission
                 </a>
-              {% elif exam.status == "closed" %}
+              {% elif exam.status == "closed" or exam_ended %}
                 <button class="btn secondary" type="button" disabled>Closed</button>
               {% else %}
                 <form method="post" action="{{ url_for('student.start_assigned_exam', exam_id=exam.id) }}">
                   <button class="btn primary" type="submit">
-                    {% if exam.status == "active" %}
+                    {% if exam.status == "active" and exam_open %}
                       <i class="fas fa-play"></i> {{ "Resume" if attempt else "Start exam" }}
                     {% else %}
                       <i class="fas fa-door-open"></i> Join waiting room
@@ -108,4 +127,20 @@
     </aside>
   </section>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.querySelectorAll(".student-announcement-banner").forEach(banner => {
+    const key = `announcement_${btoa(unescape(encodeURIComponent(banner.dataset.announcement || ""))).slice(0, 32)}`;
+    if (sessionStorage.getItem(key) === "dismissed") {
+      banner.remove();
+      return;
+    }
+    banner.querySelector("button")?.addEventListener("click", () => {
+      sessionStorage.setItem(key, "dismissed");
+      banner.remove();
+    });
+  });
+</script>
 {% endblock %}

@@ -13,6 +13,9 @@
       <div><span>Set</span><strong>{{ student_session.exam_set.set_code }}</strong></div>
       <div><span>Roll No</span><strong>{{ student_session.roll_no }}</strong></div>
       <div><span>Status</span><strong>{{ student_session.status | title }}</strong></div>
+      {% if student_session.extra_time_minutes %}
+        <div><span>Extra Time</span><strong>+{{ student_session.extra_time_minutes }} min</strong></div>
+      {% endif %}
     </div>
 
     {% if student_session.autosubmit_reason %}
@@ -57,6 +60,12 @@
           </div>
           {% if question_marks.get(q.id) and question_marks.get(q.id).teacher_remark %}
             <p class="muted feedback-remark">{{ question_marks.get(q.id).teacher_remark }}</p>
+          {% endif %}
+          {% if q.model_answer %}
+            <div class="gentle-alert">
+              <i class="fas fa-lightbulb"></i>
+              <span><strong>Model answer:</strong> {{ q.model_answer }}</span>
+            </div>
           {% endif %}
           {% if q.question_type == "coding" and answer_objects_map.get(q.id) and answer_objects_map.get(q.id).code_output %}
             <pre class="code-review-output">{{ answer_objects_map.get(q.id).code_output }}</pre>

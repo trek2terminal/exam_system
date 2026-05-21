@@ -3,10 +3,14 @@ let heartbeatInterval = null;
 let debounceTimers = {};
 let currentSessionCode = null;
 let currentSessionToken = null;
+let currentWindowToken = null;
 let examSubmitted = false;
 let violationCount = 0;
 let fullscreenReady = false;
 let MAX_WARNINGS = 3;
+let questionStateMap = {};
+
+const QUESTION_STATES = ["NOT_VISITED", "VISITED_UNANSWERED", "ANSWERED", "MARKED_REVIEW", "ANSWERED_MARKED"];
 
 async function enterFullscreen() {
     const element = document.documentElement;
@@ -38,11 +42,12 @@ function formatTime(seconds) {
 function examRequestHeaders() {
     const headers = { "Content-Type": "application/json" };
     if (currentSessionToken) headers["X-Exam-Token"] = currentSessionToken;
+    if (currentWindowToken) headers["X-Exam-Window-Token"] = currentWindowToken;
     return headers;
 }
 
 function examPayload(payload = {}) {
-    return { ...payload, session_token: currentSessionToken };
+    return { ...payload, session_token: currentSessionToken, window_token: currentWindowToken };
 }
 
 function redirectIfLocked(data) {
@@ -53,24 +58,50 @@ function redirectIfLocked(data) {
     return false;
 }
 
-async function saveAnswer(sessionCode, questionId, answerText) {
-    updateAutoSaveStatus?.("saving");
-    try {
-        const response = await fetch(`/api/student/session/${sessionCode}/save`, {
-            method: "POST",
-            headers: examRequestHeaders(),
-            body: JSON.stringify(examPayload({ question_id: questionId, answer_text: answerText }))
-        });
-        const data = await response.json();
-        if (response.status === 403 && redirectIfLocked(data)) return;
-        if (!response.ok || !data.ok) {
-            throw new Error(data.message || "Autosave failed");
+function getWindowToken(sessionCode) {
+    const key = `exam_window_token_${sessionCode}`;
+    let token = sessionStorage.getItem(key);
+    if (!token) {
+        const random = new Uint8Array(24);
+        if (window.crypto?.getRandomValues) {
+            window.crypto.getRandomValues(random);
+            token = Array.from(random, value => value.toString(16).padStart(2, "0")).join("");
+        } else {
+            token = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
         }
-        updateAutoSaveStatus?.("saved");
-    } catch (e) {
-        console.error("Autosave failed:", e);
-        updateAutoSaveStatus?.("error", "Check connection");
+        sessionStorage.setItem(key, token);
     }
+    return token;
+}
+
+async function acquireExamWindowLock(sessionCode) {
+    const response = await fetch(`/api/student/session/${sessionCode}/window-lock`, {
+        method: "POST",
+        headers: examRequestHeaders(),
+        body: JSON.stringify(examPayload({}))
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) {
+        redirectIfLocked(data);
+        return false;
+    }
+    return true;
+}
+
+function normalizeQuestionState(status) {
+    return QUESTION_STATES.includes(status) ? status : "NOT_VISITED";
+}
+
+function questionStatusClass(status) {
+    return `status-${normalizeQuestionState(status).toLowerCase().replaceAll("_", "-")}`;
+}
+
+function getQuestionBlockById(questionId) {
+    return document.querySelector(`[data-question-id="${questionId}"].student-question-card`);
+}
+
+function getQuestionPaletteItem(questionId) {
+    return document.querySelector(`.palette-item[data-question-id="${questionId}"]`);
 }
 
 function getQuestionAnswerValue(questionBlock) {
@@ -81,38 +112,144 @@ function getQuestionAnswerValue(questionBlock) {
     return field ? field.value.trim() : "";
 }
 
-function updateAnswerProgress() {
-    const questionBlocks = Array.from(document.querySelectorAll("[data-question-number]"));
-    if (!questionBlocks.length) return;
+function isQuestionFlagged(questionBlock) {
+    return questionBlock.querySelector(".flag-review-button")?.classList.contains("active") || false;
+}
 
-    let answered = 0;
-    questionBlocks.forEach(block => {
-        const isAnswered = getQuestionAnswerValue(block).length > 0;
-        const questionNumber = block.dataset.questionNumber;
-        if (isAnswered) answered += 1;
-        block.classList.toggle("answered", isAnswered);
-        updatePaletteStatus?.(questionNumber, isAnswered ? "answered" : "");
+function computeQuestionState(questionBlock, markVisited = false) {
+    const answered = getQuestionAnswerValue(questionBlock).length > 0;
+    const flagged = isQuestionFlagged(questionBlock);
+    const previous = normalizeQuestionState(questionBlock.dataset.visitStatus || "NOT_VISITED");
+    const visited = markVisited || previous !== "NOT_VISITED";
+
+    if (answered && flagged) return "ANSWERED_MARKED";
+    if (answered) return "ANSWERED";
+    if (flagged) return "MARKED_REVIEW";
+    if (visited) return "VISITED_UNANSWERED";
+    return "NOT_VISITED";
+}
+
+function getQuestionStatusCounts() {
+    const counts = Object.fromEntries(QUESTION_STATES.map(state => [state, 0]));
+    document.querySelectorAll(".student-question-card[data-question-id]").forEach(block => {
+        counts[normalizeQuestionState(block.dataset.visitStatus)] += 1;
     });
+    return counts;
+}
+
+function updateQuestionStatusSummary() {
+    const counts = getQuestionStatusCounts();
+    Object.entries(counts).forEach(([state, count]) => {
+        const node = document.querySelector(`[data-summary="${state}"]`);
+        if (node) node.textContent = count;
+    });
+
+    const answered = counts.ANSWERED + counts.ANSWERED_MARKED;
+    const total = Object.values(counts).reduce((sum, count) => sum + count, 0);
+    const percent = total ? Math.round((answered / total) * 100) : 0;
 
     const answeredCount = document.getElementById("answeredCount");
     const totalCount = document.getElementById("totalQuestionCount");
     const progressFill = document.getElementById("answerProgressFill");
     const progressText = document.getElementById("answerProgressText");
-    const percent = Math.round((answered / questionBlocks.length) * 100);
 
     if (answeredCount) answeredCount.textContent = answered;
-    if (totalCount) totalCount.textContent = questionBlocks.length;
+    if (totalCount) totalCount.textContent = total;
     if (progressFill) progressFill.style.width = `${percent}%`;
     if (progressText) progressText.textContent = `${percent}% complete`;
+}
+
+function applyQuestionState(questionBlock, state) {
+    const normalized = normalizeQuestionState(state);
+    const questionId = questionBlock.dataset.questionId;
+    questionBlock.dataset.visitStatus = normalized;
+    questionStateMap[questionId] = normalized;
+    questionBlock.classList.toggle("answered", normalized === "ANSWERED" || normalized === "ANSWERED_MARKED");
+    questionBlock.classList.toggle("marked-review", normalized === "MARKED_REVIEW" || normalized === "ANSWERED_MARKED");
+
+    const item = getQuestionPaletteItem(questionId);
+    if (item) {
+        item.dataset.status = normalized;
+        item.classList.remove(...QUESTION_STATES.map(questionStatusClass));
+        item.classList.add(questionStatusClass(normalized));
+    }
+
+    updateQuestionStatusSummary();
+}
+
+async function persistQuestionState(sessionCode, questionId, state) {
+    try {
+        const response = await fetch(`/api/student/session/${sessionCode}/question-status`, {
+            method: "POST",
+            headers: examRequestHeaders(),
+            body: JSON.stringify(examPayload({ question_id: questionId, visit_status: state }))
+        });
+        const data = await response.json();
+        if (redirectIfLocked(data)) return;
+        if (!response.ok || !data.ok) throw new Error(data.message || "Status save failed");
+    } catch (error) {
+        console.error("Question status save failed:", error);
+    }
+}
+
+function updateQuestionState(questionBlock, markVisited = false, persist = false) {
+    const state = computeQuestionState(questionBlock, markVisited);
+    const changed = normalizeQuestionState(questionBlock.dataset.visitStatus) !== state;
+    applyQuestionState(questionBlock, state);
+    if (persist && changed) persistQuestionState(currentSessionCode, questionBlock.dataset.questionId, state);
+    return state;
+}
+
+function refreshQuestionStates() {
+    document.querySelectorAll(".student-question-card[data-question-id]").forEach(block => {
+        applyQuestionState(block, normalizeQuestionState(block.dataset.visitStatus));
+    });
+}
+
+async function saveAnswer(sessionCode, questionId, answerText, visitStatus = null) {
+    updateAutoSaveStatus?.("saving");
+    try {
+        const response = await fetch(`/api/student/session/${sessionCode}/save`, {
+            method: "POST",
+            headers: examRequestHeaders(),
+            body: JSON.stringify(examPayload({
+                question_id: questionId,
+                answer_text: answerText,
+                visit_status: visitStatus || questionStateMap[questionId] || "ANSWERED"
+            }))
+        });
+        const data = await response.json();
+        if (redirectIfLocked(data)) return;
+        if (!response.ok || !data.ok) {
+            throw new Error(data.message || "Autosave failed");
+        }
+        updateAutoSaveStatus?.("saved");
+    } catch (e) {
+        console.error("Autosave failed:", e);
+        updateAutoSaveStatus?.("error", "Check connection");
+    }
+}
+
+function updateAnswerProgress() {
+    const questionBlocks = Array.from(document.querySelectorAll(".student-question-card[data-question-number]"));
+    if (!questionBlocks.length) return;
+
+    questionBlocks.forEach(block => {
+        updateQuestionState(block, false, false);
+    });
 }
 
 function snapshotAnswers() {
     const saves = [];
     document.querySelectorAll(".answer-field").forEach(field => {
-        saves.push(saveAnswer(currentSessionCode, field.dataset.questionId, field.value));
+        const block = field.closest(".student-question-card");
+        const state = block ? updateQuestionState(block, true, false) : questionStateMap[field.dataset.questionId];
+        saves.push(saveAnswer(currentSessionCode, field.dataset.questionId, field.value, state));
     });
     document.querySelectorAll(".answer-radio:checked").forEach(radio => {
-        saves.push(saveAnswer(currentSessionCode, radio.dataset.questionId, radio.value));
+        const block = radio.closest(".student-question-card");
+        const state = block ? updateQuestionState(block, true, false) : questionStateMap[radio.dataset.questionId];
+        saves.push(saveAnswer(currentSessionCode, radio.dataset.questionId, radio.value, state));
     });
     return saves;
 }
@@ -121,10 +258,10 @@ function isCodeEditingTarget(target) {
     return Boolean(target?.closest?.(".coding-workspace"));
 }
 
-function queueTextSave(sessionCode, questionId, answerText) {
+function queueTextSave(sessionCode, questionId, answerText, visitStatus) {
     const key = `${sessionCode}_${questionId}`;
     if (debounceTimers[key]) clearTimeout(debounceTimers[key]);
-    debounceTimers[key] = setTimeout(() => saveAnswer(sessionCode, questionId, answerText), 800);
+    debounceTimers[key] = setTimeout(() => saveAnswer(sessionCode, questionId, answerText, visitStatus), 800);
 }
 
 async function runCodeForQuestion(button) {
@@ -150,11 +287,12 @@ async function runCodeForQuestion(button) {
             body: JSON.stringify(examPayload({
                 question_id: questionId,
                 code: codeField.value,
-                stdin: stdinField ? stdinField.value : ""
+                stdin: stdinField ? stdinField.value : "",
+                visit_status: questionStateMap[questionId] || "ANSWERED"
             }))
         });
         const data = await response.json();
-        if (response.status === 403 && redirectIfLocked(data)) return;
+        if (redirectIfLocked(data)) return;
         const parts = [];
         parts.push(`[${(data.status || "unknown").toUpperCase()}] ${data.message || ""}`.trim());
         if (typeof data.execution_time_ms === "number") {
@@ -189,7 +327,7 @@ async function sendHeartbeat(sessionCode, focused = true) {
             body: JSON.stringify(examPayload({ focused, violation_count: violationCount }))
         });
         const data = await response.json();
-        if (response.status === 403 && redirectIfLocked(data)) return;
+        if (redirectIfLocked(data)) return;
         if (typeof data.max_violations_allowed === "number") {
             MAX_WARNINGS = data.max_violations_allowed;
         }
@@ -218,7 +356,7 @@ async function reportViolation(sessionCode, type, detail) {
             body: JSON.stringify(examPayload({ type, detail, violation_count: violationCount }))
         });
         const data = await response.json();
-        if (response.status === 403 && redirectIfLocked(data)) return data;
+        if (redirectIfLocked(data)) return data;
         if (typeof data.max_violations_allowed === "number") {
             MAX_WARNINGS = data.max_violations_allowed;
         }
@@ -259,7 +397,20 @@ async function submitExam(sessionCode, manual = false, reason = null) {
 
 function confirmSubmitExam(sessionCode) {
     if (examSubmitted) return;
-    const confirmed = window.confirm("Submit your exam now? Your saved answers will be sent before submission.");
+    updateAnswerProgress();
+    const counts = getQuestionStatusCounts();
+    const confirmed = window.confirm(
+        [
+            "Submit your exam now?",
+            "",
+            `Answered: ${counts.ANSWERED + counts.ANSWERED_MARKED}`,
+            `Not answered: ${counts.VISITED_UNANSWERED}`,
+            `Not visited: ${counts.NOT_VISITED}`,
+            `Marked for review: ${counts.MARKED_REVIEW + counts.ANSWERED_MARKED}`,
+            "",
+            "Your saved answers will be sent before submission."
+        ].join("\n")
+    );
     if (confirmed) submitExam(sessionCode, true, "Manual submission");
 }
 
@@ -340,12 +491,12 @@ function initWaitingPage(sessionCode, sessionToken = null) {
                 headers: currentSessionToken ? { "X-Exam-Token": currentSessionToken } : {}
             });
             const data = await res.json();
-            if (res.status === 403 && redirectIfLocked(data)) return;
+            if (redirectIfLocked(data)) return;
             if (data.redirect && data.submitted) {
                 window.location.replace(data.redirect);
                 return;
             }
-            if (data.exam_status === "active" && data.session_status !== "submitted") {
+            if (data.exam_status === "active" && data.time_state !== "not_started" && data.session_status !== "submitted") {
                 window.location.replace(`/student/precheck/${sessionCode}`);
             }
         } catch (e) {
@@ -354,9 +505,12 @@ function initWaitingPage(sessionCode, sessionToken = null) {
     }, 3000);
 }
 
-function initExamPage(sessionCode, remainingSeconds, sessionToken = null) {
+async function initExamPage(sessionCode, remainingSeconds, sessionToken = null) {
     currentSessionCode = sessionCode;
     currentSessionToken = sessionToken;
+    currentWindowToken = getWindowToken(sessionCode);
+    if (!(await acquireExamWindowLock(sessionCode))) return;
+
     const shell = document.querySelector(".exam-shell");
     const configuredLimit = parseInt(shell?.dataset.warningLimit || "3", 10);
     if (configuredLimit > 0) MAX_WARNINGS = configuredLimit;
@@ -469,7 +623,8 @@ function initExamPage(sessionCode, remainingSeconds, sessionToken = null) {
                 type: "PAGE_CLOSE_ATTEMPT",
                 detail: "Repeated page close/refresh attempts",
                 violation_count: attempts,
-                session_token: currentSessionToken
+                session_token: currentSessionToken,
+                window_token: currentWindowToken
             })], { type: "application/json" });
             navigator.sendBeacon(`/api/student/session/${sessionCode}/violation`, blob);
             return;
@@ -487,7 +642,8 @@ function initExamPage(sessionCode, remainingSeconds, sessionToken = null) {
                 type: "PAGE_CLOSE_ATTEMPT",
                 detail: "Repeated page close/refresh attempts",
                 violation_count: attempts,
-                session_token: currentSessionToken
+                session_token: currentSessionToken,
+                window_token: currentWindowToken
             })], { type: "application/json" });
             navigator.sendBeacon(`/api/student/session/${sessionCode}/violation`, blob);
         }
@@ -495,14 +651,24 @@ function initExamPage(sessionCode, remainingSeconds, sessionToken = null) {
 
     document.querySelectorAll(".answer-field").forEach(field => {
         field.addEventListener("input", () => {
-            queueTextSave(sessionCode, field.dataset.questionId, field.value);
-            updateAnswerProgress();
+            const block = field.closest(".student-question-card");
+            const state = block ? updateQuestionState(block, true, false) : "ANSWERED";
+            queueTextSave(sessionCode, field.dataset.questionId, field.value, state);
         });
     });
     document.querySelectorAll(".answer-radio").forEach(radio => {
         radio.addEventListener("change", () => {
-            saveAnswer(sessionCode, radio.dataset.questionId, radio.value);
-            updateAnswerProgress();
+            const block = radio.closest(".student-question-card");
+            const state = block ? updateQuestionState(block, true, false) : "ANSWERED";
+            saveAnswer(sessionCode, radio.dataset.questionId, radio.value, state);
+        });
+    });
+    document.querySelectorAll(".flag-review-button").forEach(button => {
+        button.addEventListener("click", () => {
+            const block = button.closest(".student-question-card");
+            if (!block) return;
+            button.classList.toggle("active");
+            updateQuestionState(block, true, true);
         });
     });
     document.querySelectorAll(".run-code-button").forEach(button => {
@@ -513,6 +679,8 @@ function initExamPage(sessionCode, remainingSeconds, sessionToken = null) {
         const item = event.target.closest(".palette-item");
         if (!item) return;
         scrollToQuestion?.(item.dataset.question);
+        const block = getQuestionBlockById(item.dataset.questionId);
+        if (block) updateQuestionState(block, true, true);
     });
 
     document.getElementById("questionList")?.addEventListener("click", () => {
@@ -524,6 +692,18 @@ function initExamPage(sessionCode, remainingSeconds, sessionToken = null) {
         gate.querySelector("button")?.addEventListener("click", enterFullscreen);
     }
 
+    if ("IntersectionObserver" in window) {
+        const observer = new IntersectionObserver(entries => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    updateQuestionState(entry.target, true, true);
+                }
+            });
+        }, { threshold: 0.55 });
+        document.querySelectorAll(".student-question-card[data-question-id]").forEach(block => observer.observe(block));
+    }
+
+    refreshQuestionStates();
     updateAnswerProgress();
     updateAutoSaveStatus?.("idle");
 }

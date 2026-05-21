@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Exam Already Open{% endblock %}
+
+{% block content %}
+<div class="student-flow-shell">
+  <section class="student-flow-card submitted-card animate-scale-in">
+    <div class="submitted-check warning"><i class="fas fa-lock"></i></div>
+    <p class="student-kicker">Exam window locked</p>
+    <h1>This exam is already open.</h1>
+    <p>
+      <strong>{{ student_session.exam_set.exam_name }}</strong> is active in another tab or device.
+      Close the other exam window first, then return from the dashboard.
+    </p>
+
+    <div class="student-exam-summary">
+      <div><span>Roll No</span><strong>{{ student_session.roll_no }}</strong></div>
+      <div><span>Status</span><strong>{{ student_session.status | title }}</strong></div>
+      <div><span>Session</span><strong>{{ student_session.session_code }}</strong></div>
+    </div>
+
+    <div class="submitted-actions">
+      <a class="btn secondary" href="{{ url_for('student.dashboard') }}">
+        <i class="fas fa-table-cells-large"></i> Dashboard
+      </a>
+    </div>
+  </section>
+</div>
+{% endblock %}

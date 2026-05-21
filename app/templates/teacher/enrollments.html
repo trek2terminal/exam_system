@@ -36,10 +36,10 @@
   <div class="grid-2" style="align-items: start; margin-top: 24px;">
     <section class="card">
       <h2>Add Students</h2>
-      <p class="muted">Paste one student per line. Use <strong>ROLL_NO, Student Name</strong> or just <strong>ROLL_NO</strong>.</p>
+      <p class="muted">Paste one student per line. Use <strong>ROLL_NO, Student Name, Extra Minutes</strong> or just <strong>ROLL_NO</strong>.</p>
       <form method="post" class="student-roster-form">
         <label for="enrollments">Roster</label>
-        <textarea id="enrollments" name="enrollments" rows="12" placeholder="24CS001, Aditi Sharma&#10;24CS002, Rahul Das&#10;24CS003"></textarea>
+        <textarea id="enrollments" name="enrollments" rows="12" placeholder="24CS001, Aditi Sharma, 0&#10;24CS002, Rahul Das, 15&#10;24CS003"></textarea>
         <button class="btn primary" type="submit">
           <i class="fas fa-user-plus"></i> Add to Exam
         </button>
@@ -57,6 +57,7 @@
             <tr>
               <th>Roll No</th>
               <th>Name</th>
+              <th>Extra Time</th>
               <th>Status</th>
               <th>Action</th>
             </tr>
@@ -67,6 +68,7 @@
               <tr>
                 <td><strong>{{ enrollment.roll_no }}</strong></td>
                 <td>{{ enrollment.student_name or "Not set" }}</td>
+                <td>{{ enrollment.extra_time_minutes }} min</td>
                 <td>
                   {% if attempt %}
                     <span class="badge {{ attempt.status }}">{{ attempt.status | title }}</span>
@@ -86,7 +88,7 @@
               </tr>
             {% else %}
               <tr>
-                <td colspan="4" style="text-align: center; padding: 32px;">
+                <td colspan="5" style="text-align: center; padding: 32px;">
                   <span class="muted">No students assigned yet.</span>
                 </td>
               </tr>

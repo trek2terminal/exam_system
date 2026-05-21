@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Question Bank{% endblock %}
+
+{% block content %}
+<div class="page-transition">
+  <div class="row-between">
+    <div>
+      <p class="muted">Reusable questions</p>
+      <h1>Question Bank</h1>
+    </div>
+    <a class="btn secondary" href="{{ url_for('teacher.dashboard') }}">Back</a>
+  </div>
+
+  <div class="grid-2" style="align-items: start; margin-top: 24px;">
+    <section class="card">
+      <h2>Add Question</h2>
+      <form method="post" class="student-roster-form">
+        <label>Question Type</label>
+        <select name="question_type">
+          <option value="short">Short</option>
+          <option value="long">Long</option>
+          <option value="mcq">MCQ</option>
+          <option value="coding">Coding</option>
+        </select>
+
+        <label>Question Text</label>
+        <textarea name="question_text" rows="5" required></textarea>
+
+        <label>Marks</label>
+        <input type="number" name="marks" min="1" value="1" required>
+
+        <label>Options for MCQ (use | between options)</label>
+        <input type="text" name="options" placeholder="Option A|Option B|Option C|Option D">
+
+        <label>Correct Answer / Key</label>
+        <input type="text" name="correct_answer">
+
+        <label>Model Answer / Review Reference</label>
+        <textarea name="model_answer" rows="3"></textarea>
+
+        <button class="btn primary" type="submit">
+          <i class="fas fa-bookmark"></i> Save to Bank
+        </button>
+      </form>
+    </section>
+
+    <section class="card">
+      <div class="row-between">
+        <h2>Saved Questions</h2>
+        <span class="badge active">{{ bank_items | length }} items</span>
+      </div>
+
+      <div class="question-bank-list">
+        {% for item in bank_items %}
+          <article class="question-bank-item">
+            <div class="row-between">
+              <span class="badge {{ item.question_type }}">{{ item.question_type | title }}</span>
+              <form method="post" action="{{ url_for('teacher.delete_question_bank_item', item_id=item.id) }}" onsubmit="return confirm('Remove this question from your bank?')">
+                <button class="btn danger small" type="submit">Delete</button>
+              </form>
+            </div>
+            <h3>{{ item.question_text }}</h3>
+            <p class="muted">{{ item.marks }} mark{% if item.marks != 1 %}s{% endif %}</p>
+            {% if item.model_answer %}
+              <p class="muted">Model answer saved</p>
+            {% endif %}
+          </article>
+        {% else %}
+          <p class="muted">No saved questions yet.</p>
+        {% endfor %}
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}
