@@ -62,6 +62,7 @@ This project should follow that same practical model.
 - Code execution output stored with answers and shown to teacher/student/PDF review surfaces.
 - Pre-exam checklist/start gate for active exams. Timed sessions now start only after the student confirms readiness and rules.
 - CSV exports for teacher all-results, per-exam results with per-question marks/remarks, and admin violation logs.
+- Platform settings table with admin-managed platform name, student welcome message, quote pool, self-registration toggle placeholder, and violation warning threshold.
 
 ## Python Feature Roadmap
 

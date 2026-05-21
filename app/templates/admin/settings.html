@@ -5,104 +5,67 @@
 {% block content %}
 <div class="admin-page">
     <div class="page-header">
-        <h1><i class="fas fa-cog"></i> System Settings</h1>
-        <p>Configure system-wide exam and user settings</p>
+        <div>
+            <h1><i class="fas fa-cog"></i> System Settings</h1>
+            <p>Control student-facing tone, platform identity, and exam integrity thresholds.</p>
+        </div>
+        <a class="btn secondary" href="{{ url_for('admin.dashboard') }}">Back</a>
     </div>
 
-    <div class="card">
-        <div class="card-header">
-            <h2>Exam Configuration</h2>
+    <form method="POST" action="{{ url_for('admin.save_settings') }}" class="settings-panel">
+        <section class="card">
+            <div class="card-header">
+                <h2>Platform Identity</h2>
+                <p class="muted">These values appear in the top bar and student-facing surfaces.</p>
+            </div>
+            <div class="settings-grid">
+                <div class="form-group">
+                    <label for="platform_name">Platform Name</label>
+                    <input id="platform_name" type="text" name="platform_name" maxlength="120" value="{{ settings.platform_name }}" required>
+                </div>
+                <div class="form-group">
+                    <label for="welcome_message">Student Welcome Message</label>
+                    <input id="welcome_message" type="text" name="welcome_message" maxlength="255" value="{{ settings.welcome_message }}" required>
+                </div>
+            </div>
+        </section>
+
+        <section class="card">
+            <div class="card-header">
+                <h2>Student Experience</h2>
+                <p class="muted">Add one quote per line. Students see a random quote on each dashboard visit.</p>
+            </div>
+            <div class="form-group">
+                <label for="quote_pool">Motivational Quote Pool</label>
+                <textarea id="quote_pool" name="quote_pool" rows="8" placeholder="One question at a time is enough.">{{ settings.quote_pool }}</textarea>
+            </div>
+        </section>
+
+        <section class="card">
+            <div class="card-header">
+                <h2>Exam Integrity</h2>
+                <p class="muted">These settings are used by student warnings and admin review thresholds.</p>
+            </div>
+            <div class="settings-grid">
+                <div class="form-group">
+                    <label for="max_violations_before_alert">Warning Threshold</label>
+                    <input id="max_violations_before_alert" type="number" name="max_violations_before_alert" min="1" max="10" value="{{ settings.max_violations_before_alert }}" required>
+                </div>
+                <label class="settings-check">
+                    <input type="checkbox" name="student_self_registration" {% if settings.student_self_registration %}checked{% endif %}>
+                    <span>
+                        <strong>Allow Student Self-Registration</strong>
+                        <small>Stored now for the upcoming student account flow.</small>
+                    </span>
+                </label>
+            </div>
+        </section>
+
+        <div class="form-actions">
+            <button type="submit" class="btn primary">
+                <i class="fas fa-floppy-disk"></i> Save Settings
+            </button>
         </div>
-        <div class="card-body">
-            <form method="POST" action="{{ url_for('admin.save_settings') }}" class="settings-form">
-                <div class="form-group">
-                    <label>Max Exam Duration (minutes)</label>
-                    <input type="number" name="max_duration" value="180" min="1" max="600">
-                </div>
-                <div class="form-group">
-                    <label>Allow Exam Rescheduling</label>
-                    <input type="checkbox" name="allow_reschedule" checked>
-                </div>
-                <div class="form-group">
-                    <label>Auto-lock Exams After Time</label>
-                    <input type="checkbox" name="auto_lock" checked>
-                </div>
-                <button type="submit" class="btn btn-primary">Save Settings</button>
-            </form>
-        </div>
-    </div>
+    </form>
 </div>
-
-<style>
-.admin-page {
-    padding: 2rem;
-    max-width: 800px;
-    margin: 0 auto;
-}
-
-.page-header h1 {
-    font-size: 1.8rem;
-    margin-bottom: 0.5rem;
-}
-
-.card {
-    background: var(--panel-solid);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    margin-top: 2rem;
-    overflow: hidden;
-}
-
-.card-header {
-    padding: 1.5rem;
-    border-bottom: 1px solid var(--border);
-}
-
-.card-body {
-    padding: 2rem;
-}
-
-.settings-form {
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-}
-
-.form-group {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-
-.form-group label {
-    font-weight: 500;
-    color: var(--text);
-}
-
-.form-group input[type="number"],
-.form-group input[type="checkbox"] {
-    padding: 0.5rem;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    color: var(--text);
-}
-
-.btn {
-    padding: 0.75rem 1.5rem;
-    background: var(--primary);
-    color: white;
-    border: none;
-    border-radius: var(--radius-md);
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.3s ease;
-}
-
-.btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 10px 25px rgba(79, 140, 255, 0.3);
-}
-</style>
 {% endblock %}
-

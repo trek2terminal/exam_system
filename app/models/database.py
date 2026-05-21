@@ -58,6 +58,7 @@ def init_db(app):
         from app.models.submission_model import StudentSession, Answer
         from app.models.result_model import Result, QuestionMark
         from app.models.audit_model import AuditLog, ViolationLog
+        from app.models.settings_model import PlatformSettings
 
         db.create_all()
         apply_lightweight_schema_updates(app)

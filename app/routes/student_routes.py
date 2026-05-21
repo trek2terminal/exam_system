@@ -1,11 +1,11 @@
-import random
 from datetime import datetime
-from flask import Blueprint, current_app, render_template, redirect, url_for, request, flash, session, send_file
+from flask import Blueprint, render_template, redirect, url_for, request, flash, session, send_file
 from app.models.database import db
 from app.models.exam_model import ExamEnrollment, ExamSet, Question
 from app.models.submission_model import StudentSession, Answer
 from app.models.result_model import Result
 from app.services.exam_service import ExamService
+from app.services.settings_service import SettingsService
 from app.utils.helpers import create_submission_pdf
 
 student_bp = Blueprint("student", __name__, url_prefix="/student")
@@ -121,14 +121,8 @@ def dashboard():
     else:
         greeting = "Good evening"
 
-    quote = random.choice(
-        [
-            "One question at a time is enough.",
-            "Read calmly, answer clearly, and trust your preparation.",
-            "A steady mind does better work than a rushed one.",
-            "You do not need to be perfect. You only need to be present.",
-        ]
-    )
+    platform_settings = SettingsService.get_settings()
+    quote = SettingsService.random_quote(platform_settings)
 
     return render_template(
         "student/dashboard.html",
@@ -137,6 +131,7 @@ def dashboard():
         assigned_exams=assigned_exams,
         greeting=greeting,
         quote=quote,
+        platform_settings=platform_settings,
     )
 
 
@@ -303,7 +298,7 @@ def precheck(session_code):
         student_session=student_session,
         exam=exam,
         question_count=question_count,
-        max_violations_allowed=current_app.config.get("MAX_VIOLATIONS_ALLOWED", 3),
+        max_violations_allowed=SettingsService.max_violations_allowed(),
     )
 
 
@@ -348,7 +343,7 @@ def exam(session_code):
         saved_map=saved_map,
         code_output_map=code_output_map,
         remaining_seconds=remaining_seconds,
-        max_violations_allowed=current_app.config.get("MAX_VIOLATIONS_ALLOWED", 3),
+        max_violations_allowed=SettingsService.max_violations_allowed(),
     )
 
 

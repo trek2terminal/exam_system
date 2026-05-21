@@ -11,6 +11,7 @@ from app.services.code_execution_service import CodeExecutionService
 from app.services.exam_service import ExamService
 from app.services.result_service import ResultService
 from app.services.security_service import SecurityService
+from app.services.settings_service import SettingsService
 from app.utils.helpers import get_remaining_seconds
 from app.utils.network import get_client_ip
 from app.utils.rate_limiter import rate_limit
@@ -62,7 +63,7 @@ def session_status(session_code):
             "session_status": student_session.status,
             "remaining_seconds": remaining_seconds,
             "focus_violations": student_session.focus_violations,
-            "max_violations_allowed": current_app.config.get("MAX_VIOLATIONS_ALLOWED", 3),
+            "max_violations_allowed": SettingsService.max_violations_allowed(),
             "suspicion_score": getattr(student_session, "suspicion_score", 0),
             "submitted": student_session.status in ["submitted", "evaluated"],
         }
@@ -179,7 +180,7 @@ def heartbeat(session_code):
             "session_status": student_session.status,
             "remaining_seconds": remaining_seconds,
             "focus_violations": student_session.focus_violations,
-            "max_violations_allowed": current_app.config.get("MAX_VIOLATIONS_ALLOWED", 3),
+            "max_violations_allowed": SettingsService.max_violations_allowed(),
             "should_submit": should_submit,
         }
     )
@@ -210,7 +211,7 @@ def record_violation(session_code):
         user_agent=request.headers.get("User-Agent"),
     )
 
-    max_violations = current_app.config.get("MAX_VIOLATIONS_ALLOWED", 3)
+    max_violations = SettingsService.max_violations_allowed()
     admin_review_required = student_session.focus_violations >= max_violations
 
     return jsonify(

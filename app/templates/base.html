@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Exam System{% endblock %}</title>
+    <title>{% block title %}{{ platform_settings.platform_name if platform_settings else 'Exam System' }}{% endblock %}</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -23,8 +23,14 @@
                     <i class="fas {% if is_student_surface %}fa-compass{% else %}fa-shield-halved{% endif %}"></i>
                 </div>
                 <div>
-                    <div class="brand-title">Exam System</div>
-                    <div class="brand-subtitle">{% if is_student_surface %}Calm assessment space{% else %}Professional Assessment Platform{% endif %}</div>
+                    <div class="brand-title">{{ platform_settings.platform_name if platform_settings else 'Exam System' }}</div>
+                    <div class="brand-subtitle">
+                        {% if is_student_surface %}
+                            {{ platform_settings.welcome_message if platform_settings else 'Calm assessment space' }}
+                        {% else %}
+                            Professional Assessment Platform
+                        {% endif %}
+                    </div>
                 </div>
             </div>
 
@@ -44,6 +50,9 @@
                     </a>
                     <a href="{{ url_for('admin.violations') }}" class="nav-link">
                         <i class="fas fa-triangle-exclamation"></i> Violations
+                    </a>
+                    <a href="{{ url_for('admin.settings') }}" class="nav-link">
+                        <i class="fas fa-cog"></i> Settings
                     </a>
                     <a href="{{ url_for('auth.admin_logout') }}" class="nav-link nav-logout">
                         <i class="fas fa-sign-out-alt"></i> Logout

@@ -63,6 +63,16 @@ def create_app(config_class=None):
     app.register_blueprint(student_bp)
     app.register_blueprint(api_bp)
 
+    @app.context_processor
+    def inject_platform_settings():
+        try:
+            from app.services.settings_service import SettingsService
+
+            settings = SettingsService.get_settings()
+        except Exception:
+            settings = None
+        return {"platform_settings": settings}
+
     # Security Headers
     @app.after_request
     def add_security_headers(response):

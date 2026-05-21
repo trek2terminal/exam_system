@@ -10,6 +10,7 @@ from app.models.submission_model import StudentSession, Answer
 from app.models.result_model import Result
 from app.models.audit_model import AuditLog, ViolationLog
 from app.services.exam_service import ExamService
+from app.services.settings_service import SettingsService
 from app.utils.export_utils import csv_response, format_datetime
 from app.utils.helpers import admin_required, get_remaining_seconds
 from app.utils.network import get_client_ip
@@ -771,14 +772,24 @@ def reduce_session_time(session_id):
 @admin_required
 def settings():
     """System settings and configuration"""
-    return render_template("admin/settings.html")
+    platform_settings = SettingsService.get_settings()
+    return render_template("admin/settings.html", settings=platform_settings)
 
 
 @admin_bp.route("/settings/save", methods=["POST"])
 @admin_required
 def save_settings():
     """Save system settings"""
-    # Future: Save to config table
+    SettingsService.update_settings(request.form, updated_by=session.get("admin_id"))
+    AuditLog(
+        user_id=session.get("admin_id"),
+        action="update_platform_settings",
+        resource_type="settings",
+        resource_id=1,
+        changes="Updated platform settings",
+        status="success",
+        ip_address=get_client_ip(),
+    ).save()
     flash("Settings saved successfully!", "success")
     return redirect(url_for("admin.settings"))
 
