@@ -70,6 +70,19 @@ def _remember_student_session(student_session):
     session["student_session_code"] = student_session.session_code
 
 
+def _precheck_key(session_code):
+    return f"exam_precheck_ok_{session_code}"
+
+
+def _has_precheck_clearance(session_code):
+    return bool(session.get(_precheck_key(session_code)))
+
+
+def _grant_precheck_clearance(session_code):
+    session[_precheck_key(session_code)] = True
+    session.modified = True
+
+
 @student_bp.route("/")
 def index():
     return redirect(url_for("student.dashboard"))
@@ -152,8 +165,10 @@ def start_assigned_exam(exam_id):
     if student_session.status in ["submitted", "evaluated"]:
         return redirect(url_for("student.submitted", session_code=student_session.session_code))
 
+    if exam.status == "active" and not student_session.start_time:
+        return redirect(url_for("student.precheck", session_code=student_session.session_code))
+
     if exam.status == "active":
-        ExamService.start_exam(student_session.session_code)
         return redirect(url_for("student.exam", session_code=student_session.session_code))
 
     return redirect(url_for("student.waiting", session_code=student_session.session_code))
@@ -220,8 +235,8 @@ def join_exam():
         if student_session.status in ["submitted", "evaluated"]:
             return redirect(url_for("student.submitted", session_code=student_session.session_code))
 
-        if exam.status == "active":
-            ExamService.start_exam(student_session.session_code)
+        if exam.status == "active" and not student_session.start_time:
+            return redirect(url_for("student.precheck", session_code=student_session.session_code))
 
         if student_session.status == "waiting":
             return redirect(url_for("student.waiting", session_code=student_session.session_code))
@@ -244,12 +259,52 @@ def waiting(session_code):
         return redirect(url_for("student.submitted", session_code=session_code))
 
     if exam.status == "active":
-        ExamService.start_exam(session_code)
-        return redirect(url_for("student.exam", session_code=session_code))
+        if student_session.start_time:
+            return redirect(url_for("student.exam", session_code=session_code))
+        return redirect(url_for("student.precheck", session_code=session_code))
 
     return render_template("student/waiting.html",
                            student_session=student_session,
                            exam=exam)
+
+
+@student_bp.route("/precheck/<session_code>", methods=["GET", "POST"])
+def precheck(session_code):
+    owner_redirect = _redirect_if_not_owner(session_code)
+    if owner_redirect:
+        return owner_redirect
+
+    student_session = StudentSession.query.filter_by(session_code=session_code).first_or_404()
+    exam = student_session.exam_set
+    question_count = Question.query.filter_by(exam_set_id=exam.id).count()
+
+    if student_session.status in ["submitted", "evaluated"]:
+        return redirect(url_for("student.submitted", session_code=session_code))
+
+    if exam.status != "active":
+        flash("Your teacher has not started this exam yet.", "info")
+        return redirect(url_for("student.waiting", session_code=session_code))
+
+    if student_session.start_time:
+        _grant_precheck_clearance(session_code)
+        return redirect(url_for("student.exam", session_code=session_code))
+
+    if request.method == "POST":
+        if request.form.get("rules_ack") != "on":
+            flash("Please confirm that you understand the exam rules.", "warning")
+            return redirect(url_for("student.precheck", session_code=session_code))
+
+        _grant_precheck_clearance(session_code)
+        ExamService.start_exam(session_code)
+        return redirect(url_for("student.exam", session_code=session_code))
+
+    return render_template(
+        "student/precheck.html",
+        student_session=student_session,
+        exam=exam,
+        question_count=question_count,
+        max_violations_allowed=current_app.config.get("MAX_VIOLATIONS_ALLOWED", 3),
+    )
 
 
 @student_bp.route("/exam/<session_code>")
@@ -267,8 +322,9 @@ def exam(session_code):
     if exam.status != "active":
         return redirect(url_for("student.waiting", session_code=session_code))
 
-    # Start exam if not started
     if not student_session.start_time:
+        if not _has_precheck_clearance(session_code):
+            return redirect(url_for("student.precheck", session_code=session_code))
         ExamService.start_exam(session_code)
 
     questions = Question.query.filter_by(exam_set_id=exam.id) \

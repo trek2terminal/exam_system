@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}Pre-Exam Check{% endblock %}
+
+{% block content %}
+<div class="precheck-shell">
+  <section class="precheck-card animate-scale-in">
+    <div class="student-flow-header">
+      <div class="student-flow-mark"><i class="fas fa-shield-heart"></i></div>
+      <div>
+        <p class="student-kicker">Before you begin</p>
+        <h1>Quick readiness check</h1>
+        <p class="muted">Your timer starts only after you confirm this screen.</p>
+      </div>
+    </div>
+
+    <div class="student-exam-summary">
+      <div><span>Exam</span><strong>{{ exam.exam_name }}</strong></div>
+      <div><span>Duration</span><strong>{{ exam.duration_minutes }} min</strong></div>
+      <div><span>Questions</span><strong>{{ question_count }}</strong></div>
+    </div>
+
+    <div class="precheck-grid">
+      <div class="precheck-step" id="jsCheck">
+        <i class="fas fa-circle-check"></i>
+        <div>
+          <strong>Browser scripts are active</strong>
+          <span>The exam timer, autosave, and security checks can run.</span>
+        </div>
+      </div>
+      <div class="precheck-step" id="fullscreenCheck">
+        <i class="fas fa-expand"></i>
+        <div>
+          <strong>Fullscreen support</strong>
+          <span id="fullscreenCheckText">Checking fullscreen support...</span>
+        </div>
+      </div>
+      <div class="precheck-step" id="storageCheck">
+        <i class="fas fa-database"></i>
+        <div>
+          <strong>Resume safety</strong>
+          <span id="storageCheckText">Checking browser storage...</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="precheck-rules">
+      <h2>Exam rules</h2>
+      <ul>
+        <li>Stay in fullscreen and keep this exam window focused.</li>
+        <li>Do not switch tabs, refresh repeatedly, right-click, or use blocked shortcuts.</li>
+        <li>Answers autosave while you work. If the network drops, log in again with the same roll number.</li>
+        <li>After {{ max_violations_allowed }} warning(s), the session is flagged for admin review.</li>
+      </ul>
+    </div>
+
+    <form method="post" id="precheckForm" class="precheck-form">
+      <label class="checkbox-line">
+        <input type="checkbox" name="rules_ack" id="rulesAck" required>
+        I understand the rules and I am ready to begin.
+      </label>
+
+      <button class="btn primary student-primary-action" type="submit" id="precheckStartButton">
+        <span class="button-text"><i class="fas fa-play"></i> Enter Fullscreen & Start</span>
+        <span class="button-loader" aria-hidden="true"></span>
+      </button>
+    </form>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const form = document.getElementById("precheckForm");
+  const button = document.getElementById("precheckStartButton");
+  const fullscreenStep = document.getElementById("fullscreenCheck");
+  const fullscreenText = document.getElementById("fullscreenCheckText");
+  const storageStep = document.getElementById("storageCheck");
+  const storageText = document.getElementById("storageCheckText");
+
+  const fullscreenAvailable = Boolean(
+    document.documentElement.requestFullscreen ||
+    document.documentElement.webkitRequestFullscreen ||
+    document.documentElement.msRequestFullscreen
+  );
+  fullscreenStep.classList.toggle("ready", fullscreenAvailable);
+  fullscreenStep.classList.toggle("warning", !fullscreenAvailable);
+  fullscreenText.textContent = fullscreenAvailable
+    ? "Supported. The exam will request fullscreen when you start."
+    : "Fullscreen is not available in this browser. Use Chrome if possible.";
+
+  try {
+    localStorage.setItem("exam_precheck_test", "1");
+    localStorage.removeItem("exam_precheck_test");
+    storageStep.classList.add("ready");
+    storageText.textContent = "Available. Reconnect and warning state can be handled safely.";
+  } catch (error) {
+    storageStep.classList.add("warning");
+    storageText.textContent = "Limited storage access. Continue only if your browser is not in private mode.";
+  }
+
+  form.addEventListener("submit", async function (event) {
+    event.preventDefault();
+    if (!form.reportValidity()) return;
+
+    button.classList.add("loading");
+    button.disabled = true;
+
+    try {
+      const element = document.documentElement;
+      if (element.requestFullscreen) {
+        await element.requestFullscreen();
+      } else if (element.webkitRequestFullscreen) {
+        await element.webkitRequestFullscreen();
+      } else if (element.msRequestFullscreen) {
+        await element.msRequestFullscreen();
+      }
+    } catch (error) {
+      // The exam page will request fullscreen again if the browser blocks this attempt.
+    }
+
+    HTMLFormElement.prototype.submit.call(form);
+  });
+})();
+</script>
+{% endblock %}

@@ -311,7 +311,7 @@ function initWaitingPage(sessionCode) {
             const res = await fetch(`/api/student/session/${sessionCode}/status`);
             const data = await res.json();
             if (data.exam_status === "active" && data.session_status !== "submitted") {
-                window.location.href = `/student/exam/${sessionCode}`;
+                window.location.href = `/student/precheck/${sessionCode}`;
             }
         } catch (e) {
             console.error("Waiting poll failed:", e);

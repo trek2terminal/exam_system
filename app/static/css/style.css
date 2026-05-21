@@ -2821,6 +2821,107 @@ body.student-mode .fullscreen-panel {
     margin-top: 18px;
 }
 
+.precheck-shell {
+    width: min(940px, 100%);
+    min-height: calc(100vh - 156px);
+    margin: 0 auto;
+    display: grid;
+    align-items: center;
+    padding: 20px 0;
+}
+
+.precheck-card {
+    border: 1px solid var(--student-border);
+    border-radius: 8px;
+    padding: clamp(22px, 4vw, 34px);
+    background: var(--student-surface);
+    color: var(--student-text);
+    box-shadow: var(--student-shadow);
+    backdrop-filter: blur(18px);
+}
+
+.precheck-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin: 18px 0;
+}
+
+.precheck-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    border: 1px solid var(--student-border);
+    border-radius: 8px;
+    padding: 14px;
+    background: rgba(255, 255, 255, 0.48);
+}
+
+html[data-theme="dark"] body.student-mode .precheck-step {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.precheck-step i {
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    border-radius: 8px;
+    color: var(--student-teal);
+    background: rgba(15, 118, 110, 0.10);
+}
+
+.precheck-step.ready i {
+    color: var(--student-green);
+    background: rgba(22, 163, 74, 0.12);
+}
+
+.precheck-step.warning i {
+    color: var(--student-coral);
+    background: rgba(249, 115, 22, 0.12);
+}
+
+.precheck-step strong,
+.precheck-step span {
+    display: block;
+}
+
+.precheck-step strong {
+    margin-bottom: 4px;
+    color: var(--student-text);
+}
+
+.precheck-step span {
+    color: var(--student-muted);
+    line-height: 1.5;
+}
+
+.precheck-rules {
+    border: 1px solid rgba(15, 118, 110, 0.18);
+    border-radius: 8px;
+    padding: 18px;
+    background: rgba(15, 118, 110, 0.08);
+}
+
+.precheck-rules h2 {
+    margin: 0 0 10px;
+    color: var(--student-text);
+}
+
+.precheck-rules ul {
+    margin: 0;
+    padding-left: 20px;
+    color: var(--student-muted);
+    line-height: 1.75;
+}
+
+.precheck-form {
+    display: grid;
+    gap: 14px;
+    margin-top: 18px;
+}
+
 .student-dashboard-shell {
     width: min(1180px, 100%);
     margin: 0 auto;
@@ -3074,6 +3175,7 @@ html[data-theme="dark"] body.student-mode .student-side-note {
 
 @media (max-width: 1080px) {
     .student-entry,
+    .precheck-grid,
     .student-dashboard-hero,
     .student-dashboard-grid,
     .exam-layout,
