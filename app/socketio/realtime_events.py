@@ -12,7 +12,8 @@ from flask import session
 
 from app.models.exam_model import ExamSet
 from app.models.submission_model import StudentSession
-from app.services.exam_session_guard import ExamSessionGuard
+from app.models.user_model import User
+from app.services.exam_session_guard import ExamSessionGuard, LOCKED_SESSION_STATUSES
 from app.services.security_service import SecurityService
 
 
@@ -62,16 +63,32 @@ def _owns_student_socket(student_session, payload):
     if not student_session:
         return False
     token = (payload or {}).get("session_token")
-    return bool(token and token == ExamSessionGuard.ensure_token(student_session))
+    if not token or token != ExamSessionGuard.ensure_token(student_session):
+        return False
+    if student_session.status in LOCKED_SESSION_STATUSES:
+        return False
+    if session.get("role") != "student":
+        return False
+    return ExamSessionGuard.browser_owns_attempt(student_session)
 
 
 def _can_join_proctor_room(exam_id):
-    if session.get("admin_id"):
-        return True
+    admin_id = session.get("admin_id")
+    if admin_id:
+        admin = User.query.get(admin_id)
+        return bool(admin and admin.role == "admin" and admin.is_active)
+
     teacher_id = session.get("teacher_id")
     if not teacher_id:
         return False
-    return ExamSet.query.filter_by(id=exam_id, created_by=teacher_id).first() is not None
+
+    teacher = User.query.get(teacher_id)
+    if not teacher or teacher.role != "teacher" or not teacher.is_active:
+        return False
+
+    if ExamSet.query.filter_by(id=exam_id, created_by=teacher_id).first() is not None:
+        return True
+    return False
 
 
 if SOCKETIO_AVAILABLE:

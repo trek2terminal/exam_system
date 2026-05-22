@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import toast from "react-hot-toast";
 import {
   AlertTriangle,
   BellRing,
@@ -15,6 +16,7 @@ import {
   XCircle
 } from "lucide-react";
 import { api } from "./services/api";
+import { createRealtimeSocket } from "./services/realtime";
 
 function formatSeconds(value) {
   const total = Math.max(Number(value || 0), 0);
@@ -42,6 +44,24 @@ function violationTone(count) {
   return "calm";
 }
 
+function countSessions(sessions) {
+  return {
+    active_sessions: sessions.filter(item => item.status === "active").length,
+    waiting_sessions: sessions.filter(item => item.status === "waiting").length,
+    paused_sessions: sessions.filter(item => item.status === "paused").length,
+    flagged_sessions: sessions.filter(item => item.focus_violations > 0).length
+  };
+}
+
+function normalizeRealtimePatch(payload) {
+  const patch = { ...(payload || {}) };
+  if (patch.session_id && !patch.id) patch.id = patch.session_id;
+  if (patch.remainingSeconds != null && patch.remaining_seconds == null) {
+    patch.remaining_seconds = patch.remainingSeconds;
+  }
+  return patch;
+}
+
 export default function Proctoring({ mode }) {
   const isAdmin = mode === "admin";
   const [data, setData] = useState(null);
@@ -50,6 +70,10 @@ export default function Proctoring({ mode }) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [realtimeStatus, setRealtimeStatus] = useState("connecting");
+  const socketRef = useRef(null);
+  const joinedExamIdsRef = useRef(new Set());
+  const sessionsRef = useRef([]);
 
   const endpoint = isAdmin ? "/admin/proctoring/status" : "/teacher/proctoring/status";
 
@@ -76,6 +100,118 @@ export default function Proctoring({ mode }) {
     return () => window.clearInterval(intervalId);
   }, [loadStatus]);
 
+  useEffect(() => {
+    sessionsRef.current = data?.sessions || [];
+  }, [data?.sessions]);
+
+  const joinExamRooms = useCallback(sessions => {
+    const socket = socketRef.current;
+    if (!socket?.connected) return;
+    (sessions || []).forEach(item => {
+      const examId = Number(item.exam_id || 0);
+      if (!examId || joinedExamIdsRef.current.has(examId)) return;
+      joinedExamIdsRef.current.add(examId);
+      socket.emit("proctor:join", { exam_id: examId });
+    });
+  }, []);
+
+  const applySessionPatch = useCallback(payload => {
+    const patch = normalizeRealtimePatch(payload);
+    const sessionId = Number(patch.id || 0);
+    if (!sessionId) return;
+
+    setData(current => {
+      if (!current) return current;
+      let sessions = current.sessions || [];
+      const shouldRemove = patch.status && !["active", "waiting", "paused"].includes(patch.status);
+      let found = false;
+
+      sessions = sessions
+        .map(item => {
+          if (item.id !== sessionId) return item;
+          found = true;
+          return { ...item, ...patch };
+        })
+        .filter(item => !(shouldRemove && item.id === sessionId));
+
+      if (!found) return current;
+      return {
+        ...current,
+        sessions,
+        counts: countSessions(sessions),
+        updated_at: new Date().toISOString()
+      };
+    });
+  }, []);
+
+  useEffect(() => {
+    joinExamRooms(data?.sessions || []);
+  }, [data?.sessions, joinExamRooms]);
+
+  useEffect(() => {
+    const socket = createRealtimeSocket();
+    const joinedExamIds = joinedExamIdsRef.current;
+    socketRef.current = socket;
+
+    const handleConnect = () => {
+      setRealtimeStatus("connected");
+      joinedExamIdsRef.current.clear();
+      joinExamRooms(sessionsRef.current);
+    };
+    const handleDisconnect = () => {
+      setRealtimeStatus("reconnecting");
+    };
+    const handleRealtimeError = payload => {
+      setRealtimeStatus("limited");
+      if (payload?.message) setError(payload.message);
+    };
+    const handleJoined = () => {
+      setRealtimeStatus("connected");
+    };
+    const handleStatus = payload => {
+      applySessionPatch(payload);
+    };
+    const handleViolation = payload => {
+      applySessionPatch({
+        id: payload?.session_id,
+        focus_violations: payload?.count,
+        latest_violation: payload?.type,
+        latest_violation_at: new Date().toISOString()
+      });
+      if (payload?.student_name) {
+        toast.error(`${payload.student_name}: ${payload.type || "violation"}`, { duration: 5000 });
+      }
+      window.setTimeout(() => loadStatus(true), 400);
+    };
+    const handleSubmitted = payload => {
+      applySessionPatch({ id: payload?.session_id, status: payload?.status || "submitted" });
+      if (payload?.student_name) toast.success(`${payload.student_name} submitted.`);
+      window.setTimeout(() => loadStatus(true), 400);
+    };
+
+    socket.on("connect", handleConnect);
+    socket.on("disconnect", handleDisconnect);
+    socket.on("realtime:error", handleRealtimeError);
+    socket.on("proctor:joined", handleJoined);
+    socket.on("proctor:student_status", handleStatus);
+    socket.on("proctor:violation_alert", handleViolation);
+    socket.on("proctor:exam_submitted", handleSubmitted);
+    socket.connect();
+
+    return () => {
+      socket.off("connect", handleConnect);
+      socket.off("disconnect", handleDisconnect);
+      socket.off("realtime:error", handleRealtimeError);
+      socket.off("proctor:joined", handleJoined);
+      socket.off("proctor:student_status", handleStatus);
+      socket.off("proctor:violation_alert", handleViolation);
+      socket.off("proctor:exam_submitted", handleSubmitted);
+      socket.disconnect();
+      socketRef.current = null;
+      joinedExamIds.clear();
+    };
+  }, [applySessionPatch, joinExamRooms, loadStatus]);
+
   const sortedSessions = useMemo(() => {
     const sessions = data?.sessions || [];
     return [...sessions].sort((left, right) => {
@@ -100,6 +236,9 @@ export default function Proctoring({ mode }) {
           <span className="proctorUpdated">
             <Radio size={16} />
             Updated {formatDateTime(data?.updated_at)}
+          </span>
+          <span className={`realtimePill ${realtimeStatus}`}>
+            {realtimeStatus}
           </span>
           <button className="button secondary" type="button" disabled={refreshing} onClick={() => loadStatus(true)}>
             <RefreshCw size={18} /> {refreshing ? "Refreshing..." : "Refresh"}

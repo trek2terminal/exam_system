@@ -19,13 +19,19 @@ pip install -r requirements.txt
 python run.py migrate
 ```
 
-Start with Waitress on Windows:
+Start with the Socket.IO-capable runner on Windows when you want live proctoring push events:
+
+```powershell
+.\deployment\start-realtime.ps1 -Port 8000
+```
+
+Waitress can still serve HTTP pages and APIs, but it does not provide WebSocket transport. Use it only when polling fallback is acceptable:
 
 ```powershell
 .\deployment\start-waitress.ps1 -Port 8000
 ```
 
-For Linux, run an equivalent WSGI server against `wsgi:app`, then put Nginx in front.
+For Linux, use a Socket.IO-capable process for realtime exams, then put Nginx in front.
 
 ## Nginx Reverse Proxy
 

@@ -10,7 +10,7 @@ npm.cmd install
 npm.cmd run dev
 ```
 
-Vite proxies `/api`, `/student`, `/teacher`, and `/admin` to `http://127.0.0.1:8000`.
+Vite proxies `/api`, `/socket.io`, `/student`, `/teacher`, and `/admin` to `http://127.0.0.1:8000`.
 
 Production build:
 
@@ -32,6 +32,8 @@ When `frontend/dist` exists, Flask serves the built migration shell at `/react`.
 - Teacher review is available under `/react/teacher/exam/:examId/review` and `/react/teacher/session/:sessionId/review` with marks, remarks, publish controls, answer PDF links, and classic Flask fallback links.
 - Admin and teacher live proctoring are available under `/react/admin/proctoring` and `/react/teacher/proctoring`.
 - Admin React proctoring keeps password-confirmed actions for terminate, second chance, time penalty, pause/resume, and private messages; teacher React proctoring is read-only.
+- React exam attempts join their private Socket.IO session room, so admin termination, second chance, time changes, pause/resume, and private messages arrive immediately while heartbeat polling remains as fallback.
+- React proctoring joins authorized exam rooms and updates student cards from `proctor:*` events while retaining the 5-second polling refresh as fallback.
 - Load role dashboards from:
   - `/api/student/dashboard`
   - `/api/teacher/dashboard`
@@ -41,5 +43,5 @@ When `frontend/dist` exists, Flask serves the built migration shell at `/react`.
 ## Next Migration Tasks
 
 - Browser-test the React student exam, teacher review, and proctoring flows with real sessions.
-- Add React notification/proctoring live updates once Socket.IO is verified interactively.
+- Browser-verify Socket.IO live push behavior with two real browser sessions.
 - Replace individual Jinja pages only after each React page reaches parity and has a fallback path.

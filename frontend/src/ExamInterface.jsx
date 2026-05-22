@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import Editor from "@monaco-editor/react";
+import toast from "react-hot-toast";
 import { Terminal } from "xterm";
 import "xterm/css/xterm.css";
 import {
@@ -17,6 +18,7 @@ import {
   TerminalSquare
 } from "lucide-react";
 import { api } from "./services/api";
+import { createRealtimeSocket } from "./services/realtime";
 
 const QUESTION_STATES = [
   "NOT_VISITED",
@@ -476,6 +478,87 @@ export default function ExamInterface() {
     const intervalId = window.setInterval(sendHeartbeat, 8000);
     return () => window.clearInterval(intervalId);
   }, [sessionToken, windowToken, sendHeartbeat]);
+
+  useEffect(() => {
+    if (!sessionToken || !examState?.student_session?.id) return undefined;
+
+    const socket = createRealtimeSocket();
+    const showConnectionToast = () => {
+      toast.success("Realtime connected", { id: "exam-realtime", duration: 1400 });
+      socket.emit("student:join", {
+        session_code: sessionCode,
+        session_token: sessionToken
+      });
+    };
+    const showDisconnectToast = () => {
+      toast("Realtime paused. Polling still protects the exam.", { id: "exam-realtime", duration: 3000 });
+    };
+    const handleRealtimeError = payload => {
+      if (payload?.message) toast.error(payload.message, { id: "exam-realtime-error" });
+    };
+    const handleTerminated = payload => {
+      submittedRef.current = true;
+      toast.error(payload?.reason || "Your exam was ended by admin.", { duration: 5000 });
+      window.setTimeout(() => {
+        window.location.replace(payload?.redirect || examState?.student_session?.submitted_url || `/student/submitted/${sessionCode}`);
+      }, 700);
+    };
+    const handleTimeReduced = payload => {
+      if (typeof payload?.newRemainingSeconds === "number") {
+        setRemainingSeconds(payload.newRemainingSeconds);
+      }
+      toast("Your remaining time has been adjusted.", { duration: 5000 });
+    };
+    const handlePaused = payload => {
+      setPaused(true);
+      toast(payload?.message || "Your exam timer is paused by admin.", { duration: 5000 });
+    };
+    const handleResumed = payload => {
+      setPaused(false);
+      if (typeof payload?.remainingSeconds === "number") {
+        setRemainingSeconds(payload.remainingSeconds);
+      }
+      toast.success(payload?.message || "Your exam has resumed.", { duration: 5000 });
+    };
+    const handleSecondChance = payload => {
+      setViolationCount(0);
+      setPaused(false);
+      toast.success(payload?.message || "Second chance granted.", { duration: 5000 });
+    };
+    const handleAdminMessage = payload => {
+      toast(payload?.message || "Admin sent you a message.", { duration: 8000 });
+    };
+    const handleSubmitted = payload => {
+      submittedRef.current = true;
+      window.location.replace(payload?.redirect || examState?.student_session?.submitted_url || `/student/submitted/${sessionCode}`);
+    };
+
+    socket.on("connect", showConnectionToast);
+    socket.on("disconnect", showDisconnectToast);
+    socket.on("realtime:error", handleRealtimeError);
+    socket.on("exam:terminated", handleTerminated);
+    socket.on("exam:time_reduced", handleTimeReduced);
+    socket.on("exam:paused", handlePaused);
+    socket.on("exam:resumed", handleResumed);
+    socket.on("exam:second_chance", handleSecondChance);
+    socket.on("exam:admin_message", handleAdminMessage);
+    socket.on("exam:submitted", handleSubmitted);
+    socket.connect();
+
+    return () => {
+      socket.off("connect", showConnectionToast);
+      socket.off("disconnect", showDisconnectToast);
+      socket.off("realtime:error", handleRealtimeError);
+      socket.off("exam:terminated", handleTerminated);
+      socket.off("exam:time_reduced", handleTimeReduced);
+      socket.off("exam:paused", handlePaused);
+      socket.off("exam:resumed", handleResumed);
+      socket.off("exam:second_chance", handleSecondChance);
+      socket.off("exam:admin_message", handleAdminMessage);
+      socket.off("exam:submitted", handleSubmitted);
+      socket.disconnect();
+    };
+  }, [sessionCode, sessionToken, examState?.student_session?.id]);
 
   useEffect(() => {
     if (!sessionToken || !windowToken || submitting) return;

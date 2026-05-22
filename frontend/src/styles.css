@@ -1029,6 +1029,31 @@ p {
   font-weight: 800;
 }
 
+.realtimePill {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: var(--muted);
+  font-weight: 900;
+  text-transform: capitalize;
+}
+
+.realtimePill.connected {
+  border-color: rgba(15, 118, 110, 0.32);
+  background: rgba(15, 118, 110, 0.1);
+  color: var(--success);
+}
+
+.realtimePill.reconnecting,
+.realtimePill.limited {
+  border-color: rgba(217, 119, 6, 0.32);
+  background: rgba(217, 119, 6, 0.1);
+  color: var(--warning);
+}
+
 .proctorLayout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 390px;

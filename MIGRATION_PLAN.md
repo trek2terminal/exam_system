@@ -353,3 +353,19 @@ Still intentionally left for later phases:
 - Browser-test Socket.IO live push behavior in a running interactive session.
 - Stronger external sandbox isolation for Python code execution.
 - HTTPS automation for final hosted deployment.
+
+## Latest Implementation Batch 10 - 2026-05-22
+
+Completed in this batch:
+- Added a shared React Socket.IO client with WebSocket plus polling fallback.
+- Added Vite `/socket.io` proxying for local React development.
+- Wired React exam attempts into their private student session room so admin termination, time reduction, pause/resume, second chance, private messages, and submitted events update immediately.
+- Wired React admin/teacher proctoring into authorized proctor rooms so student status, violation alerts, and submissions update cards immediately while polling remains as fallback.
+- Hardened backend Socket.IO student joins to require the private attempt token, active browser session ownership, student role, and non-locked attempt status.
+- Hardened backend proctor room joins to require active admin/teacher accounts and teacher exam ownership.
+- Added `deployment/start-realtime.ps1` and clarified that Waitress is HTTP-only fallback, while realtime exams should use the Socket.IO-capable runner.
+
+Still intentionally left for later phases:
+- Browser-test realtime push with two real browser sessions on the running LAN app.
+- Stronger external sandbox isolation for Python code execution.
+- HTTPS automation for final hosted deployment.
