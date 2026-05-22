@@ -16,18 +16,26 @@ export function Modal({ open, onClose, title, children, footer, required = false
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/55 p-4 animate-page-fade" role="presentation">
+    <div
+      className="fixed inset-0 z-50 grid place-items-center modal-backdrop p-4 animate-page-fade"
+      role="presentation"
+      onClick={() => {
+        if (!required) onClose?.();
+      }}
+    >
       <section
         role="dialog"
         aria-modal="true"
-        aria-label={title}
+        aria-labelledby="modal-title"
+        tabIndex={-1}
+        onClick={event => event.stopPropagation()}
         className={cn(
           "max-h-[88vh] w-full max-w-xl overflow-hidden rounded-card border border-border bg-background-surface shadow-elevated animate-modal-in",
           className
         )}
       >
         <header className="flex items-center justify-between gap-4 border-b border-border px-5 py-4">
-          <h2 className="text-xl font-semibold text-text-primary">{title}</h2>
+          <h2 id="modal-title" className="text-xl font-semibold text-text-primary">{title}</h2>
           {!required && (
             <Button variant="ghost" size="sm" className="h-11 w-11 px-0" onClick={onClose} aria-label="Close modal">
               <X size={18} />

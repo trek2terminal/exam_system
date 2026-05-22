@@ -17,6 +17,11 @@ import {
 } from "lucide-react";
 import { api } from "./services/api";
 import { createRealtimeSocket } from "./services/realtime";
+import { Button } from "./components/ui/Button";
+import { Card } from "./components/ui/Card";
+import { Badge } from "./components/ui/Badge";
+import { Input } from "./components/ui/Input";
+import { Textarea } from "./components/ui/Textarea";
 
 function formatSeconds(value) {
   const total = Math.max(Number(value || 0), 0);
@@ -226,7 +231,7 @@ export default function Proctoring({ mode }) {
 
   return (
     <section className="proctorWorkspace">
-      <div className="reviewHeader">
+      <Card className="reviewHeader">
         <div>
           <span className="eyebrow">{isAdmin ? "Admin control room" : "Teacher proctoring"}</span>
           <h2>Live Proctoring</h2>
@@ -237,23 +242,23 @@ export default function Proctoring({ mode }) {
             <Radio size={16} />
             Updated {formatDateTime(data?.updated_at)}
           </span>
-          <span className={`realtimePill ${realtimeStatus}`}>
+          <Badge className={`realtimePill ${realtimeStatus}`} variant={realtimeStatus === "connected" ? "success" : realtimeStatus === "reconnecting" ? "warning" : "secondary"}>
             {realtimeStatus}
-          </span>
-          <button className="button secondary" type="button" disabled={refreshing} onClick={() => loadStatus(true)}>
+          </Badge>
+          <Button variant="secondary" size="sm" disabled={refreshing} onClick={() => loadStatus(true)}>
             <RefreshCw size={18} /> {refreshing ? "Refreshing..." : "Refresh"}
-          </button>
+          </Button>
         </div>
-      </div>
+      </Card>
 
       {error && <div className="alert">{error}</div>}
       {message && <div className="successBanner">{message}</div>}
 
       <section className="studentStats">
-        <article><PlayCircle size={18} /><span>Active</span><strong>{data?.counts?.active_sessions || 0}</strong></article>
-        <article><Clock3 size={18} /><span>Waiting</span><strong>{data?.counts?.waiting_sessions || 0}</strong></article>
-        <article><PauseCircle size={18} /><span>Paused</span><strong>{data?.counts?.paused_sessions || 0}</strong></article>
-        <article><ShieldAlert size={18} /><span>Flagged</span><strong>{data?.counts?.flagged_sessions || 0}</strong></article>
+        <Card className="statsCard"><PlayCircle size={18} /><span>Active</span><strong>{data?.counts?.active_sessions || 0}</strong></Card>
+        <Card className="statsCard"><Clock3 size={18} /><span>Waiting</span><strong>{data?.counts?.waiting_sessions || 0}</strong></Card>
+        <Card className="statsCard"><PauseCircle size={18} /><span>Paused</span><strong>{data?.counts?.paused_sessions || 0}</strong></Card>
+        <Card className="statsCard"><ShieldAlert size={18} /><span>Flagged</span><strong>{data?.counts?.flagged_sessions || 0}</strong></Card>
       </section>
 
       <div className="proctorLayout">
@@ -270,14 +275,12 @@ export default function Proctoring({ mode }) {
                   <strong>{item.student_name}</strong>
                   <span>Roll {item.roll_no} | {item.exam_name}</span>
                 </div>
-                <span className={`violationBadge ${violationTone(item.focus_violations)}`}>
-                  {item.focus_violations}
-                </span>
+                <Badge variant={violationTone(item.focus_violations)}>{item.focus_violations}</Badge>
               </div>
               <div className="proctorMetrics">
                 <span><Clock3 size={15} /> {formatSeconds(item.remaining_seconds)}</span>
                 <span><CheckCircle2 size={15} /> {item.answered_count}/{item.total_questions}</span>
-                <span className={`status ${item.status}`}>{item.status}</span>
+                <Badge variant={item.status === "active" ? "success" : item.status === "paused" ? "warning" : "secondary"}>{item.status}</Badge>
               </div>
               <div className="proctorCardFoot">
                 <span>{item.latest_violation || "No violation"}</span>
@@ -321,7 +324,7 @@ export default function Proctoring({ mode }) {
               <span className="eyebrow">Recent alerts</span>
               <h3>Violation Feed</h3>
             </div>
-            <a className="button quiet" href="/admin/violations">Full log</a>
+            <Button as="a" variant="ghost" size="sm" href="/admin/violations">Full log</Button>
           </div>
           {data.recent_violations.map(item => (
             <article key={item.id}>
@@ -401,55 +404,60 @@ function SessionDetail({ sessionItem, isAdmin, onActionMessage, onActionError, o
       {!isAdmin ? (
         <div className="softNote">Teacher proctoring is read-only. Admin-only actions are intentionally unavailable here.</div>
       ) : (
-        <div className="adminActionPanel">
-          <label>
-            Admin password
-            <input
-              type="password"
-              value={adminPassword}
-              onChange={event => setAdminPassword(event.target.value)}
-              autoComplete="current-password"
-            />
-          </label>
-          <label>
-            Reason / note
-            <input value={reason} onChange={event => setReason(event.target.value)} placeholder="Required for serious actions" />
-          </label>
-          <label>
-            Private message
-            <textarea rows={3} value={studentMessage} onChange={event => setStudentMessage(event.target.value)} />
-          </label>
+        <Card className="adminActionPanel">
+          <Input
+            label="Admin password"
+            type="password"
+            value={adminPassword}
+            onChange={event => setAdminPassword(event.target.value)}
+            autoComplete="current-password"
+          />
+          <Input
+            label="Reason / note"
+            value={reason}
+            onChange={event => setReason(event.target.value)}
+            placeholder="Required for serious actions"
+          />
+          <Textarea
+            label="Private message"
+            rows={3}
+            value={studentMessage}
+            onChange={event => setStudentMessage(event.target.value)}
+          />
           <div className="timePenaltyLine">
-            <label>
-              Time penalty
-              <input type="number" min="1" value={minutes} onChange={event => setMinutes(event.target.value)} />
-            </label>
-            <button className="button secondary" type="button" disabled={Boolean(busyAction)} onClick={() => runAction("reduce_time")}>
+            <Input
+              label="Time penalty"
+              type="number"
+              min="1"
+              value={minutes}
+              onChange={event => setMinutes(event.target.value)}
+            />
+            <Button variant="secondary" size="sm" disabled={Boolean(busyAction)} onClick={() => runAction("reduce_time")}>
               <TimerReset size={18} /> Reduce
-            </button>
+            </Button>
           </div>
           <div className="actionRow">
-            <button className="button danger" type="button" disabled={Boolean(busyAction)} onClick={() => runAction("terminate")}>
+            <Button variant="danger" size="sm" disabled={Boolean(busyAction)} onClick={() => runAction("terminate")}>
               <XCircle size={18} /> Terminate
-            </button>
-            <button className="button secondary" type="button" disabled={Boolean(busyAction)} onClick={() => runAction("second_chance")}>
+            </Button>
+            <Button variant="secondary" size="sm" disabled={Boolean(busyAction)} onClick={() => runAction("second_chance")}>
               <UserCheck size={18} /> Second chance
-            </button>
+            </Button>
             {sessionItem.status === "paused" ? (
-              <button className="button primary" type="button" disabled={Boolean(busyAction)} onClick={() => runAction("resume")}>
+              <Button variant="primary" size="sm" disabled={Boolean(busyAction)} onClick={() => runAction("resume")}>
                 <PlayCircle size={18} /> Resume
-              </button>
+              </Button>
             ) : (
-              <button className="button secondary" type="button" disabled={Boolean(busyAction)} onClick={() => runAction("pause")}>
+              <Button variant="secondary" size="sm" disabled={Boolean(busyAction)} onClick={() => runAction("pause")}>
                 <PauseCircle size={18} /> Pause
-              </button>
+              </Button>
             )}
-            <button className="button primary" type="button" disabled={Boolean(busyAction)} onClick={() => runAction("message")}>
+            <Button variant="primary" size="sm" disabled={Boolean(busyAction)} onClick={() => runAction("message")}>
               <MessageSquare size={18} /> Send message
-            </button>
+            </Button>
           </div>
           {busyAction && <span className="savingHint">Applying {busyAction.replace("_", " ")}...</span>}
-        </div>
+        </Card>
       )}
     </div>
   );

@@ -2,7 +2,6 @@ import {
   BarChart3,
   BookOpenCheck,
   ClipboardList,
-  FileClock,
   Gauge,
   History,
   Radio,

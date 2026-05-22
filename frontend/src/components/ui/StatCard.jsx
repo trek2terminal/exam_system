@@ -9,15 +9,19 @@ export function StatCard({ icon: Icon, label, value = 0, trend, variant = "defau
 
   useEffect(() => {
     let frameId;
-    const start = performance.now();
+    const start = (window.performance && window.performance.now && window.performance.now()) || Date.now();
     const duration = 600;
     const tick = now => {
-      const progress = Math.min((now - start) / duration, 1);
+      const current = now || ((window.performance && window.performance.now && window.performance.now()) || Date.now());
+      const progress = Math.min((current - start) / duration, 1);
       setDisplayValue(Math.round(numericValue * progress));
-      if (progress < 1) frameId = requestAnimationFrame(tick);
+      if (progress < 1) frameId = (window.requestAnimationFrame || (fn => window.setTimeout(fn, 16)))(tick);
     };
-    frameId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frameId);
+    frameId = (window.requestAnimationFrame || (fn => window.setTimeout(fn, 16)))(tick);
+    return () => {
+      if (window.cancelAnimationFrame) window.cancelAnimationFrame(frameId);
+      else window.clearTimeout(frameId);
+    };
   }, [numericValue]);
 
   const trendUp = Number(trend || 0) >= 0;

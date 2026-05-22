@@ -9,8 +9,7 @@ import {
   Save,
   ShieldAlert,
   Users
-} from "lucide-react";
-import { api } from "./services/api";
+} from "lucide-react";import { Button, Card, Badge, EmptyState, Input, Textarea } from "./components/ui";import { api } from "./services/api";
 
 function formatDate(value) {
   if (!value) return "-";
@@ -79,29 +78,45 @@ function TeacherExamReview() {
 
   return (
     <section className="teacherReviewWorkspace">
-      <div className="reviewHeader">
+      <Card className="reviewHeader">
         <div>
           <span className="eyebrow">Teacher review</span>
           <h2>{data.exam.exam_name}</h2>
           <p>{data.exam.subject} | Set {data.exam.set_code} | Access {data.exam.access_code}</p>
         </div>
         <div className="actionRow">
-          <a className="button secondary" href={data.links.csv_export}><Download size={18} /> CSV</a>
-          <a className="button secondary" href={data.links.similarity}><FileSearch size={18} /> Similarity</a>
-          <button className="button primary" type="button" disabled={saving || stats.evaluated === 0} onClick={() => publishAll(true)}>
+          <Button variant="secondary" size="sm" as="a" href={data.links.csv_export}><Download size={18} /> CSV</Button>
+          <Button variant="secondary" size="sm" as="a" href={data.links.similarity}><FileSearch size={18} /> Similarity</Button>
+          <Button variant="primary" size="sm" disabled={saving || stats.evaluated === 0} onClick={() => publishAll(true)}>
             <CheckCircle2 size={18} /> Publish evaluated
-          </button>
-          <button className="button secondary" type="button" disabled={saving || stats.published === 0} onClick={() => publishAll(false)}>
+          </Button>
+          <Button variant="secondary" size="sm" disabled={saving || stats.published === 0} onClick={() => publishAll(false)}>
             Hide published
-          </button>
+          </Button>
         </div>
-      </div>
+      </Card>
 
       <section className="studentStats">
-        <article><Users size={18} /><span>Attempts</span><strong>{stats.attempts || 0}</strong></article>
-        <article><CheckCircle2 size={18} /><span>Submitted</span><strong>{stats.submitted || 0}</strong></article>
-        <article><Save size={18} /><span>Evaluated</span><strong>{stats.evaluated || 0}</strong></article>
-        <article><Eye size={18} /><span>Published</span><strong>{stats.published || 0}</strong></article>
+        <Card className="p-4">
+          <Users size={18} />
+          <span>Attempts</span>
+          <strong>{stats.attempts || 0}</strong>
+        </Card>
+        <Card className="p-4">
+          <CheckCircle2 size={18} />
+          <span>Submitted</span>
+          <strong>{stats.submitted || 0}</strong>
+        </Card>
+        <Card className="p-4">
+          <Save size={18} />
+          <span>Evaluated</span>
+          <strong>{stats.evaluated || 0}</strong>
+        </Card>
+        <Card className="p-4">
+          <Eye size={18} />
+          <span>Published</span>
+          <strong>{stats.published || 0}</strong>
+        </Card>
       </section>
 
       <section className="reviewTable">
@@ -114,29 +129,30 @@ function TeacherExamReview() {
           <span>Action</span>
         </div>
         {sessions.map(item => (
-          <article className="reviewRow" key={item.id}>
+          <Card key={item.id} className="reviewRow">
             <div>
               <strong>{item.student_name}</strong>
               <p>Roll {item.roll_no} | Started {formatDate(item.started_at)}</p>
             </div>
-            <span className={`status ${item.status}`}>{item.status}</span>
+            <Badge variant={item.status === "active" ? "success" : "secondary"} size="sm">{item.status}</Badge>
             <strong>{scoreLabel(item.result)}</strong>
-            <span className={`status ${item.result?.published ? "active" : "draft"}`}>
+            <Badge variant={item.result?.published ? "success" : item.result ? "warning" : "secondary"} size="sm">
               {item.result?.published ? "published" : item.result ? "hidden" : "not marked"}
-            </span>
+            </Badge>
             <strong>{item.focus_violations}</strong>
             <div className="actionRow">
-              <Link className="button primary" to={`/teacher/session/${item.id}/review`}>Mark</Link>
-              <a className="button quiet" href={item.links.answer_pdf}>PDF</a>
+              <Button variant="primary" size="sm" as={Link} to={`/teacher/session/${item.id}/review`}>Mark</Button>
+              <Button variant="ghost" size="sm" as="a" href={item.links.answer_pdf}>PDF</Button>
             </div>
-          </article>
+          </Card>
         ))}
         {!sessions.length && (
-          <div className="emptyState">
-            <Users size={34} />
-            <h3>No student attempts yet</h3>
-            <p>Submissions will appear here after students enter this exam.</p>
-          </div>
+          <EmptyState
+            icon={Users}
+            heading="No student attempts yet"
+            description="Submissions will appear here after students enter this exam."
+            className="rounded-card border border-border bg-background-surface"
+          />
         )}
       </section>
     </section>
@@ -217,9 +233,11 @@ function TeacherSessionReview() {
 
   return (
     <section className="teacherMarkWorkspace">
-      <div className="reviewHeader">
+      <Card className="reviewHeader">
         <div>
-          <Link className="backLink" to={`/teacher/exam/${data.exam.id}/review`}><ArrowLeft size={16} /> Back to exam</Link>
+          <Button variant="ghost" size="sm" as={Link} to={`/teacher/exam/${data.exam.id}/review`}>
+            <ArrowLeft size={16} /> Back to exam
+          </Button>
           <span className="eyebrow">Mark submission</span>
           <h2>{data.student_session.student_name}</h2>
           <p>Roll {data.student_session.roll_no} | {data.exam.exam_name}</p>
@@ -228,7 +246,7 @@ function TeacherSessionReview() {
           <span>Total</span>
           <strong>{totalAwarded} / {data.questions.reduce((sum, question) => sum + question.marks, 0)}</strong>
         </div>
-      </div>
+      </Card>
 
       {error && <div className="alert">{error}</div>}
       {message && <div className="successBanner">{message}</div>}
@@ -236,14 +254,14 @@ function TeacherSessionReview() {
         <div className="alert">This attempt is still in progress. Marks can be saved after submission.</div>
       )}
 
-      <section className="teacherSummaryBox">
+      <Card className="teacherSummaryBox">
         <label>Teacher summary remarks</label>
-        <textarea value={teacherRemarks} onChange={event => setTeacherRemarks(event.target.value)} rows={4} />
+        <Textarea value={teacherRemarks} onChange={event => setTeacherRemarks(event.target.value)} rows={4} />
         <label className="checkboxLine">
           <input type="checkbox" checked={published} onChange={event => setPublished(event.target.checked)} />
           Publish result to student after saving
         </label>
-      </section>
+      </Card>
 
       <section className="teacherQuestionReviewList">
         {data.questions.map(question => (
@@ -285,37 +303,35 @@ function TeacherSessionReview() {
             )}
 
             <div className="markGrid">
-              <label>
-                Marks awarded
-                <input
-                  type="number"
-                  min="0"
-                  max={question.marks}
-                  value={marks[question.id] ?? 0}
-                  onChange={event => setMarks(current => ({ ...current, [question.id]: event.target.value }))}
-                  disabled={!locked}
-                />
-              </label>
-              <label>
-                Remark
-                <input
-                  type="text"
-                  value={remarks[question.id] || ""}
-                  onChange={event => setRemarks(current => ({ ...current, [question.id]: event.target.value }))}
-                  disabled={!locked}
-                />
-              </label>
+              <Input
+                label="Marks awarded"
+                type="number"
+                min="0"
+                max={question.marks}
+                value={marks[question.id] ?? 0}
+                onChange={event => setMarks(current => ({ ...current, [question.id]: event.target.value }))}
+                disabled={!locked}
+                className="!p-2"
+              />
+              <Input
+                label="Remark"
+                type="text"
+                value={remarks[question.id] || ""}
+                onChange={event => setRemarks(current => ({ ...current, [question.id]: event.target.value }))}
+                disabled={!locked}
+                className="!p-2"
+              />
             </div>
           </article>
         ))}
       </section>
 
       <div className="stickySaveBar">
-        <a className="button secondary" href={data.links.answer_pdf}><Download size={18} /> Answer PDF</a>
-        <a className="button quiet" href={data.links.flask_review}>Classic view</a>
-        <button className="button primary" type="button" disabled={!locked || saving} onClick={saveReview}>
+        <Button variant="secondary" size="sm" as="a" href={data.links.answer_pdf}><Download size={18} /> Answer PDF</Button>
+        <Button variant="ghost" size="sm" as="a" href={data.links.flask_review}>Classic view</Button>
+        <Button variant="primary" size="sm" disabled={!locked || saving} onClick={saveReview}>
           <Save size={18} /> {saving ? "Saving..." : "Save marks"}
-        </button>
+        </Button>
       </div>
     </section>
   );
@@ -327,7 +343,7 @@ function ErrorPanel({ message, backHref }) {
       <ShieldAlert size={36} />
       <h2>Review cannot open</h2>
       <p>{message}</p>
-      <a className="button primary" href={backHref}>Back</a>
+      <Button as="a" variant="primary" size="sm" href={backHref}>Back</Button>
     </section>
   );
 }

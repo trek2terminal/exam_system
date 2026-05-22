@@ -7,14 +7,30 @@ const variants = {
 };
 
 export function Card({ variant = "default", interactive = false, className, children, ...props }) {
+  const interactiveClasses =
+    "hover:-translate-y-0.5 hover:scale-[1.01] hover:shadow-elevated focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/30";
+
+  const roleAttrs = {};
+  if (interactive && props.onClick) {
+    roleAttrs.role = "button";
+    roleAttrs.tabIndex = props.tabIndex ?? 0;
+    roleAttrs.onKeyDown = event => {
+      if (event.key === "Enter" || event.key === " ") {
+        props.onClick?.(event);
+      }
+      props.onKeyDown?.(event);
+    };
+  }
+
   return (
     <section
       className={cn(
         "rounded-card border border-border text-text-primary transition duration-200 ease-out",
         variants[variant] || variants.default,
-        interactive && "hover:-translate-y-0.5 hover:scale-[1.01] hover:shadow-elevated",
+        interactive && interactiveClasses,
         className
       )}
+      {...roleAttrs}
       {...props}
     >
       {children}

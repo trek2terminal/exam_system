@@ -8,18 +8,16 @@ import {
   Clock3,
   DoorOpen,
   FileText,
-  Gauge,
   KeyRound,
   LogIn,
-  Moon,
   Play,
   Radio,
-  ShieldCheck,
-  Sparkles,
-  Trophy,
-  Users
+  Trophy
 } from "lucide-react";
+import { PageLayout } from "./components/layout/PageLayout";
+import { Badge, Button, Card } from "./components/ui";
 import { useAppStore } from "./store/appStore";
+import { api } from "./services/api";
 
 const ExamInterface = lazy(() => import("./ExamInterface.jsx"));
 const TeacherReview = lazy(() => import("./TeacherReview.jsx"));
@@ -79,51 +77,12 @@ function actionIcon(label) {
   return <FileText size={18} />;
 }
 
-function Shell({ children, platformName, auth, notifications, theme, onToggleTheme }) {
-  const rolePath = rolePaths[auth?.role] || "/";
-  const workspaceHref = auth?.role ? `/${auth.role}/dashboard` : "/student/login";
-  const peopleHref = auth?.role === "admin" ? "/admin/users" : workspaceHref;
-  const proctorPath = auth?.role === "admin" ? "/admin/proctoring" : auth?.role === "teacher" ? "/teacher/proctoring" : null;
+function Shell({ children, platformName, auth, notifications, theme, onToggleTheme, onMarkAllRead }) {
+  // layout handled by PageLayout
   return (
-    <div className="app">
-      <aside className="sidebar">
-        <div className="brand">
-          <div className="brandMark"><ShieldCheck size={22} /></div>
-          <div>
-            <strong>{platformName || "Exam Platform"}</strong>
-            <span>Focused assessment space</span>
-          </div>
-        </div>
-        <nav>
-          <Link className="active" to={rolePath}><Gauge size={18} /> Overview</Link>
-          <a href={workspaceHref}><BookOpenCheck size={18} /> Exams</a>
-          <a href={peopleHref}><Users size={18} /> People</a>
-          {proctorPath ? (
-            <Link to={proctorPath}><Radio size={18} /> Proctoring</Link>
-          ) : (
-            <a href={workspaceHref}><Bell size={18} /> Alerts</a>
-          )}
-        </nav>
-      </aside>
-      <main>
-        <header className="topbar">
-          <div>
-            <span className="eyebrow">{auth?.role ? `${auth.role} workspace` : "Welcome"}</span>
-            <h1>{auth?.student_name || auth?.teacher_name || auth?.admin_name || "Exam Platform"}</h1>
-          </div>
-          <div className="topbarActions">
-            <button className="iconButton badgeButton" type="button" aria-label="Notifications">
-              <Bell size={18} />
-              {notifications?.unread_count > 0 && <span>{notifications.unread_count}</span>}
-            </button>
-            <button className="iconButton" type="button" aria-label="Toggle theme" onClick={onToggleTheme}>
-              {theme === "dark" ? <Sparkles size={18} /> : <Moon size={18} />}
-            </button>
-          </div>
-        </header>
-        {children}
-      </main>
-    </div>
+    <PageLayout auth={auth} platformName={platformName} notifications={notifications} theme={theme} onToggleTheme={onToggleTheme} onMarkAllRead={onMarkAllRead}>
+      {children}
+    </PageLayout>
   );
 }
 
@@ -162,13 +121,13 @@ function StudentDashboard({ dashboard }) {
   return (
     <div className="studentWorkspace">
       {dashboard?.announcement_message && (
-        <section className="announcement">
+        <Card className="announcement">
           <Bell size={18} />
           <span>{dashboard.announcement_message}</span>
-        </section>
+        </Card>
       )}
 
-      <section className="studentHero">
+      <Card className="studentHero">
         <div>
           <span className="eyebrow">Your exam space</span>
           <h2>{dashboard?.student?.greeting || "Welcome"}, {dashboard?.student?.name || "student"}.</h2>
@@ -179,13 +138,37 @@ function StudentDashboard({ dashboard }) {
           <strong>{dashboard?.student?.roll_no || "-"}</strong>
           <small>{stats.assigned || 0} assigned exams</small>
         </div>
-      </section>
+      </Card>
 
       <section className="studentStats">
-        <article><BookOpenCheck size={18} /><span>Assigned</span><strong>{stats.assigned || 0}</strong></article>
-        <article><Play size={18} /><span>Available</span><strong>{stats.available || 0}</strong></article>
-        <article><Clock3 size={18} /><span>Upcoming</span><strong>{stats.upcoming || 0}</strong></article>
-        <article><Trophy size={18} /><span>Results</span><strong>{stats.published_results || 0}</strong></article>
+        <Card className="p-5">
+          <div className="flex items-center gap-3">
+            <BookOpenCheck size={18} />
+            <span>Assigned</span>
+          </div>
+          <strong>{stats.assigned || 0}</strong>
+        </Card>
+        <Card className="p-5">
+          <div className="flex items-center gap-3">
+            <Play size={18} />
+            <span>Available</span>
+          </div>
+          <strong>{stats.available || 0}</strong>
+        </Card>
+        <Card className="p-5">
+          <div className="flex items-center gap-3">
+            <Clock3 size={18} />
+            <span>Upcoming</span>
+          </div>
+          <strong>{stats.upcoming || 0}</strong>
+        </Card>
+        <Card className="p-5">
+          <div className="flex items-center gap-3">
+            <Trophy size={18} />
+            <span>Results</span>
+          </div>
+          <strong>{stats.published_results || 0}</strong>
+        </Card>
       </section>
 
       <div className="rowBetween">
@@ -194,24 +177,24 @@ function StudentDashboard({ dashboard }) {
           <h2>Assigned exams</h2>
         </div>
         <div className="actionRow">
-          <a className="button secondary" href={dashboard?.links?.results || "/student/results"}>
+          <Button variant="secondary" size="sm" as={Link} to={dashboard?.links?.results || "/student/results"}>
             <Trophy size={18} /> Results
-          </a>
-          <a className="button primary" href={dashboard?.links?.join_exam || "/student/join"}>
+          </Button>
+          <Button variant="primary" size="sm" as={Link} to={dashboard?.links?.join_exam || "/student/join"}>
             <KeyRound size={18} /> Use access code
-          </a>
+          </Button>
         </div>
       </div>
 
       {exams.length === 0 ? (
-        <section className="emptyState">
+        <Card className="emptyState">
           <CalendarClock size={34} />
           <h3>No assigned exams yet</h3>
           <p>Your assigned exams will appear here. You can still join an exam with an access code if your teacher shared one.</p>
-          <a className="button primary" href={dashboard?.links?.join_exam || "/student/join"}>
+          <Button variant="primary" size="sm" as={Link} to={dashboard?.links?.join_exam || "/student/join"}>
             <KeyRound size={18} /> Open exam lobby
-          </a>
-        </section>
+          </Button>
+        </Card>
       ) : (
         <section className="studentExamGrid">
           {exams.map(exam => (
@@ -232,11 +215,19 @@ function StudentExamCard({ exam, elapsedSeconds }) {
   const startTime = formatDateTime(exam.start_time);
   const endTime = formatDateTime(exam.end_time);
 
+  const toneVariant = {
+    active: "success",
+    result: "primary",
+    upcoming: "warning",
+    closed: "danger",
+    submitted: "secondary"
+  }[tone] || "ghost";
+
   return (
-    <article className={`studentExamCard ${tone}`}>
+    <Card className={`studentExamCard ${tone}`}>
       <div className="examCardHeader">
         <div>
-          <span className={`status ${tone}`}>{tone.replace("_", " ")}</span>
+          <Badge variant={toneVariant} size="sm">{tone.replace("_", " ")}</Badge>
           <h3>{exam.exam_name}</h3>
           <p>{exam.subject} | Set {exam.set_code}</p>
         </div>
@@ -280,26 +271,26 @@ function StudentExamCard({ exam, elapsedSeconds }) {
 
       <div className="examActions">
         {action.disabled ? (
-          <button className="button secondary" type="button" disabled>{action.label || "Unavailable"}</button>
+          <Button variant="secondary" size="sm" disabled>{action.label || "Unavailable"}</Button>
         ) : action.method === "post" ? (
           <form method="post" action={action.href}>
             <input type="hidden" name="ui" value="react" />
-            <button className="button primary" type="submit">
+            <Button type="submit" variant="primary" size="sm">
               {actionIcon(actionLabel)}
               {actionLabel}
-            </button>
+            </Button>
           </form>
         ) : (
-          <a className={`button ${action.variant || "secondary"}`} href={action.href}>
+          <Button as="a" variant={action.variant || "secondary"} size="sm" href={action.href}>
             {actionIcon(actionLabel)}
             {actionLabel}
-          </a>
+          </Button>
         )}
         {exam.result?.pdf_href && (
-          <a className="button quiet" href={exam.result.pdf_href}>PDF</a>
+          <Button as="a" variant="ghost" size="sm" href={exam.result.pdf_href}>PDF</Button>
         )}
       </div>
-    </article>
+    </Card>
   );
 }
 
@@ -311,21 +302,21 @@ function TeacherDashboard({ dashboard }) {
           <span className="eyebrow">Teacher workspace</span>
           <h2>My exams</h2>
         </div>
-        <Link className="button primary" to="/teacher/proctoring"><Radio size={18} /> Live proctoring</Link>
+        <Button variant="primary" size="sm" as={Link} to="/teacher/proctoring"><Radio size={18} /> Live proctoring</Button>
       </div>
       {(dashboard?.exams || []).map(exam => (
-        <article className="examCard" key={exam.id}>
+        <Card key={exam.id} className="examCard">
           <div>
-            <span className={`status ${exam.status}`}>{exam.status}</span>
+            <Badge variant={exam.status === "active" ? "success" : "secondary"} size="sm">{exam.status}</Badge>
             <h3>{exam.exam_name}</h3>
             <p>{exam.question_count} questions | {exam.session_count} sessions</p>
           </div>
           <div className="actionRow">
             <strong>{exam.total_marks} marks</strong>
-            <Link className="button primary" to={`/teacher/exam/${exam.id}/review`}>Review</Link>
-            <a className="button quiet" href={exam.flask_results_url}>Classic</a>
+            <Button variant="primary" size="sm" as={Link} to={`/teacher/exam/${exam.id}/review`}>Review</Button>
+            <Button as="a" variant="ghost" size="sm" href={exam.flask_results_url}>Classic</Button>
           </div>
-        </article>
+        </Card>
       ))}
     </div>
   );
@@ -340,14 +331,14 @@ function AdminDashboard({ dashboard }) {
           <span className="eyebrow">Admin overview</span>
           <h2>Platform health</h2>
         </div>
-        <Link className="button primary" to="/admin/proctoring"><Radio size={18} /> Live proctoring</Link>
+        <Button variant="primary" size="sm" as={Link} to="/admin/proctoring"><Radio size={18} /> Live proctoring</Button>
       </div>
       <section className="statsGrid">
         {Object.entries(stats).map(([key, value]) => (
-          <article className="statCard" key={key}>
+          <Card key={key} className="statCard">
             <span>{key.replaceAll("_", " ")}</span>
             <strong>{value}</strong>
-          </article>
+          </Card>
         ))}
       </section>
     </div>
@@ -423,7 +414,16 @@ function ProtectedProctoringRoute({ currentRole, settings, mode }) {
 export default function App() {
   const { bootstrap, dashboard, error, loading, loadBootstrap, loadDashboard } = useAppStore();
   const role = bootstrap?.auth?.role;
-  const [theme, setTheme] = useState(() => window.localStorage.getItem("examTheme") || "light");
+  const [theme, setTheme] = useState(() => {
+    try {
+      const stored = window.localStorage.getItem("examTheme");
+      if (stored) return stored;
+      const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      return prefersDark ? 'dark' : 'light';
+    } catch {
+      return 'light';
+    }
+  });
 
   useEffect(() => {
     loadBootstrap().then(data => {
@@ -432,9 +432,35 @@ export default function App() {
   }, [loadBootstrap, loadDashboard]);
 
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    window.localStorage.setItem("examTheme", theme);
+    try {
+      // transient transition class for smooth theme change
+      document.documentElement.classList.add('theme-transition');
+      window.setTimeout(() => document.documentElement.classList.remove('theme-transition'), 300);
+      window.localStorage.setItem("examTheme", theme);
+      if (theme === 'dark') {
+        document.documentElement.classList.add('dark');
+        document.documentElement.style.colorScheme = 'dark';
+      } else {
+        document.documentElement.classList.remove('dark');
+        document.documentElement.style.colorScheme = 'light';
+      }
+    } catch {
+      // ignore
+    }
   }, [theme]);
+
+  async function markAllRead() {
+    try {
+      await api.post('/notifications/mark_all');
+    } catch {
+      // ignore errors, but attempt to reload bootstrap regardless
+    }
+    try {
+      await loadBootstrap();
+    } catch {
+      // ignore
+    }
+  }
 
   if (loading) {
     return <div className="loadingScreen">Preparing your workspace...</div>;
@@ -447,6 +473,7 @@ export default function App() {
       notifications={bootstrap?.notifications}
       theme={theme}
       onToggleTheme={() => setTheme(current => (current === "dark" ? "light" : "dark"))}
+      onMarkAllRead={markAllRead}
     >
       {error && <div className="alert">{error}</div>}
       <Routes>

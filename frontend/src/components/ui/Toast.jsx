@@ -25,7 +25,11 @@ function show(type, message, options = {}) {
   const duration = type === "warning" || type === "error" ? 8000 : 5000;
   return toast.custom(
     toastItem => (
-      <div className={`toastFrame ${toastItem.visible ? "toastEnter" : "toastExit"} ${type}`}>
+      <div
+        role="status"
+        aria-live="polite"
+        className={`toastFrame ${toastItem.visible ? "toastEnter" : "toastExit"} ${type}`}
+      >
         <Icon size={18} />
         <span>{message}</span>
         {options.action && <a href={options.action.href}>{options.action.label}</a>}

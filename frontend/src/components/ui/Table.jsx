@@ -46,20 +46,37 @@ export function Table({
         <table className="min-w-full border-collapse text-left text-sm">
           <thead className="sticky top-0 z-10 bg-background-surface text-text-secondary">
             <tr>
-              {columns.map(column => (
-                <th className="whitespace-nowrap px-4 py-3 font-semibold" key={column.key}>
-                  {column.sortable ? (
-                    <button className="group inline-flex items-center gap-1" type="button" onClick={() => toggleSort(column.key)}>
-                      {column.header}
-                      {sort?.key === column.key ? (
-                        sort.direction === "asc" ? <ArrowUp size={14} /> : <ArrowDown size={14} />
-                      ) : (
-                        <ChevronsUpDown size={14} className="opacity-0 transition group-hover:opacity-100" />
-                      )}
-                    </button>
-                  ) : column.header}
-                </th>
-              ))}
+              {columns.map(column => {
+                const isSorted = sort?.key === column.key;
+                const ariaSort = isSorted ? (sort.direction === "asc" ? "ascending" : "descending") : "none";
+                return (
+                  <th
+                    className="whitespace-nowrap px-4 py-3 font-semibold"
+                    key={column.key}
+                    role="columnheader"
+                    scope="col"
+                    aria-sort={column.sortable ? ariaSort : undefined}
+                  >
+                    {column.sortable ? (
+                      <button
+                        className="group inline-flex items-center gap-1"
+                        type="button"
+                        onClick={() => toggleSort(column.key)}
+                        aria-label={`Sort by ${column.header}`}
+                      >
+                        {column.header}
+                        {isSorted ? (
+                          sort.direction === "asc" ? <ArrowUp size={14} /> : <ArrowDown size={14} />
+                        ) : (
+                          <ChevronsUpDown size={14} className="opacity-0 transition group-hover:opacity-100" />
+                        )}
+                      </button>
+                    ) : (
+                      column.header
+                    )}
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -68,9 +85,9 @@ export function Table({
                 <td colSpan={columns.length}><SkeletonTableRows rows={rowsPerPage} /></td>
               </tr>
             ) : visibleRows.map((row, index) => (
-              <tr className="group bg-background-base transition hover:bg-background-elevated/70" key={row[rowKey] || index}>
+              <tr className="group bg-background-base transition hover:bg-background-elevated/70" key={row[rowKey] || index} role="row">
                 {columns.map(column => (
-                  <td className="px-4 py-3 text-text-primary" key={column.key}>
+                  <td className="px-4 py-3 text-text-primary" key={column.key} role="cell">
                     {column.render ? column.render(row) : row[column.key]}
                   </td>
                 ))}

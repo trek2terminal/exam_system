@@ -35,8 +35,8 @@ export function Select({
         disabled={disabled}
         onClick={() => setOpen(current => !current)}
         className={cn(
-          "flex min-h-11 w-full items-center justify-between rounded-md border bg-white px-3 text-left text-base text-text-primary transition duration-150 ease-out",
-          "focus:outline-none focus:ring-2 focus:ring-brand-primary/20 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-background-base",
+          "flex min-h-11 w-full items-center justify-between rounded-md border bg-background-base px-3 text-left text-base text-text-primary transition duration-150 ease-out",
+          "focus:outline-none focus:ring-2 focus:ring-brand-primary/20 disabled:cursor-not-allowed disabled:opacity-60",
           error ? "border-danger" : "border-border"
         )}
       >

@@ -4,9 +4,7 @@ export function Skeleton({ className }) {
   return (
     <span
       className={cn(
-        "block rounded-md bg-[length:200%_100%] animate-shimmer",
-        "bg-[linear-gradient(90deg,#e2e8f0_0%,#f8fafc_50%,#e2e8f0_100%)]",
-        "dark:bg-[linear-gradient(90deg,#1e293b_0%,#334155_50%,#1e293b_100%)]",
+        "block rounded-md skeleton",
         className
       )}
     />

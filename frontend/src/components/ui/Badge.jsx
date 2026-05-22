@@ -17,8 +17,9 @@ const sizes = {
 export function Badge({ variant = "default", size = "sm", dot = false, className, children }) {
   return (
     <span
+      role="status"
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-pill font-semibold capitalize",
+        "inline-flex items-center gap-1.5 rounded-pill font-semibold capitalize focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/30",
         variants[variant] || variants.default,
         sizes[size] || sizes.sm,
         className

@@ -17,6 +17,7 @@ import {
   ShieldAlert,
   TerminalSquare
 } from "lucide-react";
+import { Button, Card, Badge, Textarea } from "./components/ui";
 import { api } from "./services/api";
 import { createRealtimeSocket } from "./services/realtime";
 
@@ -653,7 +654,7 @@ export default function ExamInterface() {
         <ShieldAlert size={36} />
         <h2>Exam cannot open</h2>
         <p>{error}</p>
-        <a className="button primary" href="/student/dashboard">Back to dashboard</a>
+        <Button as="a" variant="primary" size="sm" href="/student/dashboard">Back to dashboard</Button>
       </section>
     );
   }
@@ -666,9 +667,9 @@ export default function ExamInterface() {
             <Expand size={34} />
             <h2>Enter focused exam mode</h2>
             <p>Your timer, autosave, and security checks are active. Keep this window open and focused.</p>
-            <button className="button primary" type="button" onClick={enterFullscreen}>
+            <Button variant="primary" size="sm" onClick={enterFullscreen}>
               <Expand size={18} /> Start Focus Mode
-            </button>
+            </Button>
           </section>
         </div>
       )}
@@ -679,7 +680,7 @@ export default function ExamInterface() {
             <AlertTriangle size={34} />
             <h2>Timer paused</h2>
             <p>An admin has paused this attempt. Stay on this screen until it resumes.</p>
-            <button className="button secondary" type="button" onClick={sendHeartbeat}>Check status</button>
+            <Button variant="secondary" size="sm" onClick={sendHeartbeat}>Check status</Button>
           </section>
         </div>
       )}
@@ -696,25 +697,25 @@ export default function ExamInterface() {
         </div>
         <div className="examHeaderActions">
           <div className="autosavePill"><Cloud size={16} /> {autosaveState}</div>
-          <button className="button secondary" type="button" onClick={enterFullscreen}><Expand size={18} /></button>
-          <button className="button danger" type="button" disabled={submitting} onClick={confirmSubmit}>
+          <Button variant="secondary" size="sm" onClick={enterFullscreen}><Expand size={18} /></Button>
+          <Button variant="danger" size="sm" disabled={submitting} onClick={confirmSubmit}>
             <Send size={18} /> Submit
-          </button>
+          </Button>
         </div>
       </header>
 
       <div className="reactExamGrid">
         <aside className="reactQuestionPanel">
-          <div className="examSideCard">
+          <Card className="examSideCard">
             <div className="rowBetween">
               <span>Answered</span>
               <strong>{answeredCount}/{questions.length}</strong>
             </div>
             <div className="progressLine"><span style={{ width: `${progressPercent}%` }} /></div>
             <p>{progressPercent}% complete</p>
-          </div>
+          </Card>
 
-          <div className="examSideCard">
+          <Card className="examSideCard">
             <div className="rowBetween">
               <span>Focus warnings</span>
               <strong>{Math.min(violationCount, warningLimit)}/{warningLimit}</strong>
@@ -724,28 +725,32 @@ export default function ExamInterface() {
                 <span key={index} className={index < violationCount ? "active" : ""} />
               ))}
             </div>
-          </div>
+          </Card>
 
-          <div className="examSideCard">
+          <Card className="examSideCard">
             <span className="eyebrow">Questions</span>
             <div className="reactPalette">
-              {questions.map((question, index) => (
-                <button
-                  key={question.id}
-                  type="button"
-                  className={normalizeStatus(statuses[question.id]).toLowerCase().replaceAll("_", "-")}
-                  onClick={() => visitQuestion(index)}
-                >
-                  {question.question_number}
-                </button>
-              ))}
+              {questions.map((question, index) => {
+                const status = normalizeStatus(statuses[question.id]);
+                return (
+                  <Button
+                    key={question.id}
+                    variant={status === "ANSWERED" || status === "ANSWERED_MARKED" ? "success" : status === "MARKED_REVIEW" ? "warning" : "ghost"}
+                    size="sm"
+                    className={status.toLowerCase().replaceAll("_", "-")}
+                    onClick={() => visitQuestion(index)}
+                  >
+                    {question.question_number}
+                  </Button>
+                );
+              })}
             </div>
             <div className="statusSummary">
               {QUESTION_STATES.map(state => (
                 <div key={state}><span>{statusLabel(state)}</span><strong>{counts[state]}</strong></div>
               ))}
             </div>
-          </div>
+          </Card>
         </aside>
 
         {currentQuestion && (
@@ -757,19 +762,19 @@ export default function ExamInterface() {
                   <h2>{currentQuestion.question_text}</h2>
                 </div>
                 <div className="questionToolset">
-                  <button
-                    type="button"
-                    className={`iconButton ${isFlagged(statuses[currentQuestion.id]) ? "active" : ""}`}
+                  <Button
+                    variant={isFlagged(statuses[currentQuestion.id]) ? "danger" : "secondary"}
+                    size="sm"
                     onClick={() => toggleFlag(currentQuestion)}
                     aria-label="Flag for review"
                   >
                     <Bookmark size={18} />
-                  </button>
-                  <span className="status">{currentQuestion.marks} mark{currentQuestion.marks === 1 ? "" : "s"}</span>
+                  </Button>
+                  <Badge variant="info" size="sm">{currentQuestion.marks} mark{currentQuestion.marks === 1 ? "" : "s"}</Badge>
                   {currentQuestion.time_limit_seconds > 0 && (
-                    <span className={`questionTimerPill ${expiredQuestions[currentQuestion.id] ? "expired" : currentQuestionRemaining <= 30 ? "danger" : ""}`}>
+                    <Badge variant={expiredQuestions[currentQuestion.id] ? "danger" : currentQuestionRemaining <= 30 ? "warning" : "default"} size="sm">
                       {expiredQuestions[currentQuestion.id] ? "Expired" : formatExamTime(currentQuestionRemaining ?? currentQuestion.time_limit_seconds)}
-                    </span>
+                    </Badge>
                   )}
                 </div>
               </div>
@@ -802,15 +807,15 @@ export default function ExamInterface() {
             </article>
 
             <footer className="questionNavFooter">
-              <button className="button secondary" type="button" disabled={currentIndex === 0} onClick={() => visitQuestion(currentIndex - 1)}>
+              <Button variant="secondary" size="sm" disabled={currentIndex === 0} onClick={() => visitQuestion(currentIndex - 1)}>
                 <ChevronLeft size={18} /> Previous
-              </button>
-              <button className="button secondary" type="button" onClick={() => toggleFlag(currentQuestion)}>
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => toggleFlag(currentQuestion)}>
                 <Bookmark size={18} /> {isFlagged(statuses[currentQuestion.id]) ? "Unmark" : "Mark for review"}
-              </button>
-              <button className="button primary" type="button" disabled={currentIndex >= questions.length - 1} onClick={() => visitQuestion(currentIndex + 1)}>
+              </Button>
+              <Button variant="primary" size="sm" disabled={currentIndex >= questions.length - 1} onClick={() => visitQuestion(currentIndex + 1)}>
                 Next <ChevronRight size={18} />
-              </button>
+              </Button>
             </footer>
           </main>
         )}
@@ -824,7 +829,10 @@ function AnswerEditor({ question, value, output, stdinValue, expired, onChange, 
     return (
       <div className="reactMcqList">
         {question.options.map(option => (
-          <label key={option} className="reactMcqOption">
+          <label
+            key={option}
+            className={`reactMcqOption ${value === option ? "selected" : ""} ${expired ? "disabled" : ""}`}
+          >
             <input
               type="radio"
               name={`q_${question.id}`}
@@ -845,9 +853,9 @@ function AnswerEditor({ question, value, output, stdinValue, expired, onChange, 
       <div className="reactCodingWorkspace">
         <div className="codingToolbar">
           <span><TerminalSquare size={18} /> Python</span>
-          <button className="button primary" type="button" onClick={onRun} disabled={running || expired}>
+          <Button variant="primary" size="sm" onClick={onRun} disabled={running || expired}>
             <Play size={18} /> {running ? "Running..." : "Run Code"}
-          </button>
+          </Button>
         </div>
         <div className="reactCodeEditor">
           <Editor
@@ -867,7 +875,7 @@ function AnswerEditor({ question, value, output, stdinValue, expired, onChange, 
           />
         </div>
         <label className="stdinLabel" htmlFor={`stdin-${question.id}`}>stdin for input()</label>
-        <textarea
+        <Textarea
           id={`stdin-${question.id}`}
           className="reactStdinInput"
           value={stdinValue}
@@ -882,7 +890,7 @@ function AnswerEditor({ question, value, output, stdinValue, expired, onChange, 
   }
 
   return (
-    <textarea
+    <Textarea
       className="reactAnswerTextarea"
       value={value}
       onChange={event => onChange(event.target.value)}

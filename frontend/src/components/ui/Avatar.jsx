@@ -8,13 +8,13 @@ const sizes = {
 };
 
 const palette = [
-  "#4f46e5",
-  "#0284c7",
-  "#16a34a",
-  "#d97706",
-  "#dc2626",
-  "#7c3aed",
-  "#0f766e"
+  "rgb(var(--color-brand-primary))",
+  "rgb(var(--color-info))",
+  "rgb(var(--color-success))",
+  "rgb(var(--color-warning))",
+  "rgb(var(--color-danger))",
+  "rgb(var(--color-brand-primary-hover))",
+  "rgb(var(--color-success))"
 ];
 
 function initials(name = "") {
