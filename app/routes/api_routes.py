@@ -286,14 +286,6 @@ def execute_code(session_code):
     if question.question_type != "coding":
         return jsonify({"ok": False, "message": "This question is not a coding question."}), 400
 
-    result = CodeExecutionService.run_python(
-        code=code,
-        stdin_text=stdin_text,
-        timeout_seconds=current_app.config.get("CODE_EXECUTION_TIMEOUT_SECONDS", 10),
-        max_chars=current_app.config.get("CODE_EXECUTION_MAX_CHARS", 12000),
-        output_max_chars=current_app.config.get("CODE_EXECUTION_OUTPUT_MAX_CHARS", 8000),
-    )
-
     answer = Answer.query.filter_by(session_id=student_session.id, question_id=question.id).first()
     if not answer:
         answer = Answer(session_id=student_session.id, question_id=question.id)
@@ -305,6 +297,15 @@ def execute_code(session_code):
         return jsonify({"ok": False, "message": "This question's time limit has expired."}), 403
     if answer.question_time_expired:
         return jsonify({"ok": False, "message": "This question's time limit has expired."}), 403
+
+    result = CodeExecutionService.run_python(
+        code=code,
+        stdin_text=stdin_text,
+        timeout_seconds=current_app.config.get("CODE_EXECUTION_TIMEOUT_SECONDS", 10),
+        max_chars=current_app.config.get("CODE_EXECUTION_MAX_CHARS", 12000),
+        stdin_max_chars=current_app.config.get("CODE_EXECUTION_STDIN_MAX_CHARS", 4000),
+        output_max_chars=current_app.config.get("CODE_EXECUTION_OUTPUT_MAX_CHARS", 8000),
+    )
 
     output_parts = [f"[{result.status.upper()}] {result.message}"]
     if result.stdout:
@@ -319,6 +320,19 @@ def execute_code(session_code):
     answer.visit_status = AutoSaveService.normalize_visit_status(data.get("visit_status"), code)
     student_session.last_heartbeat = datetime.utcnow()
     student_session.updated_at = datetime.utcnow()
+    db.session.add(
+        AuditLog(
+            user_id=session.get("student_user_id"),
+            action="run_python_code",
+            resource_type="student_session",
+            resource_id=student_session.id,
+            changes=f"question_id={question.id}; status={result.status}; time_ms={result.execution_time_ms}",
+            status="success" if result.ok else "warning",
+            error_message=result.message if not result.ok else None,
+            ip_address=get_client_ip(),
+            user_agent=request.headers.get("User-Agent"),
+        )
+    )
     db.session.commit()
 
     payload = result.as_dict()

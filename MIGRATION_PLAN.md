@@ -215,3 +215,21 @@ Still intentionally left for later phases:
 - Installing and verifying Flask-SocketIO client/server dependencies in the real environment, then browser-testing live push updates.
 - Production-grade Python execution isolation using OS-level limits beyond the current static blocklist, timeout, and subprocess capture.
 - External deployment hardening: HTTPS certificates, reverse proxy config validation, Redis-backed rate limiting/session store if hosted multi-process.
+
+## Latest Implementation Batch 2 - 2026-05-22
+
+Completed in this batch:
+- Hardened Python code execution with an explicit safe-import allowlist, stronger blocked builtins/helpers, blocked private/dunder attribute access, relative import rejection, stdin length limits, no bytecode writes, no proxy environment, isolated temp working directory, POSIX CPU/memory limits, and Windows no-window process flags.
+- Moved per-question timer validation before Python execution so expired coding questions cannot run code.
+- Added audit-log records for Python execution attempts with status and execution time.
+- Added `CODE_EXECUTION_STDIN_MAX_CHARS` and made admin idle timeout configurable from `.env`.
+- Added `wsgi.py` for production-style WSGI serving.
+- Added deployment assets: `deployment/nginx-exam-system.conf`, `deployment/start-waitress.ps1`, and `deployment/README.md`.
+- Updated `.env.example` and requirements for host-ready runtime configuration.
+- Upgraded the existing Flask exam coding UI with optional Monaco Editor and xterm.js CDN loading, while preserving textarea/output fallbacks if those assets are unavailable.
+
+Still intentionally left for later phases:
+- Full React + Vite migration with Zustand, Axios interceptors, shadcn/Tailwind, and deeper component-level state management. Monaco/xterm are now available in the current Flask interface as an interim working upgrade.
+- Browser verification of Socket.IO push behavior on the final installed environment.
+- Stronger production sandbox isolation outside the Python process, such as container/firejail/Windows Job Object policy and network namespace blocking.
+- HTTPS certificate automation and Redis-backed rate limiting/session storage for multi-process hosting.

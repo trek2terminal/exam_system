@@ -2858,6 +2858,18 @@ html[data-theme="dark"] body.student-mode .student-options .mcq-option {
     tab-size: 4;
 }
 
+.code-answer.is-hidden-editor-source {
+    display: none;
+}
+
+.monaco-editor-host {
+    min-height: 380px;
+    border: 1px solid var(--student-border);
+    border-radius: 8px;
+    overflow: hidden;
+    background: #111827;
+}
+
 .code-stdin-label {
     margin: 4px 0 -6px;
     color: var(--student-muted);
@@ -2880,6 +2892,16 @@ html[data-theme="dark"] body.student-mode .student-options .mcq-option {
     color: #d7ffe5;
     line-height: 1.55;
     white-space: pre-wrap;
+}
+
+.code-output-panel.terminal-ready {
+    min-height: 180px;
+    padding: 0;
+    white-space: normal;
+}
+
+.code-output-panel .xterm {
+    padding: 12px;
 }
 
 .code-output-panel.running {

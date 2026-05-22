@@ -133,6 +133,7 @@ def create_app(config_class=None):
                 "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com data:; "
                 "img-src 'self' data:; "
                 "connect-src 'self' ws: wss:; "
+                "worker-src 'self' blob: data:; "
                 "frame-ancestors 'none'; "
                 "base-uri 'self'; "
                 "form-action 'self'"

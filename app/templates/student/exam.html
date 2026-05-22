@@ -1,5 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Exam Window{% endblock %}
+{% set has_coding = questions | selectattr('question_type', 'equalto', 'coding') | list | length > 0 %}
+
+{% block head %}
+  {% if has_coding %}
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/xterm/5.3.0/xterm.min.css">
+  {% endif %}
+{% endblock %}
 
 {% block content %}
 <div class="exam-shell student-exam-shell" data-session-code="{{ student_session.session_code }}" data-session-token="{{ attempt_token }}" data-remaining="{{ remaining_seconds }}" data-warning-limit="{{ max_violations_allowed }}" data-session-status="{{ student_session.status }}">
@@ -229,6 +236,10 @@
 {% endblock %}
 
 {% block scripts %}
+{% if has_coding %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xterm/5.3.0/xterm.min.js"></script>
+{% endif %}
 <script>
   initExamPage("{{ student_session.session_code }}", {{ remaining_seconds }}, {{ attempt_token|tojson }});
 </script>

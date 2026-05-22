@@ -31,29 +31,94 @@ class CodeExecutionResult:
 class CodeExecutionService:
     """Run student Python snippets with practical local-first safety controls."""
 
+    ALLOWED_IMPORT_ROOTS = {
+        "array",
+        "bisect",
+        "calendar",
+        "collections",
+        "copy",
+        "dataclasses",
+        "datetime",
+        "decimal",
+        "fractions",
+        "functools",
+        "heapq",
+        "itertools",
+        "math",
+        "operator",
+        "random",
+        "re",
+        "statistics",
+        "string",
+        "typing",
+    }
     BANNED_IMPORT_ROOTS = {
+        "builtins",
         "ctypes",
+        "faulthandler",
+        "importlib",
+        "inspect",
         "multiprocessing",
         "os",
         "pathlib",
+        "pickle",
+        "pkgutil",
+        "pty",
         "requests",
+        "resource",
+        "runpy",
         "shutil",
+        "signal",
+        "site",
         "socket",
         "subprocess",
         "sys",
+        "tempfile",
         "threading",
         "urllib",
+        "venv",
     }
     BANNED_CALLS = {
         "__import__",
         "breakpoint",
         "compile",
+        "delattr",
+        "dir",
         "eval",
         "exec",
+        "exit",
+        "getattr",
         "globals",
+        "help",
         "locals",
+        "memoryview",
         "open",
+        "quit",
+        "setattr",
         "vars",
+    }
+    BANNED_NAMES = {
+        "__builtins__",
+        "copyright",
+        "credits",
+        "exit",
+        "help",
+        "license",
+        "quit",
+    }
+    BANNED_ATTRIBUTES = {
+        "mro",
+        "popen",
+        "remove",
+        "removedirs",
+        "rename",
+        "rmdir",
+        "rmtree",
+        "socket",
+        "subclasses",
+        "system",
+        "unlink",
+        "walk",
     }
 
     @staticmethod
@@ -82,6 +147,8 @@ class CodeExecutionService:
                 module_names = []
                 if isinstance(node, ast.Import):
                     module_names = [alias.name for alias in node.names]
+                elif node.level and node.level > 0:
+                    return False, "Relative imports are not allowed in exam code."
                 elif node.module:
                     module_names = [node.module]
 
@@ -89,6 +156,8 @@ class CodeExecutionService:
                     root_name = module_name.split(".")[0]
                     if root_name in CodeExecutionService.BANNED_IMPORT_ROOTS:
                         return False, f"Import '{root_name}' is not allowed in exam code."
+                    if root_name not in CodeExecutionService.ALLOWED_IMPORT_ROOTS:
+                        return False, f"Import '{root_name}' is not in the allowed exam module list."
 
             if isinstance(node, ast.Call):
                 function_name = ""
@@ -99,6 +168,13 @@ class CodeExecutionService:
 
                 if function_name in CodeExecutionService.BANNED_CALLS:
                     return False, f"Function '{function_name}' is not allowed in exam code."
+
+            if isinstance(node, ast.Name) and node.id in CodeExecutionService.BANNED_NAMES:
+                return False, f"Name '{node.id}' is not allowed in exam code."
+
+            if isinstance(node, ast.Attribute):
+                if node.attr.startswith("_") or node.attr in CodeExecutionService.BANNED_ATTRIBUTES:
+                    return False, f"Attribute '{node.attr}' is not allowed in exam code."
 
         return True, ""
 
@@ -120,33 +196,85 @@ class CodeExecutionService:
         return limit_resources
 
     @staticmethod
-    def run_python(code, stdin_text="", timeout_seconds=10, max_chars=12000, output_max_chars=8000):
+    def _creation_flags():
+        if platform.system().lower() != "windows":
+            return 0
+        flags = 0
+        if hasattr(subprocess, "CREATE_NO_WINDOW"):
+            flags |= subprocess.CREATE_NO_WINDOW
+        if hasattr(subprocess, "CREATE_NEW_PROCESS_GROUP"):
+            flags |= subprocess.CREATE_NEW_PROCESS_GROUP
+        return flags
+
+    @staticmethod
+    def _lockdown_workdir(temp_dir):
+        if platform.system().lower() == "windows":
+            return
+        try:
+            os.chmod(temp_dir, 0o555)
+        except OSError:
+            pass
+
+    @staticmethod
+    def _restore_workdir(temp_dir):
+        try:
+            os.chmod(temp_dir, 0o755)
+        except OSError:
+            pass
+
+    @staticmethod
+    def run_python(
+        code,
+        stdin_text="",
+        timeout_seconds=10,
+        max_chars=12000,
+        stdin_max_chars=4000,
+        output_max_chars=8000,
+    ):
         is_valid, validation_message = CodeExecutionService.validate_code(code, max_chars)
         if not is_valid:
             return CodeExecutionResult(ok=False, status="rejected", message=validation_message)
 
+        stdin_text = stdin_text or ""
+        if len(stdin_text) > stdin_max_chars:
+            return CodeExecutionResult(
+                ok=False,
+                status="rejected",
+                message=f"Input is too long. Keep stdin under {stdin_max_chars} characters.",
+            )
+
         start = time.perf_counter()
+        completed = None
 
         with tempfile.TemporaryDirectory(prefix="exam_code_") as temp_dir:
             script_path = os.path.join(temp_dir, "main.py")
             with open(script_path, "w", encoding="utf-8") as script_file:
                 script_file.write(code)
+            try:
+                os.chmod(script_path, 0o444)
+            except OSError:
+                pass
 
             env = {
+                "NO_PROXY": "*",
                 "PYTHONIOENCODING": "utf-8",
+                "PYTHONDONTWRITEBYTECODE": "1",
                 "PYTHONUNBUFFERED": "1",
             }
 
             try:
+                CodeExecutionService._lockdown_workdir(temp_dir)
                 completed = subprocess.run(
-                    [sys.executable, "-I", script_path],
-                    input=stdin_text or "",
+                    [sys.executable, "-I", "-B", script_path],
+                    input=stdin_text,
                     text=True,
                     capture_output=True,
                     cwd=temp_dir,
                     env=env,
                     timeout=timeout_seconds,
                     preexec_fn=CodeExecutionService._resource_limiter(),
+                    start_new_session=platform.system().lower() != "windows",
+                    creationflags=CodeExecutionService._creation_flags(),
                 )
             except subprocess.TimeoutExpired as exc:
                 elapsed_ms = int((time.perf_counter() - start) * 1000)
@@ -160,6 +288,8 @@ class CodeExecutionService:
                     message=f"Execution timed out after {timeout_seconds} seconds.",
                     execution_time_ms=elapsed_ms,
                 )
+            finally:
+                CodeExecutionService._restore_workdir(temp_dir)
 
         elapsed_ms = int((time.perf_counter() - start) * 1000)
         stdout = CodeExecutionService._truncate(completed.stdout, output_max_chars)

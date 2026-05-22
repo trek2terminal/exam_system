@@ -23,10 +23,10 @@ class Config:
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"
     PERMANENT_SESSION_LIFETIME = timedelta(hours=8)
-    ADMIN_IDLE_TIMEOUT_SECONDS = 2 * 60 * 60
+    ADMIN_IDLE_TIMEOUT_SECONDS = int(os.environ.get("ADMIN_IDLE_TIMEOUT_SECONDS", str(2 * 60 * 60)))
 
     # Automatically set secure cookie based on environment
-    SESSION_COOKIE_SECURE = APP_ENV == "production"
+    SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "").lower() in {"1", "true", "yes"} or APP_ENV == "production"
 
     # File Upload Limits
     MAX_CONTENT_LENGTH = 25 * 1024 * 1024  # 25MB
@@ -46,6 +46,7 @@ class Config:
 
     CODE_EXECUTION_TIMEOUT_SECONDS = int(os.environ.get("CODE_EXECUTION_TIMEOUT_SECONDS", "10"))
     CODE_EXECUTION_MAX_CHARS = int(os.environ.get("CODE_EXECUTION_MAX_CHARS", "12000"))
+    CODE_EXECUTION_STDIN_MAX_CHARS = int(os.environ.get("CODE_EXECUTION_STDIN_MAX_CHARS", "4000"))
     CODE_EXECUTION_OUTPUT_MAX_CHARS = int(os.environ.get("CODE_EXECUTION_OUTPUT_MAX_CHARS", "8000"))
 
     # Local-first in-memory rate limits. For hosted multi-process deployment,

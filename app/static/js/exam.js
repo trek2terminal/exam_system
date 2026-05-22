@@ -12,6 +12,8 @@ let questionStateMap = {};
 let examPaused = false;
 let questionTimerIntervals = {};
 let questionTimerPauseStarted = null;
+let codeEditorMap = {};
+let codeTerminalMap = {};
 
 const QUESTION_STATES = ["NOT_VISITED", "VISITED_UNANSWERED", "ANSWERED", "MARKED_REVIEW", "ANSWERED_MARKED"];
 
@@ -359,6 +361,10 @@ function disableQuestionInputs(questionBlock) {
         if (element.classList.contains("flag-review-button")) return;
         element.disabled = true;
     });
+    const questionId = questionBlock.dataset.questionId;
+    if (codeEditorMap[questionId]) {
+        codeEditorMap[questionId].updateOptions({ readOnly: true });
+    }
 }
 
 async function markQuestionTimeExpired(questionBlock) {
@@ -492,6 +498,109 @@ function queueTextSave(sessionCode, questionId, answerText, visitStatus) {
     debounceTimers[key] = setTimeout(() => saveAnswer(sessionCode, questionId, answerText, visitStatus), 800);
 }
 
+function syncCodeFieldFromEditor(codeField) {
+    const editor = codeEditorMap[codeField?.dataset?.questionId];
+    if (editor && codeField) {
+        codeField.value = editor.getValue();
+    }
+    return codeField?.value || "";
+}
+
+function normalizeTerminalText(text) {
+    return String(text || "").replace(/\r?\n/g, "\r\n");
+}
+
+function writeCodeOutput(outputPanel, text, status = null) {
+    if (!outputPanel) return;
+    const terminal = codeTerminalMap[outputPanel.id];
+    if (terminal) {
+        terminal.clear();
+        terminal.write(normalizeTerminalText(text || "No output."));
+    } else {
+        outputPanel.textContent = text || "No output.";
+    }
+    if (status) {
+        outputPanel.classList.toggle("success", status === "success");
+        outputPanel.classList.toggle("error", status !== "success");
+    }
+}
+
+function setupCodeTerminal(outputPanel) {
+    if (!outputPanel || outputPanel.dataset.terminalReady === "1" || !window.Terminal) return;
+    const initialText = outputPanel.textContent.trim() || "Run output will appear here.";
+    outputPanel.textContent = "";
+    outputPanel.classList.add("terminal-ready");
+    outputPanel.dataset.terminalReady = "1";
+
+    const terminal = new window.Terminal({
+        convertEol: true,
+        cursorBlink: false,
+        disableStdin: true,
+        fontFamily: "Consolas, 'Courier New', monospace",
+        fontSize: 13,
+        scrollback: 1000,
+        theme: {
+            background: "#0f172a",
+            foreground: "#d7ffe5",
+            cursor: "#d7ffe5",
+            selectionBackground: "#334155"
+        }
+    });
+    terminal.open(outputPanel);
+    terminal.write(normalizeTerminalText(initialText));
+    codeTerminalMap[outputPanel.id] = terminal;
+}
+
+function setupMonacoEditors() {
+    if (!window.monaco) return;
+    document.querySelectorAll(".code-answer").forEach(textarea => {
+        const questionId = textarea.dataset.questionId;
+        if (!questionId || codeEditorMap[questionId]) return;
+
+        const host = document.createElement("div");
+        host.className = "monaco-editor-host";
+        textarea.insertAdjacentElement("afterend", host);
+        textarea.classList.add("is-hidden-editor-source");
+
+        const editor = window.monaco.editor.create(host, {
+            value: textarea.value || "",
+            language: "python",
+            theme: "vs-dark",
+            automaticLayout: true,
+            fontSize: 14,
+            minimap: { enabled: false },
+            scrollBeyondLastLine: false,
+            tabSize: 4,
+            wordWrap: "on"
+        });
+        editor.onDidChangeModelContent(() => {
+            textarea.value = editor.getValue();
+            textarea.dispatchEvent(new Event("input", { bubbles: true }));
+        });
+        codeEditorMap[questionId] = editor;
+    });
+}
+
+function initCodeEditors() {
+    document.querySelectorAll(".code-output-panel").forEach(setupCodeTerminal);
+
+    if (window.monaco) {
+        setupMonacoEditors();
+        return;
+    }
+
+    if (!window.require) return;
+    const monacoBase = "https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs";
+    window.MonacoEnvironment = {
+        getWorkerUrl: function () {
+            const workerSource = `self.MonacoEnvironment={baseUrl:'${monacoBase}/'};importScripts('${monacoBase}/base/worker/workerMain.min.js');`;
+            return `data:text/javascript;charset=utf-8,${encodeURIComponent(workerSource)}`;
+        }
+    };
+    window.require.config({ paths: { vs: monacoBase } });
+    window.require(["vs/editor/editor.main"], setupMonacoEditors);
+}
+
 async function runCodeForQuestion(button) {
     const questionId = button.dataset.questionId;
     const sessionCode = button.dataset.sessionCode;
@@ -505,16 +614,17 @@ async function runCodeForQuestion(button) {
     button.disabled = true;
     button.classList.add("loading");
     outputPanel.classList.add("running");
-    outputPanel.textContent = "Running code...";
+    const codeValue = syncCodeFieldFromEditor(codeField);
+    writeCodeOutput(outputPanel, "Running code...");
 
     try {
-        await saveAnswer(sessionCode, questionId, codeField.value);
+        await saveAnswer(sessionCode, questionId, codeValue);
         const response = await fetch(`/api/student/session/${sessionCode}/execute`, {
             method: "POST",
             headers: examRequestHeaders(),
             body: JSON.stringify(examPayload({
                 question_id: questionId,
-                code: codeField.value,
+                code: codeValue,
                 stdin: stdinField ? stdinField.value : "",
                 visit_status: questionStateMap[questionId] || "ANSWERED"
             }))
@@ -532,13 +642,10 @@ async function runCodeForQuestion(button) {
         if (data.stderr) {
             parts.push(`\nSTDERR:\n${data.stderr}`);
         }
-        outputPanel.textContent = parts.join("\n");
-        outputPanel.classList.toggle("success", data.status === "success");
-        outputPanel.classList.toggle("error", data.status !== "success");
+        writeCodeOutput(outputPanel, parts.join("\n"), data.status);
         updateAutoSaveStatus?.("saved", "Code run saved");
     } catch (error) {
-        outputPanel.textContent = `Run failed: ${error.message || "Check connection"}`;
-        outputPanel.classList.add("error");
+        writeCodeOutput(outputPanel, `Run failed: ${error.message || "Check connection"}`, "error");
         updateAutoSaveStatus?.("error", "Run failed");
     } finally {
         button.disabled = false;
@@ -966,6 +1073,7 @@ async function initExamPage(sessionCode, remainingSeconds, sessionToken = null) 
     }
 
     refreshQuestionStates();
+    initCodeEditors();
     document.querySelectorAll(".student-question-card[data-question-id]").forEach(block => {
         if (normalizeQuestionState(block.dataset.visitStatus) !== "NOT_VISITED") {
             startQuestionTimer(block);

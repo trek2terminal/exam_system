@@ -132,12 +132,20 @@ if __name__ == "__main__":
             sys.exit(0)
 
     app = create_app()
+    use_reloader = debug_mode and os.environ.get("FLASK_USE_RELOADER", "1") != "0"
 
     if os.environ.get("WERKZEUG_RUN_MAIN") != "true":
         print_startup_urls(port)
 
     socketio = app.extensions.get("socketio")
     if socketio:
-        socketio.run(app, host="0.0.0.0", port=port, debug=debug_mode, allow_unsafe_werkzeug=True)
+        socketio.run(
+            app,
+            host="0.0.0.0",
+            port=port,
+            debug=debug_mode,
+            use_reloader=use_reloader,
+            allow_unsafe_werkzeug=True,
+        )
     else:
-        app.run(host="0.0.0.0", port=port, debug=debug_mode, threaded=True)
+        app.run(host="0.0.0.0", port=port, debug=debug_mode, threaded=True, use_reloader=use_reloader)
