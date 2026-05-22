@@ -1,3 +1,4 @@
+import secrets
 from datetime import datetime, timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 from app.models.database import db
@@ -29,6 +30,8 @@ class User(db.Model):
     failed_login_attempts = db.Column(db.Integer, default=0, nullable=False)
     locked_until = db.Column(db.DateTime, nullable=True)
     must_change_password = db.Column(db.Boolean, default=False, nullable=False)
+    active_session_token = db.Column(db.String(128), nullable=True, index=True)
+    active_session_started_at = db.Column(db.DateTime, nullable=True)
 
     # Optional fields for future use
     email = db.Column(db.String(120), unique=True, nullable=True, index=True)
@@ -87,6 +90,20 @@ class User(db.Model):
             db.session.commit()
             return False
         return True
+
+    def issue_active_session_token(self) -> str:
+        """Create a single live browser-session token for this account."""
+        self.active_session_token = secrets.token_urlsafe(32)
+        self.active_session_started_at = datetime.utcnow()
+        return self.active_session_token
+
+    def clear_active_session_token(self, presented_token=None):
+        """Clear the live session token, without letting stale sessions kill a newer login."""
+        if presented_token and self.active_session_token:
+            if not secrets.compare_digest(str(presented_token), str(self.active_session_token)):
+                return
+        self.active_session_token = None
+        self.active_session_started_at = None
 
     # ====================== ROLE CHECKS ======================
     def is_admin(self) -> bool:

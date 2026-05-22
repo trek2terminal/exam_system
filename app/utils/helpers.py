@@ -28,6 +28,25 @@ def _active_user(user_id, expected_role):
     return user
 
 
+def current_session_matches_user(user):
+    """Return True only when this browser holds the user's latest login token."""
+    if not user:
+        return False
+
+    session_token = session.get("auth_session_token")
+    active_token = getattr(user, "active_session_token", None)
+    if not session_token or not active_token:
+        return False
+
+    return secrets.compare_digest(str(session_token), str(active_token))
+
+
+def _stale_login_redirect(login_endpoint, message):
+    session.clear()
+    flash(message, "warning")
+    return redirect(url_for(login_endpoint))
+
+
 def teacher_required(view):
     """Decorator to protect teacher-only routes"""
 
@@ -44,6 +63,11 @@ def teacher_required(view):
             session.clear()
             flash("Your teacher account is no longer active. Please contact the administrator.", "danger")
             return redirect(url_for("auth.teacher_login"))
+        if not current_session_matches_user(teacher):
+            return _stale_login_redirect(
+                "auth.teacher_login",
+                "This teacher account is active in another browser. Please log in again here.",
+            )
         if getattr(teacher, "must_change_password", False) and view.__name__ != "teacher_change_password":
             flash("Please change your temporary password first.", "warning")
             return redirect(url_for("auth.teacher_change_password"))
@@ -63,10 +87,16 @@ def admin_required(view):
         if session.get("role") != "admin":
             flash("Unauthorized access. Admin privileges required.", "danger")
             return redirect(url_for("auth.admin_login"))
-        if not _active_user(session.get("admin_id"), "admin"):
+        admin = _active_user(session.get("admin_id"), "admin")
+        if not admin:
             session.clear()
             flash("Your admin session is no longer active. Please log in again.", "danger")
             return redirect(url_for("auth.admin_login"))
+        if not current_session_matches_user(admin):
+            return _stale_login_redirect(
+                "auth.admin_login",
+                "This admin account is active in another browser. Please log in again here.",
+            )
         idle_timeout = int(current_app.config.get("ADMIN_IDLE_TIMEOUT_SECONDS", 2 * 60 * 60))
         last_activity = session.get("admin_last_activity")
         if last_activity:
@@ -97,10 +127,17 @@ def student_required(view):
             flash("Unauthorized access.", "danger")
             return redirect(url_for("auth.student_login"))
         student_user_id = session.get("student_user_id")
-        if student_user_id and not _active_user(student_user_id, "student"):
-            session.clear()
-            flash("Your student account is no longer active. Please contact the administrator.", "danger")
-            return redirect(url_for("auth.student_login"))
+        if student_user_id:
+            student = _active_user(student_user_id, "student")
+            if not student:
+                session.clear()
+                flash("Your student account is no longer active. Please contact the administrator.", "danger")
+                return redirect(url_for("auth.student_login"))
+            if not current_session_matches_user(student):
+                return _stale_login_redirect(
+                    "auth.student_login",
+                    "This student account is active in another browser. Please log in again here.",
+                )
         return view(*args, **kwargs)
 
     return wrapper
@@ -114,6 +151,14 @@ def any_auth_required(view):
         if not session.get("user_id"):
             flash("Please log in to access this page.", "danger")
             return redirect(url_for("auth.admin_login"))
+        from app.models.user_model import User
+
+        user = User.query.get(session.get("user_id"))
+        if not current_session_matches_user(user):
+            return _stale_login_redirect(
+                "auth.login_selector",
+                "This account is active in another browser. Please log in again here.",
+            )
         return view(*args, **kwargs)
 
     return wrapper

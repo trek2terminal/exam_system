@@ -1,6 +1,6 @@
 import os
 from time import monotonic
-from flask import Flask, send_from_directory
+from flask import Flask, send_from_directory, session
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.utils import safe_join
 from config import DevelopmentConfig, ProductionConfig
@@ -153,6 +153,10 @@ def create_app(config_class=None):
     # Security Headers
     @app.after_request
     def add_security_headers(response):
+        if session.get("role") or session.get("user_id"):
+            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
         if app.config.get("SECURITY_HEADERS", True):
             response.headers["X-Content-Type-Options"] = "nosniff"
             response.headers["X-Frame-Options"] = "DENY"

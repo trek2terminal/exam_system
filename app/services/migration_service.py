@@ -189,6 +189,16 @@ class MigrationService:
         )
 
     @staticmethod
+    def _migration_active_login_sessions():
+        MigrationService._add_column_if_missing("users", "active_session_token", "VARCHAR(128)")
+        MigrationService._add_column_if_missing("users", "active_session_started_at", "DATETIME")
+        MigrationService._create_index_if_missing(
+            "users",
+            "ix_users_active_session_token",
+            "active_session_token",
+        )
+
+    @staticmethod
     def _migration_platform_settings_seed():
         if PlatformSettings.query.first():
             return
@@ -281,6 +291,11 @@ class MigrationService:
             "Add notifications, exam attempt limits, and per-question timer fields",
             _migration_notifications_attempts_timers.__func__,
         ),
+        (
+            "20260522_015_active_login_sessions",
+            "Add one-current-browser session tokens to users",
+            _migration_active_login_sessions.__func__,
+        ),
     ]
 
     @staticmethod
@@ -361,6 +376,12 @@ class MigrationService:
                 and MigrationService._has_column("answers", "question_started_at")
                 and MigrationService._has_column("answers", "question_expires_at")
                 and MigrationService._has_column("answers", "question_time_expired")
+            )
+        if version == "20260522_015_active_login_sessions":
+            return (
+                MigrationService._has_column("users", "active_session_token")
+                and MigrationService._has_column("users", "active_session_started_at")
+                and MigrationService._has_index("users", "ix_users_active_session_token")
             )
         return False
 

@@ -5,6 +5,7 @@ from app.models.user_model import User
 from app.models.audit_model import AuditLog
 from app.services.notification_service import NotificationService
 from app.services.settings_service import SettingsService
+from app.utils.helpers import current_session_matches_user
 from app.utils.rate_limiter import rate_limit
 from app.utils.network import get_client_ip
 
@@ -20,13 +21,15 @@ def _valid_student_password(password):
     )
 
 
-def _set_student_session(student_name, roll_no, student_id=None, username=None):
+def _set_student_session(student_name, roll_no, student_id=None, username=None, auth_session_token=None):
     session.clear()
     session.permanent = True
     session["student_id"] = student_id or hash(f"{student_name}_{roll_no}_{datetime.utcnow().isoformat()}")
     if student_id:
         session["user_id"] = student_id
         session["student_user_id"] = student_id
+    if auth_session_token:
+        session["auth_session_token"] = auth_session_token
     if username:
         session["student_username"] = username
     session["student_name"] = student_name
@@ -167,6 +170,8 @@ def admin_login():
 
         # Successful login
         admin.reset_failed_attempts()
+        auth_session_token = admin.issue_active_session_token()
+        db.session.commit()
         session.clear()
         session.permanent = True
 
@@ -175,6 +180,7 @@ def admin_login():
         session["admin_name"] = admin.name
         session["admin_username"] = admin.username
         session["role"] = "admin"
+        session["auth_session_token"] = auth_session_token
         session["login_time"] = datetime.utcnow().isoformat()
         session["admin_last_activity"] = datetime.utcnow().isoformat()
 
@@ -196,15 +202,21 @@ def admin_login():
 @auth_bp.route("/admin/logout")
 def admin_logout():
     """Admin Logout"""
-    if session.get("admin_id"):
+    admin_id = session.get("admin_id")
+    auth_session_token = session.get("auth_session_token")
+    if admin_id:
         AuditLog(
-            user_id=session.get("admin_id"),
+            user_id=admin_id,
             action="logout",
             resource_type="user",
-            resource_id=session.get("admin_id"),
+            resource_id=admin_id,
             status="success",
             ip_address=get_client_ip()
         ).save()
+        admin = User.query.get(admin_id)
+        if admin:
+            admin.clear_active_session_token(auth_session_token)
+            db.session.commit()
     session.clear()
     flash("You have been logged out.", "info")
     return redirect(url_for("auth.login_selector"))
@@ -260,6 +272,8 @@ def teacher_login():
 
         # Successful login
         user.reset_failed_attempts()
+        auth_session_token = user.issue_active_session_token()
+        db.session.commit()
         session.clear()
         session.permanent = True
 
@@ -268,6 +282,7 @@ def teacher_login():
         session["teacher_name"] = user.name
         session["teacher_username"] = user.username
         session["role"] = "teacher"
+        session["auth_session_token"] = auth_session_token
         session["login_time"] = datetime.utcnow().isoformat()
 
         AuditLog(
@@ -297,6 +312,10 @@ def teacher_change_password():
         return redirect(url_for("auth.teacher_login"))
 
     user = User.query.get_or_404(teacher_id)
+    if not current_session_matches_user(user):
+        session.clear()
+        flash("This teacher account is active in another browser. Please log in again here.", "warning")
+        return redirect(url_for("auth.teacher_login"))
     if request.method == "POST":
         current_password = request.form.get("current_password", "")
         new_password = request.form.get("new_password", "")
@@ -318,6 +337,8 @@ def teacher_change_password():
 
         user.set_password(new_password)
         user.must_change_password = False
+        session["auth_session_token"] = user.issue_active_session_token()
+        session.modified = True
         db.session.commit()
         flash("Password updated. You can continue now.", "success")
         return redirect(url_for("teacher.dashboard"))
@@ -328,15 +349,21 @@ def teacher_change_password():
 @auth_bp.route("/teacher/logout")
 def teacher_logout():
     """Secure logout"""
-    if session.get("teacher_id"):
+    teacher_id = session.get("teacher_id")
+    auth_session_token = session.get("auth_session_token")
+    if teacher_id:
         AuditLog(
-            user_id=session.get("teacher_id"),
+            user_id=teacher_id,
             action="logout",
             resource_type="user",
-            resource_id=session.get("teacher_id"),
+            resource_id=teacher_id,
             status="success",
             ip_address=get_client_ip()
         ).save()
+        teacher = User.query.get(teacher_id)
+        if teacher:
+            teacher.clear_active_session_token(auth_session_token)
+            db.session.commit()
     session.clear()
     flash("You have been logged out successfully.", "info")
     return redirect(url_for("auth.login_selector"))
@@ -396,7 +423,15 @@ def student_login():
                 return redirect(url_for("auth.student_login"))
 
             user.reset_failed_attempts()
-            _set_student_session(user.name, user.roll_number or user.username, student_id=user.id, username=user.username)
+            auth_session_token = user.issue_active_session_token()
+            db.session.commit()
+            _set_student_session(
+                user.name,
+                user.roll_number or user.username,
+                student_id=user.id,
+                username=user.username,
+                auth_session_token=auth_session_token,
+            )
 
             AuditLog(
                 user_id=user.id,
@@ -483,6 +518,8 @@ def student_register():
         student.set_password(password)
         db.session.add(student)
         db.session.commit()
+        auth_session_token = student.issue_active_session_token()
+        db.session.commit()
 
         AuditLog(
             user_id=student.id,
@@ -501,7 +538,13 @@ def student_register():
         )
         db.session.commit()
 
-        _set_student_session(student.name, student.roll_number, student_id=student.id, username=student.username)
+        _set_student_session(
+            student.name,
+            student.roll_number,
+            student_id=student.id,
+            username=student.username,
+            auth_session_token=auth_session_token,
+        )
         flash("Student account created. Welcome!", "success")
         return redirect(url_for("student.dashboard"))
 
@@ -511,6 +554,13 @@ def student_register():
 @auth_bp.route("/student/logout")
 def student_logout():
     """Student Logout"""
+    student_user_id = session.get("student_user_id")
+    auth_session_token = session.get("auth_session_token")
+    if student_user_id:
+        student = User.query.get(student_user_id)
+        if student:
+            student.clear_active_session_token(auth_session_token)
+            db.session.commit()
     session.clear()
     flash("You have been logged out.", "info")
     return redirect(url_for("auth.login_selector"))

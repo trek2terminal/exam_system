@@ -15,6 +15,7 @@ from app.models.submission_model import StudentSession
 from app.models.user_model import User
 from app.services.exam_session_guard import ExamSessionGuard, LOCKED_SESSION_STATUSES
 from app.services.security_service import SecurityService
+from app.utils.helpers import current_session_matches_user
 
 
 socketio = SocketIO(async_mode="threading") if SOCKETIO_AVAILABLE else None
@@ -69,6 +70,13 @@ def _owns_student_socket(student_session, payload):
         return False
     if session.get("role") != "student":
         return False
+    student_user_id = session.get("student_user_id")
+    if student_user_id:
+        student = User.query.get(student_user_id)
+        if not student or student.role != "student" or not student.is_active:
+            return False
+        if not current_session_matches_user(student):
+            return False
     return ExamSessionGuard.browser_owns_attempt(student_session)
 
 
@@ -76,7 +84,7 @@ def _can_join_proctor_room(exam_id):
     admin_id = session.get("admin_id")
     if admin_id:
         admin = User.query.get(admin_id)
-        return bool(admin and admin.role == "admin" and admin.is_active)
+        return bool(admin and admin.role == "admin" and admin.is_active and current_session_matches_user(admin))
 
     teacher_id = session.get("teacher_id")
     if not teacher_id:
@@ -84,6 +92,8 @@ def _can_join_proctor_room(exam_id):
 
     teacher = User.query.get(teacher_id)
     if not teacher or teacher.role != "teacher" or not teacher.is_active:
+        return False
+    if not current_session_matches_user(teacher):
         return False
 
     if ExamSet.query.filter_by(id=exam_id, created_by=teacher_id).first() is not None:

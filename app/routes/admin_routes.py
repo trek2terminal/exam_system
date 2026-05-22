@@ -252,6 +252,7 @@ def account():
             admin.set_password(new_password)
             admin.failed_login_attempts = 0
             admin.locked_until = None
+            session["auth_session_token"] = admin.issue_active_session_token()
             changed_fields.append("password")
 
         admin.updated_at = datetime.utcnow()
@@ -627,6 +628,7 @@ def edit_user(user_id):
             user.set_password(password)
             user.failed_login_attempts = 0
             user.locked_until = None
+            user.clear_active_session_token()
 
         try:
             uploaded = _save_profile_photo(request.files.get("photo"), user.id)

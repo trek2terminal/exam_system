@@ -132,24 +132,33 @@ def _cleanup_smoke_data(ids):
 
 
 def _make_proctor_client(app, socketio, user, role):
+    auth_session_token = user.issue_active_session_token()
+    db.session.commit()
     http_client = app.test_client()
     with http_client.session_transaction() as browser_session:
         browser_session["role"] = role
         browser_session[f"{role}_id"] = user.id
         browser_session["user_id"] = user.id
         browser_session[f"{role}_name"] = user.name
+        browser_session["auth_session_token"] = auth_session_token
         if role == "admin":
             browser_session["admin_last_activity"] = datetime.utcnow().isoformat()
     return socketio.test_client(app, flask_test_client=http_client), http_client
 
 
-def _make_student_client(app, socketio, student, student_session):
+def _make_student_client(app, socketio, student, student_session, rotate_login=True):
+    if rotate_login:
+        auth_session_token = student.issue_active_session_token()
+        db.session.commit()
+    else:
+        auth_session_token = student.active_session_token
     http_client = app.test_client()
     with http_client.session_transaction() as browser_session:
         browser_session["role"] = "student"
         browser_session["student_id"] = student.roll_number
         browser_session["student_user_id"] = student.id
         browser_session["user_id"] = student.id
+        browser_session["auth_session_token"] = auth_session_token
         browser_session["student_name"] = student.name
         browser_session["roll_no"] = student.roll_number
         browser_session["student_session_code"] = student_session.session_code
@@ -190,7 +199,7 @@ def run_realtime_smoke(app):
             teacher_socket, _ = _make_proctor_client(app, socketio, teacher, "teacher")
             other_teacher_socket, _ = _make_proctor_client(app, socketio, other_teacher, "teacher")
             student_socket, _ = _make_student_client(app, socketio, student, student_session)
-            bad_student_socket, _ = _make_student_client(app, socketio, student, student_session)
+            bad_student_socket, _ = _make_student_client(app, socketio, student, student_session, rotate_login=False)
             clients = [admin_socket, teacher_socket, other_teacher_socket, student_socket, bad_student_socket]
 
             admin_socket.emit("proctor:join", {"exam_id": exam.id})

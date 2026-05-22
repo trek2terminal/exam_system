@@ -17,6 +17,7 @@ from app.services.result_service import ResultService
 from app.services.security_service import SecurityService
 from app.services.settings_service import SettingsService
 from app.socketio.realtime_events import emit_to_proctors, emit_to_session
+from app.utils.helpers import current_session_matches_user
 from app.utils.network import get_client_ip
 from app.utils.rate_limiter import rate_limit
 
@@ -75,6 +76,21 @@ def _window_lock_response(student_session):
 
 
 def _require_attempt(session_code, payload=None, require_active=False, require_window=False, allowed_statuses=None):
+    student_user_id = session.get("student_user_id")
+    if student_user_id:
+        student_user = User.query.get(student_user_id)
+        if (
+            not student_user
+            or student_user.role != "student"
+            or not student_user.is_active
+            or not current_session_matches_user(student_user)
+        ):
+            session.clear()
+            return None, _forbidden_session_response(
+                "This student account is active in another browser. Please log in again here.",
+                status_code=401,
+            )
+
     student_session = _get_student_session(session_code)
     payload = payload or {}
 
@@ -186,9 +202,11 @@ def _student_exam_action_payload(exam, student_session, attempts_remaining, wind
 
 
 def _require_teacher_owner(exam_id=None, student_session=None):
-    teacher_id = session.get("teacher_id")
-    if session.get("role") != "teacher" or not teacher_id:
-        return None, (jsonify({"ok": False, "message": "Teacher login required"}), 401)
+    teacher, error = _require_teacher_api()
+    if error:
+        return None, error
+
+    teacher_id = teacher.id
 
     if student_session:
         exam = student_session.exam_set
@@ -258,6 +276,9 @@ def _require_admin_api():
     if not admin or admin.role != "admin" or not admin.is_active:
         session.clear()
         return None, _role_error("Your admin session is no longer active.", 401)
+    if not current_session_matches_user(admin):
+        session.clear()
+        return None, _role_error("This admin account is active in another browser. Please log in again here.", 401)
 
     idle_timeout = int(current_app.config.get("ADMIN_IDLE_TIMEOUT_SECONDS", 2 * 60 * 60))
     last_activity = session.get("admin_last_activity")
@@ -284,6 +305,9 @@ def _require_teacher_api():
     if not teacher or teacher.role != "teacher" or not teacher.is_active:
         session.clear()
         return None, _role_error("Your teacher account is no longer active.", 401)
+    if not current_session_matches_user(teacher):
+        session.clear()
+        return None, _role_error("This teacher account is active in another browser. Please log in again here.", 401)
     if getattr(teacher, "must_change_password", False):
         return None, _role_error("Please change your temporary password first.", 403)
     return teacher, None
@@ -397,6 +421,17 @@ def bootstrap():
     settings = SettingsService.get_settings()
     user_id = session.get("user_id")
     role = session.get("role")
+    if user_id:
+        user = User.query.get(user_id)
+        if (
+            not user
+            or not user.is_active
+            or user.role != role
+            or not current_session_matches_user(user)
+        ):
+            session.clear()
+            user_id = None
+            role = None
     return jsonify(
         {
             "ok": True,
@@ -429,6 +464,20 @@ def bootstrap():
 def student_dashboard_api():
     if session.get("role") != "student" or not session.get("roll_no"):
         return jsonify({"ok": False, "message": "Student login required"}), 401
+    student_user_id = session.get("student_user_id")
+    if student_user_id:
+        student_user = User.query.get(student_user_id)
+        if (
+            not student_user
+            or student_user.role != "student"
+            or not student_user.is_active
+            or not current_session_matches_user(student_user)
+        ):
+            session.clear()
+            return jsonify({
+                "ok": False,
+                "message": "This student account is active in another browser. Please log in again here.",
+            }), 401
 
     roll_no = (session.get("roll_no") or "").strip().upper()
     now = datetime.utcnow()
@@ -545,15 +594,15 @@ def student_dashboard_api():
 
 @api_bp.route("/teacher/dashboard")
 def teacher_dashboard_api():
-    teacher_id = session.get("teacher_id")
-    if session.get("role") != "teacher" or not teacher_id:
-        return jsonify({"ok": False, "message": "Teacher login required"}), 401
+    teacher, error_response = _require_teacher_api()
+    if error_response:
+        return error_response
 
-    exams = ExamSet.query.filter_by(created_by=teacher_id).order_by(ExamSet.created_at.desc()).all()
+    exams = ExamSet.query.filter_by(created_by=teacher.id).order_by(ExamSet.created_at.desc()).all()
     return jsonify(
         {
             "ok": True,
-            "teacher": {"id": teacher_id, "name": session.get("teacher_name")},
+            "teacher": {"id": teacher.id, "name": teacher.name},
             "exams": [
                 {
                     "id": exam.id,
@@ -1026,6 +1075,13 @@ def mark_notifications_read():
     user_id = session.get("user_id")
     if not user_id:
         return jsonify({"ok": False, "message": "Not logged in"}), 401
+    user = User.query.get(user_id)
+    if not user or not user.is_active or not current_session_matches_user(user):
+        session.clear()
+        return jsonify({
+            "ok": False,
+            "message": "This account is active in another browser. Please log in again here.",
+        }), 401
     count = NotificationService.mark_user_notifications_read(user_id)
     return jsonify({"ok": True, "read": count})
 

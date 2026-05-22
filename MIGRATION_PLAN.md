@@ -422,3 +422,19 @@ Completed in this batch:
 
 Still intentionally left for later phases:
 - Browser-test the full React UI with two real browser sessions on the running LAN app.
+
+## Latest Implementation Batch 15 - 2026-05-22
+
+Completed in this batch:
+- Added server-side live login tokens for account-based Admin, Teacher, and Student sessions.
+- Added `users.active_session_token` and `users.active_session_started_at` with migration `20260522_015_active_login_sessions`.
+- Each successful account login now rotates the user's live token, so a newer browser login invalidates older browser sessions.
+- Admin, teacher, and student protected page decorators now reject stale or mismatched browser sessions.
+- React/API role checks now reject stale admin, teacher, and account-based student sessions.
+- Socket.IO proctor and student room joins now require the current live account token as well as existing role and exam-token checks.
+- Password changes rotate the current session token; admin-driven password resets clear the affected user's live token.
+- Authenticated responses now send no-store cache headers so protected pages are not reused from browser cache after logout or invalidation.
+- Verified unauthenticated `/admin/account` redirects to login, second admin login invalidates the first browser, stale classic pages redirect, stale React admin APIs return 401, and authenticated pages carry no-store headers.
+
+Still intentionally left for later phases:
+- Browser-test the full React UI with two real browser sessions on the running LAN app.
