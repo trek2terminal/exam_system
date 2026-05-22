@@ -335,7 +335,21 @@ Completed in this batch:
 
 Still intentionally left for later phases:
 - Browser-test the React teacher review screens with real submissions.
-- Move admin/teacher proctoring screens into React.
+- Browser-test Socket.IO live push behavior in a running interactive session.
+- Stronger external sandbox isolation for Python code execution.
+- HTTPS automation for final hosted deployment.
+
+## Latest Implementation Batch 9 - 2026-05-22
+
+Completed in this batch:
+- Added role-aware proctoring APIs for admin and teacher React workspaces.
+- Added admin JSON action support for terminate, second chance, reduce time, pause, resume, and private messages while preserving admin password confirmation, audit logging, and student/proctor realtime emits.
+- Added React proctoring routes at `/react/admin/proctoring` and `/react/teacher/proctoring`.
+- Built the React proctoring workspace with polling status cards, sorted violation focus, detailed selected-student panel, recent violation feed, timer/heartbeat/answer metrics, and admin action controls.
+- Added proctoring links to the React admin and teacher dashboards and sidebar.
+
+Still intentionally left for later phases:
+- Browser-test the React student exam, teacher review, and proctoring screens with real users/sessions.
 - Browser-test Socket.IO live push behavior in a running interactive session.
 - Stronger external sandbox isolation for Python code execution.
 - HTTPS automation for final hosted deployment.

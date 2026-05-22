@@ -30,6 +30,8 @@ When `frontend/dist` exists, Flask serves the built migration shell at `/react`.
 - Code questions now include a real stdin textarea plus xterm-rendered output, and the exam route is lazy-loaded so Monaco/xterm do not bloat the dashboard bundle.
 - Timed questions show a countdown and lock locally when expired while the server remains the final enforcement point.
 - Teacher review is available under `/react/teacher/exam/:examId/review` and `/react/teacher/session/:sessionId/review` with marks, remarks, publish controls, answer PDF links, and classic Flask fallback links.
+- Admin and teacher live proctoring are available under `/react/admin/proctoring` and `/react/teacher/proctoring`.
+- Admin React proctoring keeps password-confirmed actions for terminate, second chance, time penalty, pause/resume, and private messages; teacher React proctoring is read-only.
 - Load role dashboards from:
   - `/api/student/dashboard`
   - `/api/teacher/dashboard`
@@ -38,7 +40,6 @@ When `frontend/dist` exists, Flask serves the built migration shell at `/react`.
 
 ## Next Migration Tasks
 
-- Browser-test the React student exam and teacher review flows with real sessions.
-- Move admin and teacher proctoring screens into React.
+- Browser-test the React student exam, teacher review, and proctoring flows with real sessions.
 - Add React notification/proctoring live updates once Socket.IO is verified interactively.
 - Replace individual Jinja pages only after each React page reaches parity and has a fallback path.

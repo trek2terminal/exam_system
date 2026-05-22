@@ -1012,6 +1012,226 @@ p {
   font-weight: 800;
 }
 
+.proctorWorkspace {
+  display: grid;
+  gap: 18px;
+}
+
+.proctorUpdated {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.proctorLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 390px;
+  gap: 16px;
+  align-items: start;
+}
+
+.proctorCardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.proctorStudentCard,
+.proctorDetailPanel,
+.recentViolationFeed {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 12px 30px rgba(16, 24, 40, 0.06);
+}
+
+.proctorStudentCard {
+  width: 100%;
+  padding: 15px;
+  display: grid;
+  gap: 13px;
+  text-align: left;
+  color: var(--text);
+  cursor: pointer;
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.proctorStudentCard:hover,
+.proctorStudentCard.selected {
+  border-color: rgba(37, 99, 235, 0.45);
+  box-shadow: 0 18px 36px rgba(16, 24, 40, 0.09);
+  transform: translateY(-2px);
+}
+
+.proctorCardTop,
+.proctorMetrics,
+.proctorCardFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.proctorCardTop span,
+.proctorCardFoot,
+.proctorInfoList span,
+.proctorDetailStats span,
+.savingHint {
+  color: var(--muted);
+}
+
+.proctorCardTop strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.violationBadge {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  font-weight: 900;
+}
+
+.violationBadge.calm {
+  background: rgba(102, 112, 133, 0.13);
+  color: var(--muted);
+}
+
+.violationBadge.warning {
+  background: rgba(217, 119, 6, 0.12);
+  color: var(--warning);
+}
+
+.violationBadge.danger {
+  background: rgba(220, 38, 38, 0.12);
+  color: var(--danger);
+  animation: softPulse 1.2s ease-in-out infinite;
+}
+
+.proctorMetrics {
+  flex-wrap: wrap;
+}
+
+.proctorMetrics span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 800;
+}
+
+.proctorCardFoot {
+  font-size: 0.84rem;
+}
+
+.proctorDetailPanel {
+  position: sticky;
+  top: 96px;
+  padding: 18px;
+}
+
+.proctorDetail {
+  display: grid;
+  gap: 16px;
+}
+
+.proctorDetailStats,
+.proctorInfoList {
+  display: grid;
+  gap: 10px;
+}
+
+.proctorDetailStats {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.proctorDetailStats div,
+.proctorInfoList div {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 11px;
+}
+
+.proctorDetailStats span,
+.proctorInfoList span {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.proctorDetailStats strong {
+  font-size: 1.28rem;
+}
+
+.adminActionPanel {
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+.adminActionPanel label,
+.timePenaltyLine label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.adminActionPanel input,
+.adminActionPanel textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 11px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+}
+
+.timePenaltyLine {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.recentViolationFeed {
+  padding: 18px;
+  display: grid;
+  gap: 12px;
+}
+
+.recentViolationFeed article {
+  display: flex;
+  align-items: start;
+  gap: 10px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.recentViolationFeed svg {
+  color: var(--danger);
+  flex: 0 0 auto;
+}
+
+.recentViolationFeed p {
+  margin-bottom: 0;
+}
+
+.emptyState.compact {
+  min-height: 220px;
+}
+
 .backLink {
   display: inline-flex;
   align-items: center;
@@ -1185,11 +1405,13 @@ p {
   }
 
   .reactExamHeader,
-  .reactExamGrid {
+  .reactExamGrid,
+  .proctorLayout {
     grid-template-columns: 1fr;
   }
 
-  .reactQuestionPanel {
+  .reactQuestionPanel,
+  .proctorDetailPanel {
     position: static;
   }
 
@@ -1213,6 +1435,10 @@ p {
   }
 
   .markGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .timePenaltyLine {
     grid-template-columns: 1fr;
   }
 }

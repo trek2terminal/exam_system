@@ -13,6 +13,7 @@ import {
   LogIn,
   Moon,
   Play,
+  Radio,
   ShieldCheck,
   Sparkles,
   Trophy,
@@ -22,6 +23,7 @@ import { useAppStore } from "./store/appStore";
 
 const ExamInterface = lazy(() => import("./ExamInterface.jsx"));
 const TeacherReview = lazy(() => import("./TeacherReview.jsx"));
+const Proctoring = lazy(() => import("./Proctoring.jsx"));
 
 const loginLinks = [
   { label: "Admin", href: "/admin/login" },
@@ -81,6 +83,7 @@ function Shell({ children, platformName, auth, notifications, theme, onToggleThe
   const rolePath = rolePaths[auth?.role] || "/";
   const workspaceHref = auth?.role ? `/${auth.role}/dashboard` : "/student/login";
   const peopleHref = auth?.role === "admin" ? "/admin/users" : workspaceHref;
+  const proctorPath = auth?.role === "admin" ? "/admin/proctoring" : auth?.role === "teacher" ? "/teacher/proctoring" : null;
   return (
     <div className="app">
       <aside className="sidebar">
@@ -95,7 +98,11 @@ function Shell({ children, platformName, auth, notifications, theme, onToggleThe
           <Link className="active" to={rolePath}><Gauge size={18} /> Overview</Link>
           <a href={workspaceHref}><BookOpenCheck size={18} /> Exams</a>
           <a href={peopleHref}><Users size={18} /> People</a>
-          <a href={workspaceHref}><Bell size={18} /> Alerts</a>
+          {proctorPath ? (
+            <Link to={proctorPath}><Radio size={18} /> Proctoring</Link>
+          ) : (
+            <a href={workspaceHref}><Bell size={18} /> Alerts</a>
+          )}
         </nav>
       </aside>
       <main>
@@ -298,7 +305,14 @@ function StudentExamCard({ exam, elapsedSeconds }) {
 
 function TeacherDashboard({ dashboard }) {
   return (
-    <section className="cardList">
+    <div className="cardList">
+      <div className="rowBetween">
+        <div>
+          <span className="eyebrow">Teacher workspace</span>
+          <h2>My exams</h2>
+        </div>
+        <Link className="button primary" to="/teacher/proctoring"><Radio size={18} /> Live proctoring</Link>
+      </div>
       {(dashboard?.exams || []).map(exam => (
         <article className="examCard" key={exam.id}>
           <div>
@@ -313,21 +327,30 @@ function TeacherDashboard({ dashboard }) {
           </div>
         </article>
       ))}
-    </section>
+    </div>
   );
 }
 
 function AdminDashboard({ dashboard }) {
   const stats = dashboard?.stats || {};
   return (
-    <section className="statsGrid">
-      {Object.entries(stats).map(([key, value]) => (
-        <article className="statCard" key={key}>
-          <span>{key.replaceAll("_", " ")}</span>
-          <strong>{value}</strong>
-        </article>
-      ))}
-    </section>
+    <div className="cardList">
+      <div className="rowBetween">
+        <div>
+          <span className="eyebrow">Admin overview</span>
+          <h2>Platform health</h2>
+        </div>
+        <Link className="button primary" to="/admin/proctoring"><Radio size={18} /> Live proctoring</Link>
+      </div>
+      <section className="statsGrid">
+        {Object.entries(stats).map(([key, value]) => (
+          <article className="statCard" key={key}>
+            <span>{key.replaceAll("_", " ")}</span>
+            <strong>{value}</strong>
+          </article>
+        ))}
+      </section>
+    </div>
   );
 }
 
@@ -379,6 +402,20 @@ function ProtectedTeacherReviewRoute({ currentRole, settings, mode }) {
   return (
     <Suspense fallback={<div className="loadingScreen">Loading review workspace...</div>}>
       <TeacherReview mode={mode} />
+    </Suspense>
+  );
+}
+
+function ProtectedProctoringRoute({ currentRole, settings, mode }) {
+  if (!currentRole) {
+    return <LoginPanel settings={settings} />;
+  }
+  if (currentRole !== mode) {
+    return <Navigate to={rolePaths[currentRole] || "/"} replace />;
+  }
+  return (
+    <Suspense fallback={<div className="loadingScreen">Loading proctoring workspace...</div>}>
+      <Proctoring mode={mode} />
     </Suspense>
   );
 }
@@ -466,6 +503,16 @@ export default function App() {
           }
         />
         <Route
+          path="/teacher/proctoring"
+          element={
+            <ProtectedProctoringRoute
+              currentRole={role}
+              settings={bootstrap?.settings}
+              mode="teacher"
+            />
+          }
+        />
+        <Route
           path="/admin"
           element={
             <ProtectedRoleRoute
@@ -473,6 +520,16 @@ export default function App() {
               currentRole={role}
               dashboard={dashboard}
               settings={bootstrap?.settings}
+            />
+          }
+        />
+        <Route
+          path="/admin/proctoring"
+          element={
+            <ProtectedProctoringRoute
+              currentRole={role}
+              settings={bootstrap?.settings}
+              mode="admin"
             />
           }
         />

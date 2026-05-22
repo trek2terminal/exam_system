@@ -1,8 +1,8 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from flask import Blueprint, current_app, jsonify, request, session, url_for
 
-from app.models.audit_model import AuditLog
+from app.models.audit_model import AuditLog, ViolationLog
 from app.models.database import db
 from app.models.exam_model import ExamEnrollment, ExamSet, Question
 from app.models.result_model import QuestionMark, Result
@@ -243,6 +243,153 @@ def _session_review_summary(student_session):
             "answer_pdf": url_for("teacher.student_answer_pdf", session_id=student_session.id),
         },
     }
+
+
+def _role_error(message, status_code):
+    return jsonify({"ok": False, "message": message}), status_code
+
+
+def _require_admin_api():
+    admin_id = session.get("admin_id")
+    if session.get("role") != "admin" or not admin_id:
+        return None, _role_error("Admin login required", 401)
+
+    admin = User.query.get(admin_id)
+    if not admin or admin.role != "admin" or not admin.is_active:
+        session.clear()
+        return None, _role_error("Your admin session is no longer active.", 401)
+
+    idle_timeout = int(current_app.config.get("ADMIN_IDLE_TIMEOUT_SECONDS", 2 * 60 * 60))
+    last_activity = session.get("admin_last_activity")
+    if last_activity:
+        try:
+            elapsed = (datetime.utcnow() - datetime.fromisoformat(last_activity)).total_seconds()
+        except ValueError:
+            elapsed = 0
+        if elapsed > idle_timeout:
+            session.clear()
+            return None, _role_error("Your admin session expired due to inactivity.", 401)
+
+    session["admin_last_activity"] = datetime.utcnow().isoformat()
+    session.modified = True
+    return admin, None
+
+
+def _require_teacher_api():
+    teacher_id = session.get("teacher_id")
+    if session.get("role") != "teacher" or not teacher_id:
+        return None, _role_error("Teacher login required", 401)
+
+    teacher = User.query.get(teacher_id)
+    if not teacher or teacher.role != "teacher" or not teacher.is_active:
+        session.clear()
+        return None, _role_error("Your teacher account is no longer active.", 401)
+    if getattr(teacher, "must_change_password", False):
+        return None, _role_error("Please change your temporary password first.", 403)
+    return teacher, None
+
+
+def _admin_password_matches(payload):
+    password = (payload or {}).get("admin_password") or ""
+    admin = User.query.get(session.get("admin_id"))
+    return bool(password and admin and admin.check_password(password))
+
+
+def _proctor_session_payload(student_session):
+    exam = student_session.exam_set
+    total_questions = Question.query.filter_by(exam_set_id=exam.id).count()
+    answered_count = (
+        Answer.query.filter_by(session_id=student_session.id)
+        .filter(Answer.answer_text != "")
+        .count()
+    )
+    latest_violation = (
+        ViolationLog.query.filter_by(session_id=student_session.id)
+        .order_by(ViolationLog.occurred_at.desc())
+        .first()
+    )
+
+    heartbeat_age = None
+    if student_session.last_heartbeat:
+        heartbeat_age = int((datetime.utcnow() - student_session.last_heartbeat).total_seconds())
+
+    return {
+        "id": student_session.id,
+        "exam_id": exam.id,
+        "session_code": student_session.session_code,
+        "student_name": student_session.student_name,
+        "roll_no": student_session.roll_no,
+        "exam_name": exam.exam_name,
+        "set_code": exam.set_code,
+        "status": student_session.status,
+        "remaining_seconds": ExamService.remaining_seconds_for_session(student_session),
+        "answered_count": answered_count,
+        "total_questions": total_questions,
+        "focus_violations": student_session.focus_violations,
+        "suspicion_score": student_session.suspicion_score,
+        "last_heartbeat_age": heartbeat_age,
+        "latest_violation": latest_violation.violation_type if latest_violation else None,
+        "latest_violation_at": _iso_datetime(latest_violation.occurred_at) if latest_violation else None,
+        "pause_requested": bool(student_session.pause_requested_at),
+        "pause_reason": student_session.pause_reason,
+        "paused_at": _iso_datetime(student_session.paused_at),
+        "links": {
+            "teacher_review": f"/react/teacher/session/{student_session.id}/review",
+        },
+    }
+
+
+def _proctor_counts(snapshots):
+    return {
+        "active_sessions": sum(1 for item in snapshots if item["status"] == "active"),
+        "waiting_sessions": sum(1 for item in snapshots if item["status"] == "waiting"),
+        "paused_sessions": sum(1 for item in snapshots if item["status"] == "paused"),
+        "flagged_sessions": sum(1 for item in snapshots if item["focus_violations"] > 0),
+    }
+
+
+def _recent_violations_payload(limit=10):
+    recent_violations = (
+        ViolationLog.query.order_by(ViolationLog.occurred_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {
+            "id": violation.id,
+            "student_name": violation.student_session.student_name,
+            "roll_no": violation.student_session.roll_no,
+            "exam_name": violation.student_session.exam_set.exam_name,
+            "type": violation.violation_type,
+            "detail": violation.detail,
+            "occurred_at": _iso_datetime(violation.occurred_at),
+        }
+        for violation in recent_violations
+    ]
+
+
+def _emit_proctor_session_update(student_session):
+    emit_to_proctors(
+        student_session.exam_set_id,
+        "proctor:student_status",
+        _proctor_session_payload(student_session),
+    )
+
+
+def _record_admin_session_action(student_session, action, reason=None, changes=None, status="success"):
+    db.session.add(
+        AuditLog(
+            user_id=session.get("admin_id"),
+            action=action,
+            resource_type="student_session",
+            resource_id=student_session.id,
+            reason=reason,
+            changes=changes,
+            status=status,
+            ip_address=get_client_ip(),
+            user_agent=request.headers.get("User-Agent"),
+        )
+    )
 
 
 @api_bp.route("/bootstrap")
@@ -652,8 +799,9 @@ def teacher_session_review_api(session_id):
 
 @api_bp.route("/admin/dashboard")
 def admin_dashboard_api():
-    if session.get("role") != "admin" or not session.get("admin_id"):
-        return jsonify({"ok": False, "message": "Admin login required"}), 401
+    admin, error_response = _require_admin_api()
+    if error_response:
+        return error_response
 
     return jsonify(
         {
@@ -669,6 +817,206 @@ def admin_dashboard_api():
                 ).count(),
                 "published_results": Result.query.filter_by(published=True).count(),
             },
+        }
+    )
+
+
+@api_bp.route("/admin/proctoring/status")
+def admin_proctoring_status_api():
+    admin, error_response = _require_admin_api()
+    if error_response:
+        return error_response
+
+    active_sessions = (
+        StudentSession.query.filter(StudentSession.status.in_(["active", "waiting", "paused"]))
+        .order_by(StudentSession.focus_violations.desc(), StudentSession.updated_at.desc())
+        .limit(100)
+        .all()
+    )
+    snapshots = [_proctor_session_payload(student_session) for student_session in active_sessions]
+
+    return jsonify(
+        {
+            "ok": True,
+            "updated_at": _iso_datetime(datetime.utcnow()),
+            "counts": _proctor_counts(snapshots),
+            "sessions": snapshots,
+            "recent_violations": _recent_violations_payload(),
+        }
+    )
+
+
+@api_bp.route("/teacher/proctoring/status")
+def teacher_proctoring_status_api():
+    teacher, error_response = _require_teacher_api()
+    if error_response:
+        return error_response
+
+    exam_ids = [exam.id for exam in ExamSet.query.filter_by(created_by=teacher.id).all()]
+    active_sessions = []
+    if exam_ids:
+        active_sessions = (
+            StudentSession.query.filter(
+                StudentSession.exam_set_id.in_(exam_ids),
+                StudentSession.status.in_(["active", "waiting", "paused"]),
+            )
+            .order_by(StudentSession.focus_violations.desc(), StudentSession.updated_at.desc())
+            .limit(100)
+            .all()
+        )
+    snapshots = [_proctor_session_payload(student_session) for student_session in active_sessions]
+
+    return jsonify(
+        {
+            "ok": True,
+            "updated_at": _iso_datetime(datetime.utcnow()),
+            "counts": _proctor_counts(snapshots),
+            "sessions": snapshots,
+        }
+    )
+
+
+@api_bp.route("/admin/proctoring/session/<int:session_id>/action", methods=["POST"])
+@rate_limit("admin_action")
+def admin_proctoring_action_api(session_id):
+    admin, error_response = _require_admin_api()
+    if error_response:
+        return error_response
+
+    payload = _get_json_payload()
+    if not _admin_password_matches(payload):
+        return jsonify({"ok": False, "message": "Admin password confirmation failed."}), 403
+
+    student_session = StudentSession.query.get_or_404(session_id)
+    action = (payload.get("action") or "").strip().lower()
+    reason = (payload.get("reason") or "").strip()
+    response_message = ""
+
+    if action == "terminate":
+        reason = reason or "Terminated by admin"
+        if student_session.status not in LOCKED_SESSION_STATUSES:
+            ExamService.end_exam(student_session.session_code, reason=reason, status="terminated")
+            emit_to_session(
+                student_session,
+                "exam:terminated",
+                {
+                    "reason": reason,
+                    "redirect": url_for("student.submitted", session_code=student_session.session_code),
+                },
+            )
+        _record_admin_session_action(student_session, "terminate_exam_session", reason=reason)
+        response_message = f"Terminated {student_session.student_name}'s exam."
+
+    elif action == "second_chance":
+        if student_session.status in LOCKED_SESSION_STATUSES:
+            return jsonify({"ok": False, "message": "Locked sessions cannot be resumed."}), 409
+        student_session.status = "active"
+        student_session.focus_violations = 0
+        student_session.tab_switch_count = 0
+        student_session.suspicion_score = 0
+        student_session.last_heartbeat = datetime.utcnow()
+        student_session.active_window_token = None
+        student_session.active_window_heartbeat_at = None
+        student_session.pause_requested_at = None
+        student_session.pause_reason = None
+        student_session.paused_at = None
+        student_session.paused_remaining_seconds = None
+        if not student_session.start_time:
+            student_session.start_time = datetime.utcnow()
+        emit_to_session(
+            student_session,
+            "exam:second_chance",
+            {"message": "Admin has granted you a second chance. Your exam can resume."},
+        )
+        _record_admin_session_action(student_session, "grant_second_chance", reason=reason or None)
+        response_message = f"Second chance granted to {student_session.student_name}."
+
+    elif action == "reduce_time":
+        minutes = _parse_int_field(payload, "minutes") or 0
+        if minutes <= 0:
+            return jsonify({"ok": False, "message": "Enter a positive number of minutes."}), 400
+        if student_session.status not in {"active", "paused"}:
+            return jsonify({"ok": False, "message": "Time can only be reduced for active or paused sessions."}), 409
+        if student_session.status == "paused":
+            student_session.paused_remaining_seconds = max(
+                int(student_session.paused_remaining_seconds or 0) - minutes * 60,
+                60,
+            )
+        else:
+            student_session.start_time = (student_session.start_time or datetime.utcnow()) - timedelta(minutes=minutes)
+        emit_to_session(
+            student_session,
+            "exam:time_reduced",
+            {"newRemainingSeconds": ExamService.remaining_seconds_for_session(student_session)},
+        )
+        _record_admin_session_action(
+            student_session,
+            "reduce_exam_time",
+            reason=reason or None,
+            changes=f"Reduced remaining time by {minutes} minutes",
+        )
+        response_message = f"Reduced {student_session.student_name}'s time by {minutes} minute(s)."
+
+    elif action == "pause":
+        reason = reason or student_session.pause_reason or "Paused by admin"
+        if not ExamService.pause_session(student_session):
+            return jsonify({"ok": False, "message": "Only active sessions can be paused."}), 409
+        emit_to_session(
+            student_session,
+            "exam:paused",
+            {"message": "An admin has paused your exam timer. Stay on this screen."},
+        )
+        _record_admin_session_action(student_session, "pause_exam_session", reason=reason)
+        response_message = f"Paused {student_session.student_name}'s exam timer."
+
+    elif action == "resume":
+        reason = reason or "Resumed by admin"
+        if not ExamService.resume_session(student_session):
+            return jsonify({"ok": False, "message": "Only paused sessions can be resumed."}), 409
+        emit_to_session(
+            student_session,
+            "exam:resumed",
+            {
+                "message": "Your exam has resumed.",
+                "remainingSeconds": ExamService.remaining_seconds_for_session(student_session),
+            },
+        )
+        _record_admin_session_action(student_session, "resume_exam_session", reason=reason)
+        response_message = f"Resumed {student_session.student_name}'s exam."
+
+    elif action == "message":
+        message = (payload.get("message") or "").strip()
+        if not message:
+            return jsonify({"ok": False, "message": "Enter a message to send."}), 400
+        message = message[:500]
+        NotificationService.notify_session(
+            student_session.id,
+            message,
+            notification_type="admin_message",
+            related_entity_type="student_session",
+            related_entity_id=student_session.id,
+        )
+        emit_to_session(student_session, "exam:admin_message", {"message": message})
+        _record_admin_session_action(
+            student_session,
+            "send_student_message",
+            reason=reason or None,
+            changes=message,
+        )
+        response_message = f"Message sent to {student_session.student_name}."
+
+    else:
+        return jsonify({"ok": False, "message": "Unsupported proctoring action."}), 400
+
+    student_session.updated_at = datetime.utcnow()
+    db.session.commit()
+    _emit_proctor_session_update(student_session)
+
+    return jsonify(
+        {
+            "ok": True,
+            "message": response_message,
+            "session": _proctor_session_payload(student_session),
         }
     )
 
