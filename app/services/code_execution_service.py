@@ -1,6 +1,8 @@
 import ast
 import os
 import platform
+import secrets
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -120,6 +122,7 @@ class CodeExecutionService:
         "unlink",
         "walk",
     }
+    VALID_EXECUTION_MODES = {"subprocess", "docker", "firejail", "auto"}
 
     @staticmethod
     def _truncate(value, max_chars):
@@ -223,73 +226,103 @@ class CodeExecutionService:
             pass
 
     @staticmethod
-    def run_python(
-        code,
-        stdin_text="",
-        timeout_seconds=10,
-        max_chars=12000,
-        stdin_max_chars=4000,
-        output_max_chars=8000,
-    ):
-        is_valid, validation_message = CodeExecutionService.validate_code(code, max_chars)
-        if not is_valid:
-            return CodeExecutionResult(ok=False, status="rejected", message=validation_message)
+    def _isolated_env():
+        return {
+            "NO_PROXY": "*",
+            "PYTHONIOENCODING": "utf-8",
+            "PYTHONDONTWRITEBYTECODE": "1",
+            "PYTHONUNBUFFERED": "1",
+        }
 
-        stdin_text = stdin_text or ""
-        if len(stdin_text) > stdin_max_chars:
+    @staticmethod
+    def _write_script(temp_dir, code):
+        script_path = os.path.join(temp_dir, "main.py")
+        with open(script_path, "w", encoding="utf-8") as script_file:
+            script_file.write(code)
+        try:
+            os.chmod(script_path, 0o444)
+        except OSError:
+            pass
+        return script_path
+
+    @staticmethod
+    def _docker_image_is_local(image_name):
+        if not shutil.which("docker"):
+            return False
+        try:
+            completed = subprocess.run(
+                ["docker", "image", "inspect", image_name],
+                text=True,
+                capture_output=True,
+                timeout=3,
+                creationflags=CodeExecutionService._creation_flags(),
+            )
+        except Exception:
+            return False
+        return completed.returncode == 0
+
+    @staticmethod
+    def _resolve_execution_mode(mode, docker_image):
+        clean_mode = (mode or "subprocess").strip().lower()
+        if clean_mode not in CodeExecutionService.VALID_EXECUTION_MODES:
+            clean_mode = "subprocess"
+        if clean_mode == "auto":
+            if CodeExecutionService._docker_image_is_local(docker_image):
+                return "docker"
+            if platform.system().lower() != "windows" and shutil.which("firejail"):
+                return "firejail"
+            return "subprocess"
+        return clean_mode
+
+    @staticmethod
+    def _run_command(
+        command,
+        timeout_seconds=10,
+        stdin_text="",
+        output_max_chars=8000,
+        cwd=None,
+        env=None,
+        preexec_fn=None,
+        start_new_session=False,
+        on_timeout=None,
+    ):
+        start = time.perf_counter()
+        try:
+            completed = subprocess.run(
+                command,
+                input=stdin_text,
+                text=True,
+                capture_output=True,
+                cwd=cwd,
+                env=env,
+                timeout=timeout_seconds,
+                preexec_fn=preexec_fn,
+                start_new_session=start_new_session,
+                creationflags=CodeExecutionService._creation_flags(),
+            )
+        except subprocess.TimeoutExpired as exc:
+            if on_timeout:
+                try:
+                    on_timeout()
+                except Exception:
+                    pass
+            elapsed_ms = int((time.perf_counter() - start) * 1000)
             return CodeExecutionResult(
                 ok=False,
-                status="rejected",
-                message=f"Input is too long. Keep stdin under {stdin_max_chars} characters.",
+                status="timeout",
+                stdout=CodeExecutionService._truncate(exc.stdout or "", output_max_chars),
+                stderr=CodeExecutionService._truncate(exc.stderr or "", output_max_chars),
+                message=f"Execution timed out after {timeout_seconds} seconds.",
+                execution_time_ms=elapsed_ms,
             )
-
-        start = time.perf_counter()
-        completed = None
-
-        with tempfile.TemporaryDirectory(prefix="exam_code_") as temp_dir:
-            script_path = os.path.join(temp_dir, "main.py")
-            with open(script_path, "w", encoding="utf-8") as script_file:
-                script_file.write(code)
-            try:
-                os.chmod(script_path, 0o444)
-            except OSError:
-                pass
-
-            env = {
-                "NO_PROXY": "*",
-                "PYTHONIOENCODING": "utf-8",
-                "PYTHONDONTWRITEBYTECODE": "1",
-                "PYTHONUNBUFFERED": "1",
-            }
-
-            try:
-                CodeExecutionService._lockdown_workdir(temp_dir)
-                completed = subprocess.run(
-                    [sys.executable, "-I", "-B", script_path],
-                    input=stdin_text,
-                    text=True,
-                    capture_output=True,
-                    cwd=temp_dir,
-                    env=env,
-                    timeout=timeout_seconds,
-                    preexec_fn=CodeExecutionService._resource_limiter(),
-                    start_new_session=platform.system().lower() != "windows",
-                    creationflags=CodeExecutionService._creation_flags(),
-                )
-            except subprocess.TimeoutExpired as exc:
-                elapsed_ms = int((time.perf_counter() - start) * 1000)
-                stdout = CodeExecutionService._truncate(exc.stdout or "", output_max_chars)
-                stderr = CodeExecutionService._truncate(exc.stderr or "", output_max_chars)
-                return CodeExecutionResult(
-                    ok=False,
-                    status="timeout",
-                    stdout=stdout,
-                    stderr=stderr,
-                    message=f"Execution timed out after {timeout_seconds} seconds.",
-                    execution_time_ms=elapsed_ms,
-                )
-            finally:
-                CodeExecutionService._restore_workdir(temp_dir)
+        except OSError as exc:
+            elapsed_ms = int((time.perf_counter() - start) * 1000)
+            return CodeExecutionResult(
+                ok=False,
+                status="error",
+                message=f"Code runner could not start: {exc}",
+                execution_time_ms=elapsed_ms,
+            )
 
         elapsed_ms = int((time.perf_counter() - start) * 1000)
         stdout = CodeExecutionService._truncate(completed.stdout, output_max_chars)
@@ -313,3 +346,182 @@ class CodeExecutionService:
             message=f"Execution failed with exit code {completed.returncode}.",
             execution_time_ms=elapsed_ms,
         )
+
+    @staticmethod
+    def _run_subprocess(script_path, stdin_text, timeout_seconds, output_max_chars, temp_dir):
+        try:
+            CodeExecutionService._lockdown_workdir(temp_dir)
+            return CodeExecutionService._run_command(
+                [sys.executable, "-I", "-B", script_path],
+                stdin_text=stdin_text,
+                timeout_seconds=timeout_seconds,
+                output_max_chars=output_max_chars,
+                cwd=temp_dir,
+                env=CodeExecutionService._isolated_env(),
+                preexec_fn=CodeExecutionService._resource_limiter(),
+                start_new_session=platform.system().lower() != "windows",
+            )
+        finally:
+            CodeExecutionService._restore_workdir(temp_dir)
+
+    @staticmethod
+    def _run_docker(script_path, stdin_text, timeout_seconds, output_max_chars, temp_dir, docker_image, memory_mb):
+        if not shutil.which("docker"):
+            return CodeExecutionResult(ok=False, status="error", message="Docker sandbox is configured but Docker is not available.")
+
+        memory_mb = max(int(memory_mb or 128), 32)
+        container_timeout = max(int(timeout_seconds or 10), 1)
+        container_name = f"exam-code-{secrets.token_hex(8)}"
+        command = [
+            "docker",
+            "run",
+            "--rm",
+            "--name",
+            container_name,
+            "--network",
+            "none",
+            "--cpus",
+            "1",
+            "--memory",
+            f"{memory_mb}m",
+            "--memory-swap",
+            f"{memory_mb}m",
+            "--pids-limit",
+            "64",
+            "--read-only",
+            "--cap-drop",
+            "ALL",
+            "--security-opt",
+            "no-new-privileges",
+            "--user",
+            "65534:65534",
+            "--tmpfs",
+            "/tmp:rw,noexec,nosuid,size=16m",
+            "-i",
+            "-v",
+            f"{temp_dir}:/workspace:ro",
+            "--workdir",
+            "/workspace",
+            docker_image,
+            "python",
+            "-I",
+            "-B",
+            "/workspace/main.py",
+        ]
+
+        try:
+            CodeExecutionService._lockdown_workdir(temp_dir)
+            result = CodeExecutionService._run_command(
+                command,
+                stdin_text=stdin_text,
+                timeout_seconds=container_timeout + 2,
+                output_max_chars=output_max_chars,
+                env={"NO_PROXY": "*"},
+                on_timeout=lambda: subprocess.run(
+                    ["docker", "rm", "-f", container_name],
+                    text=True,
+                    capture_output=True,
+                    timeout=3,
+                    creationflags=CodeExecutionService._creation_flags(),
+                ),
+            )
+        finally:
+            CodeExecutionService._restore_workdir(temp_dir)
+
+        if result.status == "timeout":
+            result.message = f"Docker sandbox timed out after {container_timeout} seconds."
+        elif result.ok:
+            result.message = "Execution completed in Docker sandbox."
+        elif "Unable to find image" in result.stderr or "pull access denied" in result.stderr:
+            result.message = f"Docker image '{docker_image}' is not available locally."
+        return result
+
+    @staticmethod
+    def _run_firejail(script_path, stdin_text, timeout_seconds, output_max_chars, temp_dir, memory_mb):
+        if platform.system().lower() == "windows" or not shutil.which("firejail"):
+            return CodeExecutionResult(ok=False, status="error", message="Firejail sandbox is configured but is not available.")
+
+        memory_bytes = max(int(memory_mb or 128), 32) * 1024 * 1024
+        command = [
+            "firejail",
+            "--quiet",
+            "--net=none",
+            "--nonewprivs",
+            "--caps.drop=all",
+            f"--rlimit-cpu={max(int(timeout_seconds or 10), 1)}",
+            f"--rlimit-as={memory_bytes}",
+            f"--private={temp_dir}",
+            sys.executable,
+            "-I",
+            "-B",
+            script_path,
+        ]
+        result = CodeExecutionService._run_command(
+            command,
+            stdin_text=stdin_text,
+            timeout_seconds=max(int(timeout_seconds or 10), 1) + 2,
+            output_max_chars=output_max_chars,
+            cwd=temp_dir,
+            env=CodeExecutionService._isolated_env(),
+            start_new_session=True,
+        )
+        if result.ok:
+            result.message = "Execution completed in Firejail sandbox."
+        return result
+
+    @staticmethod
+    def run_python(
+        code,
+        stdin_text="",
+        timeout_seconds=10,
+        max_chars=12000,
+        stdin_max_chars=4000,
+        output_max_chars=8000,
+        execution_mode="subprocess",
+        docker_image="python:3.11-alpine",
+        memory_mb=128,
+    ):
+        is_valid, validation_message = CodeExecutionService.validate_code(code, max_chars)
+        if not is_valid:
+            return CodeExecutionResult(ok=False, status="rejected", message=validation_message)
+
+        stdin_text = stdin_text or ""
+        if len(stdin_text) > stdin_max_chars:
+            return CodeExecutionResult(
+                ok=False,
+                status="rejected",
+                message=f"Input is too long. Keep stdin under {stdin_max_chars} characters.",
+            )
+
+        with tempfile.TemporaryDirectory(prefix="exam_code_") as temp_dir:
+            script_path = CodeExecutionService._write_script(temp_dir, code)
+            mode = CodeExecutionService._resolve_execution_mode(execution_mode, docker_image)
+
+            if mode == "docker":
+                return CodeExecutionService._run_docker(
+                    script_path,
+                    stdin_text,
+                    timeout_seconds,
+                    output_max_chars,
+                    temp_dir,
+                    docker_image,
+                    memory_mb,
+                )
+
+            if mode == "firejail":
+                return CodeExecutionService._run_firejail(
+                    script_path,
+                    stdin_text,
+                    timeout_seconds,
+                    output_max_chars,
+                    temp_dir,
+                    memory_mb,
+                )
+
+            return CodeExecutionService._run_subprocess(
+                script_path,
+                stdin_text,
+                timeout_seconds,
+                output_max_chars,
+                temp_dir,
+            )

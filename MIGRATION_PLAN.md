@@ -369,3 +369,17 @@ Still intentionally left for later phases:
 - Browser-test realtime push with two real browser sessions on the running LAN app.
 - Stronger external sandbox isolation for Python code execution.
 - HTTPS automation for final hosted deployment.
+
+## Latest Implementation Batch 11 - 2026-05-22
+
+Completed in this batch:
+- Added configurable Python execution modes: `subprocess`, `docker`, `firejail`, and `auto`.
+- Added Docker sandbox execution with no network, read-only filesystem, dropped capabilities, no-new-privileges, pids limit, memory cap, CPU cap, and temporary read-only code mount.
+- Added Firejail sandbox execution for Linux hosts with network disabled, dropped capabilities, no-new-privileges, CPU limit, and memory limit.
+- Kept LAN default as the existing subprocess runner so local exams continue working without Docker or Firejail.
+- Added `.env` settings for code execution mode, Docker image, and memory cap.
+- Updated deployment notes with exam-day setup guidance for Docker/Firejail isolation.
+
+Still intentionally left for later phases:
+- Browser-test realtime push with two real browser sessions on the running LAN app.
+- HTTPS automation for final hosted deployment.

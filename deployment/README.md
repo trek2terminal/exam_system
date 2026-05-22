@@ -67,3 +67,34 @@ SESSION_REDIS_URL=redis://127.0.0.1:6379/1
 ```
 
 LAN mode can keep the defaults: signed cookie sessions and in-memory rate limits.
+
+## Python Code Execution Isolation
+
+The default LAN mode uses the built-in subprocess runner with AST validation, timeout, stdin/output limits, isolated temp files, and POSIX CPU/memory limits where available:
+
+```env
+CODE_EXECUTION_MODE=subprocess
+```
+
+For stronger lab/hosted isolation, preinstall one of these runners and change `.env`:
+
+```env
+CODE_EXECUTION_MODE=docker
+CODE_EXECUTION_DOCKER_IMAGE=python:3.11-alpine
+CODE_EXECUTION_MEMORY_MB=128
+```
+
+Docker runs student code with no network, read-only filesystem, dropped capabilities, pids limit, memory cap, and no-new-privileges. Pull the image before the exam, for example:
+
+```powershell
+docker pull python:3.11-alpine
+```
+
+On Linux machines with Firejail:
+
+```env
+CODE_EXECUTION_MODE=firejail
+CODE_EXECUTION_MEMORY_MB=128
+```
+
+`CODE_EXECUTION_MODE=auto` uses a locally available Docker image first, then Firejail on Linux, then the subprocess runner. For predictable exam-day behavior, set the exact mode after testing on the admin machine.

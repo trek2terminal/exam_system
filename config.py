@@ -52,6 +52,9 @@ class Config:
     CODE_EXECUTION_MAX_CHARS = int(os.environ.get("CODE_EXECUTION_MAX_CHARS", "12000"))
     CODE_EXECUTION_STDIN_MAX_CHARS = int(os.environ.get("CODE_EXECUTION_STDIN_MAX_CHARS", "4000"))
     CODE_EXECUTION_OUTPUT_MAX_CHARS = int(os.environ.get("CODE_EXECUTION_OUTPUT_MAX_CHARS", "8000"))
+    CODE_EXECUTION_MODE = os.environ.get("CODE_EXECUTION_MODE", "subprocess").strip().lower()
+    CODE_EXECUTION_DOCKER_IMAGE = os.environ.get("CODE_EXECUTION_DOCKER_IMAGE", "python:3.11-alpine").strip()
+    CODE_EXECUTION_MEMORY_MB = int(os.environ.get("CODE_EXECUTION_MEMORY_MB", "128"))
 
     # Local-first in-memory rate limits. Set RATE_LIMIT_STORAGE=redis and REDIS_URL
     # for hosted multi-process deployment.

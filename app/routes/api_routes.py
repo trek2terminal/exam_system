@@ -1326,6 +1326,9 @@ def execute_code(session_code):
         max_chars=current_app.config.get("CODE_EXECUTION_MAX_CHARS", 12000),
         stdin_max_chars=current_app.config.get("CODE_EXECUTION_STDIN_MAX_CHARS", 4000),
         output_max_chars=current_app.config.get("CODE_EXECUTION_OUTPUT_MAX_CHARS", 8000),
+        execution_mode=current_app.config.get("CODE_EXECUTION_MODE", "subprocess"),
+        docker_image=current_app.config.get("CODE_EXECUTION_DOCKER_IMAGE", "python:3.11-alpine"),
+        memory_mb=current_app.config.get("CODE_EXECUTION_MEMORY_MB", 128),
     )
 
     output_parts = [f"[{result.status.upper()}] {result.message}"]
