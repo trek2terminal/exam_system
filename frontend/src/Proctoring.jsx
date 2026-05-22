@@ -266,7 +266,7 @@ export default function Proctoring({ mode }) {
           {sortedSessions.map(item => (
             <button
               type="button"
-              className={`proctorStudentCard ${selectedSession?.id === item.id ? "selected" : ""}`}
+              className={`proctorStudentCard ${violationTone(item.focus_violations)} ${selectedSession?.id === item.id ? "selected" : ""}`}
               key={item.id}
               onClick={() => setSelectedId(item.id)}
             >

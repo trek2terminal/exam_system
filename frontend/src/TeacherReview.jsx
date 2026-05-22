@@ -9,7 +9,9 @@ import {
   Save,
   ShieldAlert,
   Users
-} from "lucide-react";import { Button, Card, Badge, EmptyState, Input, Textarea } from "./components/ui";import { api } from "./services/api";
+} from "lucide-react";
+import { Badge, Button, Card, EmptyState, Input, Textarea } from "./components/ui";
+import { api } from "./services/api";
 
 function formatDate(value) {
   if (!value) return "-";
@@ -255,8 +257,12 @@ function TeacherSessionReview() {
       )}
 
       <Card className="teacherSummaryBox">
-        <label>Teacher summary remarks</label>
-        <Textarea value={teacherRemarks} onChange={event => setTeacherRemarks(event.target.value)} rows={4} />
+        <Textarea
+          label="Teacher summary remarks"
+          value={teacherRemarks}
+          onChange={event => setTeacherRemarks(event.target.value)}
+          rows={4}
+        />
         <label className="checkboxLine">
           <input type="checkbox" checked={published} onChange={event => setPublished(event.target.checked)} />
           Publish result to student after saving

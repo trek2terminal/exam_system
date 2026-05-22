@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { Link, Navigate, Route, Routes } from "react-router-dom";
+import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import {
   Bell,
   BookOpenCheck,
@@ -180,7 +180,7 @@ function StudentDashboard({ dashboard }) {
           <Button variant="secondary" size="sm" as={Link} to={dashboard?.links?.results || "/student/results"}>
             <Trophy size={18} /> Results
           </Button>
-          <Button variant="primary" size="sm" as={Link} to={dashboard?.links?.join_exam || "/student/join"}>
+          <Button variant="primary" size="sm" as="a" href={dashboard?.links?.join_exam || "/student/join"}>
             <KeyRound size={18} /> Use access code
           </Button>
         </div>
@@ -191,7 +191,7 @@ function StudentDashboard({ dashboard }) {
           <CalendarClock size={34} />
           <h3>No assigned exams yet</h3>
           <p>Your assigned exams will appear here. You can still join an exam with an access code if your teacher shared one.</p>
-          <Button variant="primary" size="sm" as={Link} to={dashboard?.links?.join_exam || "/student/join"}>
+          <Button variant="primary" size="sm" as="a" href={dashboard?.links?.join_exam || "/student/join"}>
             <KeyRound size={18} /> Open exam lobby
           </Button>
         </Card>
@@ -352,6 +352,60 @@ function RoleDashboard({ role, dashboard }) {
   return null;
 }
 
+function NotificationCenter({ notifications, onMarkAllRead }) {
+  const items = notifications?.recent || notifications?.items || [];
+  return (
+    <div className="cardList">
+      <div className="rowBetween">
+        <div>
+          <span className="eyebrow">Notifications</span>
+          <h2>Unread notifications</h2>
+        </div>
+        <Button variant="secondary" size="sm" disabled={(notifications?.unread_count || 0) === 0} onClick={onMarkAllRead}>
+          Mark all as read
+        </Button>
+      </div>
+      <Card className="p-5">
+        {items.length > 0 ? (
+          <div className="grid gap-3">
+            {items.map(item => (
+              <div className="rounded-lg border border-border bg-background-base p-4" key={item.id || item.message}>
+                <Badge variant={item.type === "result_published" ? "success" : "info"} size="sm" dot>
+                  {item.type || "notice"}
+                </Badge>
+                <p className="mt-2 font-semibold text-text-primary">{item.message}</p>
+                {item.created_at && <p className="mb-0 text-sm text-text-muted">{formatDateTime(item.created_at)}</p>}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="emptyState compact">
+            <Bell size={34} />
+            <h3>No unread notifications</h3>
+            <p>You are all caught up.</p>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function PlaceholderPage({ title, eyebrow, description }) {
+  return (
+    <div className="cardList">
+      <div>
+        <span className="eyebrow">{eyebrow || "Workspace"}</span>
+        <h2>{title}</h2>
+      </div>
+      <Card className="emptyState">
+        <BookOpenCheck size={34} />
+        <h3>{title}</h3>
+        <p>{description || "This React workspace is ready for the next migration pass. Existing Flask pages and API endpoints remain unchanged."}</p>
+      </Card>
+    </div>
+  );
+}
+
 function HomeRoute({ role, settings }) {
   if (role && rolePaths[role]) {
     return <Navigate to={rolePaths[role]} replace />;
@@ -413,6 +467,7 @@ function ProtectedProctoringRoute({ currentRole, settings, mode }) {
 
 export default function App() {
   const { bootstrap, dashboard, error, loading, loadBootstrap, loadDashboard } = useAppStore();
+  const location = useLocation();
   const role = bootstrap?.auth?.role;
   const [theme, setTheme] = useState(() => {
     try {
@@ -451,7 +506,7 @@ export default function App() {
 
   async function markAllRead() {
     try {
-      await api.post('/notifications/mark_all');
+      await api.post("/notifications/mark-read");
     } catch {
       // ignore errors, but attempt to reload bootstrap regardless
     }
@@ -466,15 +521,8 @@ export default function App() {
     return <div className="loadingScreen">Preparing your workspace...</div>;
   }
 
-  return (
-    <Shell
-      platformName={bootstrap?.settings?.platform_name}
-      auth={bootstrap?.auth}
-      notifications={bootstrap?.notifications}
-      theme={theme}
-      onToggleTheme={() => setTheme(current => (current === "dark" ? "light" : "dark"))}
-      onMarkAllRead={markAllRead}
-    >
+  const routes = (
+    <>
       {error && <div className="alert">{error}</div>}
       <Routes>
         <Route path="/" element={<HomeRoute role={role} settings={bootstrap?.settings} />} />
@@ -488,6 +536,33 @@ export default function App() {
               settings={bootstrap?.settings}
             />
           }
+        />
+        <Route
+          path="/student/exams"
+          element={
+            <ProtectedRoleRoute
+              expectedRole="student"
+              currentRole={role}
+              dashboard={dashboard}
+              settings={bootstrap?.settings}
+            />
+          }
+        />
+        <Route
+          path="/student/results"
+          element={role === "student" ? (
+            <PlaceholderPage title="Results" eyebrow="Student workspace" description="Published exam results from the classic results page can be migrated here next." />
+          ) : (
+            <LoginPanel settings={bootstrap?.settings} />
+          )}
+        />
+        <Route
+          path="/student/history"
+          element={role === "student" ? (
+            <PlaceholderPage title="Exam History" eyebrow="Student workspace" description="Completed attempts and submission history will appear here as the React migration expands." />
+          ) : (
+            <LoginPanel settings={bootstrap?.settings} />
+          )}
         />
         <Route
           path="/exam/:sessionCode"
@@ -508,6 +583,30 @@ export default function App() {
               settings={bootstrap?.settings}
             />
           }
+        />
+        <Route
+          path="/teacher/exams"
+          element={role === "teacher" ? (
+            <TeacherDashboard dashboard={dashboard} />
+          ) : (
+            <LoginPanel settings={bootstrap?.settings} />
+          )}
+        />
+        <Route
+          path="/teacher/question-bank"
+          element={role === "teacher" ? (
+            <PlaceholderPage title="Question Bank" eyebrow="Teacher workspace" description="Question bank management is ready to be moved from the classic teacher tools into React." />
+          ) : (
+            <LoginPanel settings={bootstrap?.settings} />
+          )}
+        />
+        <Route
+          path="/teacher/reports"
+          element={role === "teacher" ? (
+            <PlaceholderPage title="Reports" eyebrow="Teacher workspace" description="Exam analytics and exports can be connected here without changing existing API routes." />
+          ) : (
+            <LoginPanel settings={bootstrap?.settings} />
+          )}
         />
         <Route
           path="/teacher/exam/:examId/review"
@@ -551,6 +650,46 @@ export default function App() {
           }
         />
         <Route
+          path="/admin/users"
+          element={role === "admin" ? (
+            <PlaceholderPage title="User Management" eyebrow="Admin workspace" description="The React user management surface can attach to the existing admin user endpoints in the next pass." />
+          ) : (
+            <LoginPanel settings={bootstrap?.settings} />
+          )}
+        />
+        <Route
+          path="/admin/groups"
+          element={role === "admin" ? (
+            <PlaceholderPage title="Groups" eyebrow="Admin workspace" description="Group assignment and bulk student workflows will live here." />
+          ) : (
+            <LoginPanel settings={bootstrap?.settings} />
+          )}
+        />
+        <Route
+          path="/admin/exams"
+          element={role === "admin" ? (
+            <PlaceholderPage title="Exams" eyebrow="Admin workspace" description="Cross-platform exam administration can be connected here while teacher exam creation remains unchanged." />
+          ) : (
+            <LoginPanel settings={bootstrap?.settings} />
+          )}
+        />
+        <Route
+          path="/admin/reports"
+          element={role === "admin" ? (
+            <PlaceholderPage title="Reports" eyebrow="Admin workspace" description="Participation, violations, and review reports can be added here using the existing reporting data." />
+          ) : (
+            <LoginPanel settings={bootstrap?.settings} />
+          )}
+        />
+        <Route
+          path="/admin/settings"
+          element={role === "admin" ? (
+            <PlaceholderPage title="Settings" eyebrow="Admin workspace" description="Platform settings, registration controls, announcements, backups, and notification configuration belong here." />
+          ) : (
+            <LoginPanel settings={bootstrap?.settings} />
+          )}
+        />
+        <Route
           path="/admin/proctoring"
           element={
             <ProtectedProctoringRoute
@@ -560,8 +699,49 @@ export default function App() {
             />
           }
         />
+        <Route
+          path="/notifications"
+          element={role ? (
+            <NotificationCenter notifications={bootstrap?.notifications} onMarkAllRead={markAllRead} />
+          ) : (
+            <LoginPanel settings={bootstrap?.settings} />
+          )}
+        />
+        <Route
+          path="/profile"
+          element={role ? (
+            <PlaceholderPage title="Profile" eyebrow="Account" description="Profile management can be connected here while existing login/logout behavior remains in Flask." />
+          ) : (
+            <LoginPanel settings={bootstrap?.settings} />
+          )}
+        />
+        <Route
+          path="/settings"
+          element={role ? (
+            <PlaceholderPage title="Settings" eyebrow="Account" description="User preferences and account settings can be migrated here next." />
+          ) : (
+            <LoginPanel settings={bootstrap?.settings} />
+          )}
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+    </>
+  );
+
+  if (!role || location.pathname.startsWith("/exam/")) {
+    return routes;
+  }
+
+  return (
+    <Shell
+      platformName={bootstrap?.settings?.platform_name}
+      auth={bootstrap?.auth}
+      notifications={bootstrap?.notifications}
+      theme={theme}
+      onToggleTheme={() => setTheme(current => (current === "dark" ? "light" : "dark"))}
+      onMarkAllRead={markAllRead}
+    >
+      {routes}
     </Shell>
   );
 }

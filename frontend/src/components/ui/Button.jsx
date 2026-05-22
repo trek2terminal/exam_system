@@ -50,7 +50,7 @@ export const Button = forwardRef(function Button(
       {loading && (
         <span className="h-5 w-5 rounded-full border-2 border-current border-t-transparent animate-spin" aria-hidden="true" />
       )}
-      <span>{loading ? loadingLabel : children}</span>
+      {loading ? <span>{loadingLabel}</span> : children}
     </Component>
   );
 });

@@ -7,17 +7,22 @@ export function PageLayout({ children, auth, platformName, notifications, theme,
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   return (
-    <div className="app">
-      <aside className="sidebar">
-        <Sidebar auth={auth} platformName={platformName} />
-      </aside>
-
-      <main>
-        <TopBar auth={auth} notifications={notifications} theme={theme} onToggleTheme={onToggleTheme} onMarkAllRead={onMarkAllRead} onOpenDrawer={() => setDrawerOpen(true)} />
-        <div className="contentArea">{children}</div>
-      </main>
-
+    <div className="min-h-screen bg-background-base text-text-primary">
+      <Sidebar auth={auth} platformName={platformName} />
       <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} auth={auth} platformName={platformName} />
+      <div className="min-h-screen md:pl-16 lg:pl-60">
+        <TopBar
+          auth={auth}
+          notifications={notifications}
+          theme={theme}
+          onToggleTheme={onToggleTheme}
+          onMarkAllRead={onMarkAllRead}
+          onOpenDrawer={() => setDrawerOpen(true)}
+        />
+        <main className="animate-page-fade px-4 pb-8 pt-4 md:px-6 lg:px-8">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }

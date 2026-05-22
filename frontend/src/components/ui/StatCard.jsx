@@ -35,12 +35,12 @@ export function StatCard({ icon: Icon, label, value = 0, trend, variant = "defau
       <div className="flex items-start justify-between gap-4">
         <span className={cn(
           "grid h-11 w-11 place-items-center rounded-lg",
-          variant === "danger" ? "bg-danger/12 text-danger" : "bg-brand-primary/10 text-brand-primary"
+          variant === "danger" ? "bg-danger/10 text-danger" : "bg-brand-primary/10 text-brand-primary"
         )}>
           {Icon && <Icon size={22} />}
         </span>
         {trend != null && (
-          <span className={cn("inline-flex items-center gap-1 rounded-pill px-2 py-1 text-xs font-semibold", trendUp ? "bg-success/12 text-success" : "bg-danger/12 text-danger")}>
+          <span className={cn("inline-flex items-center gap-1 rounded-pill px-2 py-1 text-xs font-semibold", trendUp ? "bg-success/10 text-success" : "bg-danger/10 text-danger")}>
             {trendUp ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
             {Math.abs(Number(trend))}%
           </span>

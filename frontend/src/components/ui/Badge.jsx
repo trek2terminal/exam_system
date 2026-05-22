@@ -2,11 +2,14 @@ import { cn } from "./utils";
 
 const variants = {
   default: "bg-background-elevated text-text-secondary",
-  success: "bg-success/12 text-success",
-  warning: "bg-warning/12 text-warning",
-  danger: "bg-danger/12 text-danger",
-  info: "bg-info/12 text-info",
-  purple: "bg-brand-primary/12 text-brand-primary"
+  primary: "bg-brand-primary text-white",
+  secondary: "bg-background-elevated text-text-secondary",
+  calm: "bg-background-elevated text-text-muted",
+  success: "bg-success/10 text-success",
+  warning: "bg-warning/10 text-warning",
+  danger: "bg-danger/10 text-danger",
+  info: "bg-info/10 text-info",
+  purple: "bg-brand-primary/10 text-brand-primary"
 };
 
 const sizes = {

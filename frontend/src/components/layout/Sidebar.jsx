@@ -12,7 +12,7 @@ export function Sidebar({ auth, platformName, mobile = false, onNavigate }) {
     <aside
       className={cn(
         "flex h-full flex-col overflow-y-auto border-r border-border bg-background-base text-text-primary",
-        mobile ? "w-72 p-5" : "hidden w-16 p-3 md:flex lg:w-60 lg:p-5"
+        mobile ? "w-72 p-5" : "fixed inset-y-0 left-0 z-30 hidden w-16 p-3 md:flex lg:w-60 lg:p-5"
       )}
     >
       <div className={cn("mb-6 flex items-center gap-3", !mobile && "md:justify-center lg:justify-start")}>
@@ -31,6 +31,7 @@ export function Sidebar({ auth, platformName, mobile = false, onNavigate }) {
           const active = location.pathname === item.to || (item.to !== `/${role}` && location.pathname.startsWith(`${item.to}/`));
           const link = (
             <Link
+              key={item.to}
               className={cn(
                 "flex min-h-11 items-center gap-3 rounded-md px-3 text-sm font-semibold transition duration-150 ease-out",
                 active

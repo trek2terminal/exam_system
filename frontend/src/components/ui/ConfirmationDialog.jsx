@@ -42,7 +42,7 @@ export function ConfirmationDialog({
     >
       <div className="grid gap-4">
         <div className="flex items-start gap-3">
-          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-danger/12 text-danger">
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-danger/10 text-danger">
             <AlertTriangle size={22} />
           </span>
           <p className="text-text-secondary">{description}</p>
