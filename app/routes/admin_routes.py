@@ -199,6 +199,89 @@ def dashboard():
     )
 
 
+@admin_bp.route("/account", methods=["GET", "POST"])
+@admin_required
+@rate_limit("admin_action", methods=("POST",), json_response=False)
+def account():
+    """Let the logged-in admin safely update their own login ID and password."""
+    admin = User.query.get_or_404(session.get("admin_id"))
+
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        username = request.form.get("username", "").strip()
+        current_password = request.form.get("current_password", "")
+        new_password = request.form.get("new_password", "")
+        confirm_password = request.form.get("confirm_password", "")
+        changed_fields = []
+
+        if not name or not username:
+            flash("Name and admin login ID are required.", "danger")
+            return render_template("admin/account.html", admin_user=admin, form_data=request.form), 400
+
+        if not _validate_username(username):
+            flash("Admin login ID must be 4-50 characters and use only letters, numbers, dot, @, dash, or underscore.", "danger")
+            return render_template("admin/account.html", admin_user=admin, form_data=request.form), 400
+
+        username_owner = User.query.filter(User.username == username, User.id != admin.id).first()
+        if username_owner:
+            flash("That admin login ID is already used by another account.", "danger")
+            return render_template("admin/account.html", admin_user=admin, form_data=request.form), 400
+
+        wants_password_change = bool(new_password or confirm_password)
+        if wants_password_change and new_password != confirm_password:
+            flash("New password and confirmation do not match.", "danger")
+            return render_template("admin/account.html", admin_user=admin, form_data=request.form), 400
+
+        if wants_password_change and not _validate_password(new_password):
+            flash("New password must be at least 10 characters and include uppercase, lowercase, and a number.", "danger")
+            return render_template("admin/account.html", admin_user=admin, form_data=request.form), 400
+
+        if not current_password or not admin.check_password(current_password):
+            flash("Enter your current admin password to confirm this change.", "danger")
+            return render_template("admin/account.html", admin_user=admin, form_data=request.form), 403
+
+        if admin.name != name:
+            admin.name = name
+            changed_fields.append("name")
+
+        if admin.username != username:
+            admin.username = username
+            changed_fields.append("login_id")
+
+        if wants_password_change:
+            admin.set_password(new_password)
+            admin.failed_login_attempts = 0
+            admin.locked_until = None
+            changed_fields.append("password")
+
+        admin.updated_at = datetime.utcnow()
+        session["admin_name"] = admin.name
+        session["admin_username"] = admin.username
+        session.modified = True
+
+        if changed_fields:
+            db.session.add(
+                AuditLog(
+                    user_id=admin.id,
+                    action="update_admin_account",
+                    resource_type="user",
+                    resource_id=admin.id,
+                    changes=f"Updated own admin account fields: {', '.join(changed_fields)}",
+                    status="success",
+                    ip_address=get_client_ip(),
+                    user_agent=request.headers.get("User-Agent", "")[:255],
+                )
+            )
+            flash("Your admin account was updated successfully.", "success")
+        else:
+            flash("No account changes were needed.", "info")
+
+        db.session.commit()
+        return redirect(url_for("admin.account"))
+
+    return render_template("admin/account.html", admin_user=admin, form_data={})
+
+
 # ==================== USER MANAGEMENT ====================
 
 @admin_bp.route("/users")

@@ -408,3 +408,17 @@ Completed in this batch:
 
 Still intentionally left for later phases:
 - Browser-test the full React UI with two real browser sessions on the running LAN app.
+
+## Latest Implementation Batch 14 - 2026-05-22
+
+Completed in this batch:
+- Added an admin-only account security dashboard at `/admin/account`.
+- Admin can update their own display name and login ID after confirming the current admin password.
+- Admin can change their own password from the same dashboard with strength validation.
+- The active admin session updates immediately after a successful name or login ID change.
+- Account changes are written to the audit log as `update_admin_account`.
+- Added Account links to the admin top navigation and admin dashboard quick actions.
+- Verified the route rejects an incorrect current password, accepts a valid login ID/password change, updates the session, and records an audit row.
+
+Still intentionally left for later phases:
+- Browser-test the full React UI with two real browser sessions on the running LAN app.

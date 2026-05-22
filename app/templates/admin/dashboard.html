@@ -10,6 +10,9 @@
             <p>Welcome back, {{ session.get('admin_name') }}! Here's your system overview.</p>
         </div>
         <div class="header-actions">
+            <a href="{{ url_for('admin.account') }}" class="btn btn-secondary">
+                <i class="fas fa-user-shield"></i> Account
+            </a>
             <button class="btn btn-secondary" onclick="refreshStats()">
                 <i class="fas fa-sync"></i> Refresh
             </button>
@@ -186,6 +189,13 @@
                 </div>
                 <h4>Violation Logs</h4>
                 <p>Review exam integrity events</p>
+            </a>
+            <a href="{{ url_for('admin.account') }}" class="action-card">
+                <div class="action-icon">
+                    <i class="fas fa-user-shield"></i>
+                </div>
+                <h4>Admin Account</h4>
+                <p>Change login ID and password</p>
             </a>
         </div>
     </div>

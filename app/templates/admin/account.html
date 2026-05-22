@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Account Security - Exam System{% endblock %}
+
+{% block content %}
+<div class="admin-account-page">
+    <div class="page-header">
+        <div>
+            <h1><i class="fas fa-user-shield"></i> Admin Account Security</h1>
+            <p>Update your own admin login ID and password. Your internal audit ID stays fixed for traceability.</p>
+        </div>
+        <a class="btn secondary" href="{{ url_for('admin.dashboard') }}">
+            <i class="fas fa-arrow-left"></i> Back
+        </a>
+    </div>
+
+    <div class="account-layout">
+        <section class="card account-summary">
+            <div class="security-avatar">
+                <i class="fas fa-shield-halved"></i>
+            </div>
+            <div>
+                <p class="eyebrow">Signed in as</p>
+                <h2>{{ admin_user.name }}</h2>
+                <p class="muted">@{{ admin_user.username }}</p>
+            </div>
+
+            <dl class="security-facts">
+                <div>
+                    <dt>Internal User ID</dt>
+                    <dd>#{{ admin_user.id }}</dd>
+                </div>
+                <div>
+                    <dt>Role</dt>
+                    <dd>{{ admin_user.role | title }}</dd>
+                </div>
+                <div>
+                    <dt>Last Login</dt>
+                    <dd>{{ admin_user.last_login.strftime('%d %b %Y, %I:%M %p') if admin_user.last_login else 'Not recorded' }}</dd>
+                </div>
+            </dl>
+
+            <div class="security-note">
+                <i class="fas fa-lock"></i>
+                <span>Every change requires your current password and is stored in the audit log.</span>
+            </div>
+        </section>
+
+        <form method="POST" action="{{ url_for('admin.account') }}" class="card account-form" autocomplete="off">
+            <div class="card-header">
+                <div>
+                    <h2>Change Login Details</h2>
+                    <p class="muted">Use a login ID you can remember and a strong private password.</p>
+                </div>
+            </div>
+
+            <div class="settings-grid">
+                <div class="form-group">
+                    <label for="name">Display Name <span aria-hidden="true">*</span></label>
+                    <input id="name" name="name" type="text" maxlength="100" value="{{ form_data.get('name', admin_user.name) }}" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="username">Admin Login ID <span aria-hidden="true">*</span></label>
+                    <input id="username" name="username" type="text" maxlength="50" value="{{ form_data.get('username', admin_user.username) }}" pattern="[A-Za-z0-9_.@-]{4,50}" required>
+                    <small class="muted">4-50 characters: letters, numbers, dot, @, dash, or underscore.</small>
+                </div>
+            </div>
+
+            <div class="password-panel">
+                <div class="form-group">
+                    <label for="current_password">Current Admin Password <span aria-hidden="true">*</span></label>
+                    <input id="current_password" name="current_password" type="password" autocomplete="current-password" required>
+                    <small class="muted">Required for name, login ID, or password changes.</small>
+                </div>
+
+                <div class="settings-grid">
+                    <div class="form-group">
+                        <label for="new_password">New Password</label>
+                        <input id="new_password" name="new_password" type="password" autocomplete="new-password">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="confirm_password">Confirm New Password</label>
+                        <input id="confirm_password" name="confirm_password" type="password" autocomplete="new-password">
+                    </div>
+                </div>
+
+                <div class="password-rules" id="passwordRules">
+                    <span data-rule="length"><i class="fas fa-circle"></i> 10+ characters</span>
+                    <span data-rule="upper"><i class="fas fa-circle"></i> Uppercase letter</span>
+                    <span data-rule="lower"><i class="fas fa-circle"></i> Lowercase letter</span>
+                    <span data-rule="number"><i class="fas fa-circle"></i> Number</span>
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn primary">
+                    <i class="fas fa-floppy-disk"></i> Save Account Changes
+                </button>
+                <a href="{{ url_for('admin.dashboard') }}" class="btn secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+.admin-account-page {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+.account-layout {
+    display: grid;
+    grid-template-columns: minmax(260px, 0.8fr) minmax(420px, 1.4fr);
+    gap: 1.5rem;
+    align-items: start;
+}
+
+.account-summary,
+.account-form {
+    padding: 1.5rem;
+}
+
+.security-avatar {
+    width: 68px;
+    height: 68px;
+    border-radius: 18px;
+    display: grid;
+    place-items: center;
+    background: rgba(79, 140, 255, 0.14);
+    color: var(--primary);
+    font-size: 1.8rem;
+    margin-bottom: 1rem;
+}
+
+.eyebrow {
+    margin: 0 0 0.35rem;
+    color: var(--muted);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: uppercase;
+}
+
+.account-summary h2 {
+    margin: 0;
+    font-size: 1.35rem;
+}
+
+.security-facts {
+    display: grid;
+    gap: 0.75rem;
+    margin: 1.5rem 0;
+}
+
+.security-facts div {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.security-facts dt {
+    color: var(--muted);
+    font-size: 0.88rem;
+}
+
+.security-facts dd {
+    margin: 0;
+    font-weight: 700;
+    text-align: right;
+}
+
+.security-note {
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-start;
+    padding: 0.9rem;
+    border-radius: var(--radius-md);
+    color: var(--text);
+    background: rgba(38, 194, 129, 0.1);
+    border: 1px solid rgba(38, 194, 129, 0.22);
+    font-size: 0.9rem;
+}
+
+.account-form .card-header {
+    padding: 0 0 1rem;
+    margin-bottom: 1rem;
+}
+
+.password-panel {
+    margin-top: 1.25rem;
+    padding: 1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.password-rules {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+    margin-top: 0.85rem;
+}
+
+.password-rules span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.38rem 0.55rem;
+    border-radius: 999px;
+    color: var(--muted);
+    background: var(--panel);
+    border: 1px solid var(--border);
+    font-size: 0.8rem;
+}
+
+.password-rules span.valid {
+    color: var(--success);
+    border-color: rgba(38, 194, 129, 0.35);
+    background: rgba(38, 194, 129, 0.1);
+}
+
+@media (max-width: 860px) {
+    .account-layout {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+    const passwordInput = document.getElementById("new_password");
+    const rules = document.getElementById("passwordRules");
+    if (!passwordInput || !rules) return;
+
+    const checks = {
+        length: value => value.length >= 10,
+        upper: value => /[A-Z]/.test(value),
+        lower: value => /[a-z]/.test(value),
+        number: value => /\d/.test(value),
+    };
+
+    passwordInput.addEventListener("input", () => {
+        const value = passwordInput.value || "";
+        Object.entries(checks).forEach(([name, test]) => {
+            const item = rules.querySelector(`[data-rule="${name}"]`);
+            item?.classList.toggle("valid", test(value));
+        });
+    });
+})();
+</script>
+{% endblock %}
