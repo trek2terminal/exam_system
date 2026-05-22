@@ -159,6 +159,15 @@ def _student_exam_action_payload(exam, student_session, attempts_remaining, wind
             "disabled": True,
         }
 
+    if student_session and student_session.status in {"active", "paused"} and window.get("is_open"):
+        return {
+            "label": "Resume",
+            "href": f"/react/exam/{student_session.session_code}",
+            "method": "get",
+            "variant": "primary",
+            "disabled": False,
+        }
+
     if locked:
         label = "Start next attempt"
     elif exam.status == "active" and window.get("is_open"):
@@ -415,6 +424,103 @@ def session_status(session_code):
             "paused": student_session.status == "paused",
             "submitted": is_locked,
             "redirect": _submitted_redirect(session_code) if is_locked else None,
+        }
+    )
+
+
+@api_bp.route("/student/session/<session_code>/exam-state")
+def exam_state(session_code):
+    student_session = _get_student_session(session_code)
+    if not ExamSessionGuard.browser_owns_attempt(student_session):
+        return _forbidden_session_response()
+
+    exam = student_session.exam_set
+    time_state = ExamService.enforce_time_window(student_session)
+    if ExamSessionGuard.is_locked(student_session) or time_state == "ended":
+        return _locked_session_response(student_session)
+    if exam.status != "active" or time_state == "not_started":
+        return _forbidden_session_response(
+            "This exam has not opened yet.",
+            redirect=url_for("student.waiting", session_code=session_code),
+        )
+    if not student_session.start_time:
+        return _forbidden_session_response(
+            "Please complete the pre-exam checklist first.",
+            redirect=url_for("student.precheck", session_code=session_code, ui="react"),
+        )
+    if student_session.status not in {"active", "paused"}:
+        return _forbidden_session_response("This exam attempt is not active.")
+
+    questions = ExamService.get_session_questions(student_session)
+    answers = Answer.query.filter_by(session_id=student_session.id).all()
+    answers_by_question = {answer.question_id: answer for answer in answers}
+
+    question_payloads = []
+    status_counts = {state: 0 for state in AutoSaveService.VALID_VISIT_STATUSES}
+    for question in questions:
+        answer = answers_by_question.get(question.id)
+        visit_status = (
+            answer.visit_status
+            if answer and answer.visit_status in AutoSaveService.VALID_VISIT_STATUSES
+            else "ANSWERED"
+            if answer and (answer.answer_text or "").strip()
+            else "NOT_VISITED"
+        )
+        status_counts[visit_status] = status_counts.get(visit_status, 0) + 1
+        question_payloads.append(
+            {
+                "id": question.id,
+                "question_number": question.question_number,
+                "question_text": question.question_text,
+                "question_type": question.question_type,
+                "marks": question.marks,
+                "options": question.options_as_list(),
+                "image_urls": [url_for("static", filename=path) for path in question.image_paths_as_list()],
+                "code_snippet": question.code_snippet,
+                "code_language": question.code_language or "python",
+                "time_limit_seconds": question.time_limit_seconds or 0,
+                "answer": {
+                    "answer_text": answer.answer_text if answer else "",
+                    "code_output": answer.code_output if answer else "",
+                    "execution_status": answer.execution_status if answer else None,
+                    "execution_time_ms": answer.execution_time_ms if answer else None,
+                    "visit_status": visit_status,
+                    "question_time_expired": bool(answer and answer.question_time_expired),
+                    "question_expires_at": _iso_datetime(answer.question_expires_at) if answer else None,
+                    "saved_at": _iso_datetime(answer.saved_at) if answer else None,
+                },
+            }
+        )
+
+    remaining_seconds = ExamService.remaining_seconds_for_session(student_session)
+    return jsonify(
+        {
+            "ok": True,
+            "attempt_token": ExamSessionGuard.ensure_token(student_session),
+            "max_violations_allowed": SettingsService.max_violations_allowed(),
+            "remaining_seconds": remaining_seconds,
+            "status_counts": status_counts,
+            "exam": {
+                "id": exam.id,
+                "exam_name": exam.exam_name,
+                "subject": exam.subject,
+                "set_code": exam.set_code,
+                "duration_minutes": exam.duration_minutes,
+                "total_marks": exam.total_marks,
+                "start_time": _iso_datetime(exam.start_time),
+                "end_time": _iso_datetime(exam.end_time),
+            },
+            "student_session": {
+                "id": student_session.id,
+                "session_code": student_session.session_code,
+                "student_name": student_session.student_name,
+                "roll_no": student_session.roll_no,
+                "status": student_session.status,
+                "extra_time_minutes": student_session.extra_time_minutes,
+                "focus_violations": student_session.focus_violations,
+                "submitted_url": url_for("student.submitted", session_code=session_code),
+            },
+            "questions": question_payloads,
         }
     )
 

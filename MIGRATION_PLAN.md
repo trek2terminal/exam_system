@@ -284,3 +284,21 @@ Still intentionally left for later phases:
 - Browser-test Socket.IO live push behavior in a running interactive session.
 - Stronger external sandbox isolation for Python code execution.
 - HTTPS automation for final hosted deployment.
+
+## Latest Implementation Batch 6 - 2026-05-22
+
+Completed in this batch:
+- Added `/api/student/session/<session_code>/exam-state` for React exam attempts with browser ownership validation, session token delivery, exam metadata, ordered questions, saved answers, code output, navigator status, remaining time, and warning limits.
+- Added a React exam route at `/react/exam/:sessionCode`.
+- Wired React dashboard start/resume forms to request the React exam UI while keeping backend precheck, waiting room, session token, and window-lock security intact.
+- Updated Flask student start/precheck redirects so React-started attempts land in `/react/exam/<session_code>` after the readiness checklist.
+- Built the React exam interface with timer, autosave, question navigator, status counts, flag for review, submit confirmation, fullscreen prompt, focus/shortcut/copy/paste/right-click violation reporting, heartbeat sync, offline save buffer, and Monaco editor for Python coding answers.
+- Verified lint, production build, Flask React route serving, generated asset serving, migration status, and a temporary authenticated exam-state API smoke test.
+
+Still intentionally left for later phases:
+- Add xterm.js terminal rendering and interactive stdin UI inside the React coding answer surface.
+- Port per-question countdown expiry UI fully into React; server-side expiry protection remains active.
+- Move teacher review and admin/teacher proctoring screens into React.
+- Browser-test Socket.IO live push behavior in a running interactive session.
+- Stronger external sandbox isolation for Python code execution.
+- HTTPS automation for final hosted deployment.

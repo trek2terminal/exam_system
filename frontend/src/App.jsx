@@ -18,6 +18,7 @@ import {
   Trophy,
   Users
 } from "lucide-react";
+import ExamInterface from "./ExamInterface.jsx";
 import { useAppStore } from "./store/appStore";
 
 const loginLinks = [
@@ -273,6 +274,7 @@ function StudentExamCard({ exam, elapsedSeconds }) {
           <button className="button secondary" type="button" disabled>{action.label || "Unavailable"}</button>
         ) : action.method === "post" ? (
           <form method="post" action={action.href}>
+            <input type="hidden" name="ui" value="react" />
             <button className="button primary" type="submit">
               {actionIcon(actionLabel)}
               {actionLabel}
@@ -347,6 +349,16 @@ function ProtectedRoleRoute({ expectedRole, currentRole, dashboard, settings }) 
   return <RoleDashboard role={expectedRole} dashboard={dashboard} />;
 }
 
+function ProtectedExamRoute({ currentRole, settings }) {
+  if (!currentRole) {
+    return <LoginPanel settings={settings} />;
+  }
+  if (currentRole !== "student") {
+    return <Navigate to={rolePaths[currentRole] || "/"} replace />;
+  }
+  return <ExamInterface />;
+}
+
 export default function App() {
   const { bootstrap, dashboard, error, loading, loadBootstrap, loadDashboard } = useAppStore();
   const role = bootstrap?.auth?.role;
@@ -385,6 +397,15 @@ export default function App() {
               expectedRole="student"
               currentRole={role}
               dashboard={dashboard}
+              settings={bootstrap?.settings}
+            />
+          }
+        />
+        <Route
+          path="/exam/:sessionCode"
+          element={
+            <ProtectedExamRoute
+              currentRole={role}
               settings={bootstrap?.settings}
             />
           }

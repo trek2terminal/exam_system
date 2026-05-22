@@ -94,6 +94,16 @@ def _grant_precheck_clearance(session_code):
     session.modified = True
 
 
+def _wants_react_ui():
+    return request.values.get("ui") == "react"
+
+
+def _exam_ui_redirect(session_code):
+    if _wants_react_ui():
+        return redirect(f"/react/exam/{session_code}")
+    return redirect(url_for("student.exam", session_code=session_code))
+
+
 @student_bp.route("/")
 def index():
     return redirect(url_for("student.dashboard"))
@@ -184,10 +194,10 @@ def start_assigned_exam(exam_id):
         return redirect(url_for("student.waiting", session_code=student_session.session_code))
 
     if exam.status == "active" and not student_session.start_time:
-        return redirect(url_for("student.precheck", session_code=student_session.session_code))
+        return redirect(url_for("student.precheck", session_code=student_session.session_code, ui=request.form.get("ui")))
 
     if exam.status == "active":
-        return redirect(url_for("student.exam", session_code=student_session.session_code))
+        return _exam_ui_redirect(student_session.session_code)
 
     return redirect(url_for("student.waiting", session_code=student_session.session_code))
 
@@ -268,12 +278,12 @@ def join_exam():
             return redirect(url_for("student.waiting", session_code=student_session.session_code))
 
         if exam.status == "active" and not student_session.start_time:
-            return redirect(url_for("student.precheck", session_code=student_session.session_code))
+            return redirect(url_for("student.precheck", session_code=student_session.session_code, ui=request.form.get("ui")))
 
         if student_session.status == "waiting":
             return redirect(url_for("student.waiting", session_code=student_session.session_code))
 
-        return redirect(url_for("student.exam", session_code=student_session.session_code))
+        return _exam_ui_redirect(student_session.session_code)
 
     return render_template("student/join.html", student_name=student_name, roll_no=roll_no)
 
@@ -330,7 +340,7 @@ def precheck(session_code):
 
     if student_session.start_time:
         _grant_precheck_clearance(session_code)
-        return redirect(url_for("student.exam", session_code=session_code))
+        return _exam_ui_redirect(session_code)
 
     if request.method == "POST":
         if request.form.get("rules_ack") != "on":
@@ -344,7 +354,7 @@ def precheck(session_code):
                 return redirect(url_for("student.submitted", session_code=session_code))
             flash("This exam is not open yet.", "info")
             return redirect(url_for("student.waiting", session_code=session_code))
-        return redirect(url_for("student.exam", session_code=session_code))
+        return _exam_ui_redirect(session_code)
 
     return render_template(
         "student/precheck.html",
@@ -352,6 +362,7 @@ def precheck(session_code):
         exam=exam,
         question_count=question_count,
         max_violations_allowed=SettingsService.max_violations_allowed(),
+        react_ui=_wants_react_ui(),
     )
 
 

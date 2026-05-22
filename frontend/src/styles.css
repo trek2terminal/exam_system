@@ -494,6 +494,353 @@ p {
   gap: 10px;
 }
 
+.reactExamShell {
+  display: grid;
+  gap: 16px;
+}
+
+.reactExamHeader,
+.reactQuestionCard,
+.examSideCard {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 12px 30px rgba(16, 24, 40, 0.06);
+}
+
+.reactExamHeader {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) auto auto;
+  gap: 16px;
+  align-items: center;
+  padding: 16px;
+}
+
+.reactTimer {
+  min-width: 142px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 11px 14px;
+  text-align: center;
+}
+
+.reactTimer span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.reactTimer strong {
+  font-size: 1.55rem;
+}
+
+.reactTimer.warning strong {
+  color: var(--warning);
+}
+
+.reactTimer.danger strong {
+  color: var(--danger);
+  animation: softPulse 1.2s ease-in-out infinite;
+}
+
+.examHeaderActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: end;
+  gap: 10px;
+}
+
+.autosavePill {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.reactExamGrid {
+  display: grid;
+  grid-template-columns: 310px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.reactQuestionPanel {
+  position: sticky;
+  top: 104px;
+  display: grid;
+  gap: 12px;
+}
+
+.examSideCard {
+  padding: 15px;
+}
+
+.progressLine {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(102, 112, 133, 0.18);
+  overflow: hidden;
+  margin: 12px 0 8px;
+}
+
+.progressLine span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--success);
+  transition: width 180ms ease;
+}
+
+.warningDots {
+  display: flex;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.warningDots span {
+  width: 13px;
+  height: 13px;
+  border-radius: 999px;
+  background: rgba(102, 112, 133, 0.24);
+}
+
+.warningDots span.active {
+  background: var(--danger);
+}
+
+.reactPalette {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.reactPalette button {
+  aspect-ratio: 1;
+  border: 0;
+  border-radius: 8px;
+  color: #fff;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.reactPalette .not-visited {
+  background: #98a2b3;
+}
+
+.reactPalette .visited-unanswered {
+  background: #dc2626;
+}
+
+.reactPalette .answered {
+  background: #0f766e;
+}
+
+.reactPalette .marked-review {
+  background: #7c3aed;
+}
+
+.reactPalette .answered-marked {
+  background: #0891b2;
+}
+
+.statusSummary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.statusSummary div {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.statusSummary span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.76rem;
+  text-transform: capitalize;
+}
+
+.reactQuestionMain {
+  display: grid;
+  gap: 14px;
+}
+
+.reactQuestionCard {
+  padding: 22px;
+  display: grid;
+  gap: 18px;
+}
+
+.questionCardHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: start;
+}
+
+.questionNumber {
+  display: inline-block;
+  color: var(--primary);
+  font-weight: 900;
+  margin-bottom: 8px;
+}
+
+.questionToolset {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.iconButton.active {
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
+.questionImages {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.questionImages img {
+  width: 100%;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.questionCodeSnippet,
+.reactTerminal {
+  margin: 0;
+  border-radius: 8px;
+  overflow: auto;
+  background: #0b1220;
+  color: #dbeafe;
+  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+  font-size: 0.9rem;
+}
+
+.questionCodeSnippet {
+  padding: 14px;
+}
+
+.reactMcqList {
+  display: grid;
+  gap: 10px;
+}
+
+.reactMcqOption {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 13px;
+  cursor: pointer;
+}
+
+.reactMcqOption:has(input:checked) {
+  border-color: var(--success);
+  background: rgba(15, 118, 110, 0.08);
+}
+
+.reactAnswerTextarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  line-height: 1.55;
+}
+
+.reactCodingWorkspace {
+  display: grid;
+  gap: 12px;
+}
+
+.codingToolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.codingToolbar span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.reactCodeEditor {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.reactTerminal {
+  min-height: 140px;
+  padding: 14px;
+  white-space: pre-wrap;
+}
+
+.questionNavFooter {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.button.danger {
+  background: var(--danger);
+  color: #fff;
+}
+
+.focusGate {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  background: rgba(15, 23, 42, 0.72);
+  padding: 20px;
+}
+
+.focusGate section {
+  width: min(440px, 100%);
+  background: var(--panel);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 28px;
+  display: grid;
+  gap: 12px;
+  text-align: center;
+}
+
+@keyframes softPulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.58;
+  }
+}
+
 .heroCard {
   padding: 28px;
 }
@@ -614,5 +961,19 @@ p {
 
   .studentStats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .reactExamHeader,
+  .reactExamGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .reactQuestionPanel {
+    position: static;
+  }
+
+  .questionNavFooter,
+  .examHeaderActions {
+    justify-content: stretch;
   }
 }

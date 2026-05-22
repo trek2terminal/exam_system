@@ -57,6 +57,9 @@
     </div>
 
     <form method="post" id="precheckForm" class="precheck-form">
+      {% if react_ui %}
+        <input type="hidden" name="ui" value="react">
+      {% endif %}
       <label class="checkbox-line">
         <input type="checkbox" name="rules_ack" id="rulesAck" required>
         I understand the rules and I am ready to begin.
