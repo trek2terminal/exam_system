@@ -31,6 +31,11 @@ class Config:
 
     # Automatically set secure cookie based on environment
     SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "").lower() in {"1", "true", "yes"} or APP_ENV == "production"
+    PREFERRED_URL_SCHEME = os.environ.get("PREFERRED_URL_SCHEME", "https" if APP_ENV == "production" else "http")
+    TRUST_PROXY_HEADERS = os.environ.get(
+        "TRUST_PROXY_HEADERS",
+        "true" if APP_ENV == "production" else "false",
+    ).lower() in {"1", "true", "yes"}
 
     # File Upload Limits
     MAX_CONTENT_LENGTH = 25 * 1024 * 1024  # 25MB

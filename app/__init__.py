@@ -1,6 +1,7 @@
 import os
 from time import monotonic
 from flask import Flask, send_from_directory
+from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.utils import safe_join
 from config import DevelopmentConfig, ProductionConfig
 
@@ -30,6 +31,9 @@ def create_app(config_class=None):
         config_class = ProductionConfig if app_env == "production" else DevelopmentConfig
 
     app.config.from_object(config_class)
+
+    if app.config.get("TRUST_PROXY_HEADERS"):
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
 
     # Database Path
     if not app.config.get("SQLALCHEMY_DATABASE_URI"):

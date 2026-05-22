@@ -383,3 +383,16 @@ Completed in this batch:
 Still intentionally left for later phases:
 - Browser-test realtime push with two real browser sessions on the running LAN app.
 - HTTPS automation for final hosted deployment.
+
+## Latest Implementation Batch 12 - 2026-05-22
+
+Completed in this batch:
+- Added production proxy awareness for HTTPS deployments with configurable `TRUST_PROXY_HEADERS` and `PREFERRED_URL_SCHEME`.
+- Added `ProxyFix` support so Flask respects Nginx `X-Forwarded-*` headers when explicitly enabled.
+- Added `deployment/nginx-exam-system-https.conf` with HTTP to HTTPS redirect, TLS settings, HSTS, static asset serving, Socket.IO websocket proxying, and secure forwarded headers.
+- Added `deployment/setup-letsencrypt-linux.sh` to install the Nginx site, request Let's Encrypt certificates through Certbot, enable HTTPS redirect, reload Nginx, and enable renewal timer.
+- Added `deployment/create-local-self-signed-cert.ps1` for Windows LAN HTTPS testing with local cert/key export.
+- Updated `.env.example` and deployment docs with production HTTPS settings and LAN self-signed guidance.
+
+Still intentionally left for later phases:
+- Browser-test realtime push with two real browser sessions on the running LAN app.

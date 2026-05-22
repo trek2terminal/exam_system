@@ -42,6 +42,32 @@ Copy `deployment/nginx-exam-system.conf`, replace:
 
 Then proxy HTTP and Socket.IO traffic to `127.0.0.1:8000`.
 
+For HTTPS, use `deployment/nginx-exam-system-https.conf` after certificates exist.
+
+## HTTPS Setup
+
+### Hosted Domain With Let's Encrypt
+
+On a Linux host where your domain already points to the server:
+
+```bash
+sudo bash deployment/setup-letsencrypt-linux.sh exam.example.com admin@example.com /opt/exam_system 127.0.0.1:8000
+```
+
+The script installs the Nginx site, requests the certificate with Certbot, enables HTTPS redirect, reloads Nginx, and enables Certbot renewal timer.
+
+### Local LAN Self-Signed Certificate
+
+For LAN testing on Windows, generate a local certificate:
+
+```powershell
+.\deployment\create-local-self-signed-cert.ps1 -DnsName 192.168.1.105 -OutputDir C:\nginx\certs
+```
+
+Add `-TrustCurrentUserRoot` only on a machine you control and trust. Student devices may still show a browser warning unless the certificate is trusted on those devices.
+
+Then copy `deployment/nginx-exam-system-https.conf`, replace `SERVER_DOMAIN`, `PROJECT_ROOT`, `SSL_CERT_PATH`, and `SSL_KEY_PATH`, and reload Nginx.
+
 ## Environment
 
 Start from `.env.example`. In production set:
@@ -51,6 +77,8 @@ APP_ENV=production
 SECRET_KEY=<long-random-secret>
 DATABASE_URL=<postgres-url-or-empty-for-local-sqlite>
 SESSION_COOKIE_SECURE=True
+PREFERRED_URL_SCHEME=https
+TRUST_PROXY_HEADERS=true
 ```
 
 Use HTTPS in production before enabling secure cookies for browsers.
