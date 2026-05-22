@@ -24,6 +24,10 @@ class Config:
     SESSION_COOKIE_SAMESITE = "Lax"
     PERMANENT_SESSION_LIFETIME = timedelta(hours=8)
     ADMIN_IDLE_TIMEOUT_SECONDS = int(os.environ.get("ADMIN_IDLE_TIMEOUT_SECONDS", str(2 * 60 * 60)))
+    SESSION_TYPE = os.environ.get("SESSION_TYPE", "secure-cookie").strip().lower()
+    SESSION_REDIS_URL = os.environ.get("SESSION_REDIS_URL", os.environ.get("REDIS_URL", "")).strip()
+    SESSION_KEY_PREFIX = os.environ.get("SESSION_KEY_PREFIX", "exam-session:")
+    SESSION_USE_SIGNER = True
 
     # Automatically set secure cookie based on environment
     SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "").lower() in {"1", "true", "yes"} or APP_ENV == "production"
@@ -49,8 +53,11 @@ class Config:
     CODE_EXECUTION_STDIN_MAX_CHARS = int(os.environ.get("CODE_EXECUTION_STDIN_MAX_CHARS", "4000"))
     CODE_EXECUTION_OUTPUT_MAX_CHARS = int(os.environ.get("CODE_EXECUTION_OUTPUT_MAX_CHARS", "8000"))
 
-    # Local-first in-memory rate limits. For hosted multi-process deployment,
-    # move these buckets to Redis or a reverse proxy limiter.
+    # Local-first in-memory rate limits. Set RATE_LIMIT_STORAGE=redis and REDIS_URL
+    # for hosted multi-process deployment.
+    REDIS_URL = os.environ.get("REDIS_URL", "").strip()
+    RATE_LIMIT_STORAGE = os.environ.get("RATE_LIMIT_STORAGE", "memory").strip().lower()
+    RATE_LIMIT_FAIL_OPEN = os.environ.get("RATE_LIMIT_FAIL_OPEN", "true").lower() in {"1", "true", "yes"}
     RATE_LIMITS = {
         "auth_login": {"limit": 10, "window": 15 * 60},
         "student_login": {"limit": 30, "window": 15 * 60},

@@ -4,8 +4,10 @@ from flask import Blueprint, current_app, jsonify, request, session
 
 from app.models.audit_model import AuditLog
 from app.models.database import db
-from app.models.exam_model import Question
+from app.models.exam_model import ExamEnrollment, ExamSet, Question
+from app.models.result_model import Result
 from app.models.submission_model import Answer, StudentSession
+from app.models.user_model import User
 from app.services.autosave_service import AutoSaveService
 from app.services.code_execution_service import CodeExecutionService
 from app.services.exam_service import ExamService
@@ -19,6 +21,18 @@ from app.utils.network import get_client_ip
 from app.utils.rate_limiter import rate_limit
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
+
+
+def _settings_payload(settings):
+    if not settings:
+        return {}
+    return {
+        "platform_name": settings.platform_name,
+        "welcome_message": settings.welcome_message,
+        "announcement_message": getattr(settings, "announcement_message", None),
+        "student_self_registration": settings.student_self_registration,
+        "max_violations_before_alert": settings.max_violations_before_alert,
+    }
 
 
 def _forbidden_session_response(message="Unauthorized exam session", redirect=None, status_code=403):
@@ -95,6 +109,147 @@ def _parse_int_field(payload, field_name):
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+@api_bp.route("/bootstrap")
+def bootstrap():
+    settings = SettingsService.get_settings()
+    user_id = session.get("user_id")
+    role = session.get("role")
+    return jsonify(
+        {
+            "ok": True,
+            "settings": _settings_payload(settings),
+            "auth": {
+                "role": role,
+                "user_id": user_id,
+                "admin_name": session.get("admin_name"),
+                "teacher_name": session.get("teacher_name"),
+                "student_name": session.get("student_name"),
+                "roll_no": session.get("roll_no"),
+            },
+            "notifications": {
+                "unread_count": NotificationService.unread_count_for_user(user_id),
+                "recent": [
+                    {
+                        "id": item.id,
+                        "type": item.notification_type,
+                        "message": item.message,
+                        "created_at": item.created_at.isoformat(),
+                    }
+                    for item in NotificationService.unread_for_user(user_id, limit=6)
+                ],
+            },
+        }
+    )
+
+
+@api_bp.route("/student/dashboard")
+def student_dashboard_api():
+    if session.get("role") != "student" or not session.get("roll_no"):
+        return jsonify({"ok": False, "message": "Student login required"}), 401
+
+    roll_no = (session.get("roll_no") or "").strip().upper()
+    enrollments = (
+        ExamEnrollment.query.filter(db.func.upper(ExamEnrollment.roll_no) == roll_no)
+        .join(ExamSet)
+        .order_by(ExamSet.created_at.desc())
+        .all()
+    )
+    settings = SettingsService.get_settings()
+    cards = []
+    for enrollment in enrollments:
+        exam = enrollment.exam_set
+        latest_session = (
+            StudentSession.query.filter(
+                StudentSession.exam_set_id == exam.id,
+                db.func.upper(StudentSession.roll_no) == roll_no,
+            )
+            .order_by(StudentSession.created_at.desc())
+            .first()
+        )
+        cards.append(
+            {
+                "exam_id": exam.id,
+                "exam_name": exam.exam_name,
+                "subject": exam.subject,
+                "set_code": exam.set_code,
+                "status": exam.status,
+                "start_time": exam.start_time.isoformat() if exam.start_time else None,
+                "end_time": exam.end_time.isoformat() if exam.end_time else None,
+                "duration_minutes": exam.duration_minutes,
+                "attempt_count": ExamService.attempt_count(exam.id, roll_no),
+                "attempts_remaining": ExamService.attempts_remaining(exam.id, roll_no),
+                "latest_session": {
+                    "session_code": latest_session.session_code,
+                    "status": latest_session.status,
+                    "remaining_seconds": ExamService.remaining_seconds_for_session(latest_session),
+                }
+                if latest_session
+                else None,
+            }
+        )
+
+    return jsonify(
+        {
+            "ok": True,
+            "student": {"name": session.get("student_name"), "roll_no": roll_no},
+            "quote": SettingsService.random_quote(settings),
+            "exams": cards,
+        }
+    )
+
+
+@api_bp.route("/teacher/dashboard")
+def teacher_dashboard_api():
+    teacher_id = session.get("teacher_id")
+    if session.get("role") != "teacher" or not teacher_id:
+        return jsonify({"ok": False, "message": "Teacher login required"}), 401
+
+    exams = ExamSet.query.filter_by(created_by=teacher_id).order_by(ExamSet.created_at.desc()).all()
+    return jsonify(
+        {
+            "ok": True,
+            "teacher": {"id": teacher_id, "name": session.get("teacher_name")},
+            "exams": [
+                {
+                    "id": exam.id,
+                    "exam_name": exam.exam_name,
+                    "subject": exam.subject,
+                    "set_code": exam.set_code,
+                    "status": exam.status,
+                    "total_marks": exam.total_marks,
+                    "duration_minutes": exam.duration_minutes,
+                    "question_count": len(exam.questions),
+                    "session_count": len(exam.sessions),
+                }
+                for exam in exams
+            ],
+        }
+    )
+
+
+@api_bp.route("/admin/dashboard")
+def admin_dashboard_api():
+    if session.get("role") != "admin" or not session.get("admin_id"):
+        return jsonify({"ok": False, "message": "Admin login required"}), 401
+
+    return jsonify(
+        {
+            "ok": True,
+            "stats": {
+                "total_users": User.query.count(),
+                "total_students": User.query.filter_by(role="student").count(),
+                "total_teachers": User.query.filter_by(role="teacher").count(),
+                "total_exams": ExamSet.query.count(),
+                "active_exams": ExamSet.query.filter_by(status="active").count(),
+                "submitted_sessions": StudentSession.query.filter(
+                    StudentSession.status.in_(["submitted", "evaluated", "terminated", "auto_submitted"])
+                ).count(),
+                "published_results": Result.query.filter_by(published=True).count(),
+            },
+        }
+    )
 
 
 @api_bp.route("/notifications/mark-read", methods=["POST"])

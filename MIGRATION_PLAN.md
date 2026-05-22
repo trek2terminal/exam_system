@@ -233,3 +233,20 @@ Still intentionally left for later phases:
 - Browser verification of Socket.IO push behavior on the final installed environment.
 - Stronger production sandbox isolation outside the Python process, such as container/firejail/Windows Job Object policy and network namespace blocking.
 - HTTPS certificate automation and Redis-backed rate limiting/session storage for multi-process hosting.
+
+## Latest Implementation Batch 3 - 2026-05-22
+
+Completed in this batch:
+- Added optional Redis-backed rate limiting while preserving in-memory LAN defaults.
+- Added optional Redis-backed Flask server-side sessions via `SESSION_TYPE=redis`.
+- Added shared Redis utility and production env keys for `REDIS_URL`, `RATE_LIMIT_STORAGE`, `SESSION_REDIS_URL`, and related settings.
+- Added role-aware JSON APIs for the React migration: `/api/bootstrap`, `/api/student/dashboard`, `/api/teacher/dashboard`, and `/api/admin/dashboard`.
+- Created a Vite/React frontend workspace under `frontend/` with live Flask API proxying, Zustand state, Axios client, role dashboard shell, and migration README.
+- Updated deployment notes with Redis production configuration.
+
+Still intentionally left for later phases:
+- Install Node.js/npm and verify the React frontend with `npm install`, `npm run build`, and browser screenshots.
+- Move full student exam-taking, teacher review, and admin proctoring screens into React after parity checks.
+- Browser verification of Socket.IO push behavior on the final installed environment.
+- Stronger external sandbox isolation for Python code execution.
+- HTTPS automation for final hosted deployment.

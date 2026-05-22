@@ -48,3 +48,16 @@ SESSION_COOKIE_SECURE=True
 ```
 
 Use HTTPS in production before enabling secure cookies for browsers.
+
+## Optional Redis
+
+For hosted or multi-process deployments, set Redis-backed rate limiting and server-side sessions:
+
+```env
+REDIS_URL=redis://127.0.0.1:6379/0
+RATE_LIMIT_STORAGE=redis
+SESSION_TYPE=redis
+SESSION_REDIS_URL=redis://127.0.0.1:6379/1
+```
+
+LAN mode can keep the defaults: signed cookie sessions and in-memory rate limits.

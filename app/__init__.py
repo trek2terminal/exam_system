@@ -48,6 +48,20 @@ def create_app(config_class=None):
     # ====================== INITIALIZE EXTENSIONS ======================
     setup_logging(app)
 
+    if app.config.get("SESSION_TYPE") == "redis":
+        try:
+            from flask_session import Session
+            from app.utils.redis_store import get_redis_client
+
+            redis_client = get_redis_client(app.config.get("SESSION_REDIS_URL"))
+            if not redis_client:
+                raise RuntimeError("SESSION_TYPE=redis requires SESSION_REDIS_URL or REDIS_URL.")
+            app.config["SESSION_REDIS"] = redis_client
+            Session(app)
+            app.logger.info("Redis-backed server-side sessions enabled.")
+        except Exception:
+            app.logger.exception("Redis session setup failed; signed cookie sessions remain active.")
+
     # ====================== DATABASE ======================
     init_db(app)
 
