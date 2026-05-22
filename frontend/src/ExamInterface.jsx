@@ -2,6 +2,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import Editor from "@monaco-editor/react";
+import { Terminal } from "xterm";
+import "xterm/css/xterm.css";
 import {
   AlertTriangle,
   Bookmark,
@@ -75,6 +77,12 @@ function statusLabel(status) {
   return normalizeStatus(status).replaceAll("_", " ").toLowerCase();
 }
 
+function isoDeadlineToMs(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.getTime();
+}
+
 export default function ExamInterface() {
   const { sessionCode } = useParams();
   const [loading, setLoading] = useState(true);
@@ -85,7 +93,11 @@ export default function ExamInterface() {
   const [answers, setAnswers] = useState({});
   const [statuses, setStatuses] = useState({});
   const [outputs, setOutputs] = useState({});
+  const [stdinValues, setStdinValues] = useState({});
+  const [questionDeadlines, setQuestionDeadlines] = useState({});
+  const [expiredQuestions, setExpiredQuestions] = useState({});
   const [remainingSeconds, setRemainingSeconds] = useState(0);
+  const [clockTick, setClockTick] = useState(0);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [autosaveState, setAutosaveState] = useState("Ready");
   const [violationCount, setViolationCount] = useState(0);
@@ -136,14 +148,24 @@ export default function ExamInterface() {
       const nextAnswers = {};
       const nextStatuses = {};
       const nextOutputs = {};
+      const nextStdinValues = {};
+      const nextDeadlines = {};
+      const nextExpired = {};
       data.questions.forEach(question => {
         nextAnswers[question.id] = question.answer?.answer_text || "";
         nextStatuses[question.id] = normalizeStatus(question.answer?.visit_status);
         nextOutputs[question.id] = question.answer?.code_output || "";
+        nextStdinValues[question.id] = "";
+        nextExpired[question.id] = Boolean(question.answer?.question_time_expired);
+        const deadline = isoDeadlineToMs(question.answer?.question_expires_at);
+        if (deadline) nextDeadlines[question.id] = deadline;
       });
       setAnswers(nextAnswers);
       setStatuses(nextStatuses);
       setOutputs(nextOutputs);
+      setStdinValues(nextStdinValues);
+      setQuestionDeadlines(nextDeadlines);
+      setExpiredQuestions(nextExpired);
     } catch (err) {
       if (redirectFromPayload(err.response?.data)) return;
       setError(err.response?.data?.message || err.message || "Could not load this exam attempt.");
@@ -183,7 +205,7 @@ export default function ExamInterface() {
   }, [sessionCode, sessionToken, windowToken, requestHeaders, requestPayload, redirectFromPayload]);
 
   const saveAnswerNow = useCallback(async (questionId, answerText, visitStatus) => {
-    if (!sessionToken || !windowToken || paused) return;
+    if (!sessionToken || !windowToken || paused || expiredQuestions[questionId]) return;
     setAutosaveState("Saving...");
     try {
       const { data } = await api.post(
@@ -202,7 +224,7 @@ export default function ExamInterface() {
         window.localStorage.setItem(key, JSON.stringify(queue));
       }
     }
-  }, [sessionCode, sessionToken, windowToken, paused, requestHeaders, requestPayload, redirectFromPayload]);
+  }, [sessionCode, sessionToken, windowToken, paused, expiredQuestions, requestHeaders, requestPayload, redirectFromPayload]);
 
   const scheduleSave = useCallback((questionId, answerText, visitStatus) => {
     if (saveTimers.current[questionId]) {
@@ -233,13 +255,19 @@ export default function ExamInterface() {
     const question = questions[index];
     if (!question) return;
     setCurrentIndex(index);
+    if (question.time_limit_seconds > 0 && !expiredQuestions[question.id]) {
+      setQuestionDeadlines(current => {
+        if (current[question.id]) return current;
+        return { ...current, [question.id]: Date.now() + question.time_limit_seconds * 1000 };
+      });
+    }
     const status = normalizeStatus(statuses[question.id]);
     if (status === "NOT_VISITED") {
       const nextStatus = computeStatus(answers[question.id], false, true);
       setStatuses(current => ({ ...current, [question.id]: nextStatus }));
       saveQuestionStatus(question.id, nextStatus);
     }
-  }, [questions, statuses, answers, saveQuestionStatus]);
+  }, [questions, statuses, answers, expiredQuestions, saveQuestionStatus]);
 
   const toggleFlag = useCallback(question => {
     const currentStatus = normalizeStatus(statuses[question.id]);
@@ -340,8 +368,9 @@ export default function ExamInterface() {
   }, [statuses, submitExam]);
 
   const runCode = useCallback(async question => {
+    if (expiredQuestions[question.id]) return;
     const code = answers[question.id] || "";
-    const stdin = window.prompt("Optional input for input(). Leave blank if not needed.", "") || "";
+    const stdin = stdinValues[question.id] || "";
     const nextStatus = computeStatus(code, isFlagged(statuses[question.id]), true);
     setRunningQuestionId(question.id);
     setOutputs(current => ({ ...current, [question.id]: "Running..." }));
@@ -365,7 +394,42 @@ export default function ExamInterface() {
     } finally {
       setRunningQuestionId(null);
     }
-  }, [answers, statuses, sessionCode, requestHeaders, requestPayload, redirectFromPayload, saveAnswerNow]);
+  }, [answers, statuses, stdinValues, expiredQuestions, sessionCode, requestHeaders, requestPayload, redirectFromPayload, saveAnswerNow]);
+
+  const expireQuestion = useCallback(async question => {
+    if (!question || expiredQuestions[question.id]) return;
+    setExpiredQuestions(current => ({ ...current, [question.id]: true }));
+    const answerText = answers[question.id] || "";
+    const visitStatus = computeStatus(answerText, isFlagged(statuses[question.id]), true);
+    setAutosaveState("Question time expired");
+    try {
+      await saveAnswerNow(question.id, answerText, visitStatus);
+      const { data } = await api.post(
+        `/student/session/${sessionCode}/question-expired`,
+        requestPayload({ question_id: question.id, answer_text: answerText, visit_status: visitStatus }),
+        { headers: requestHeaders() }
+      );
+      redirectFromPayload(data);
+    } catch {
+      setAutosaveState("Question expiry sync failed");
+    }
+    if (currentQuestion?.id === question.id && currentIndex < questions.length - 1) {
+      visitQuestion(currentIndex + 1);
+    }
+  }, [
+    answers,
+    statuses,
+    expiredQuestions,
+    sessionCode,
+    currentQuestion,
+    currentIndex,
+    questions.length,
+    saveAnswerNow,
+    requestHeaders,
+    requestPayload,
+    redirectFromPayload,
+    visitQuestion
+  ]);
 
   const enterFullscreen = useCallback(async () => {
     try {
@@ -387,6 +451,12 @@ export default function ExamInterface() {
 
   const answeredCount = counts.ANSWERED + counts.ANSWERED_MARKED;
   const progressPercent = questions.length ? Math.round((answeredCount / questions.length) * 100) : 0;
+  const currentQuestionDeadline = currentQuestion ? questionDeadlines[currentQuestion.id] : null;
+  const currentQuestionRemaining = currentQuestion?.time_limit_seconds
+    ? currentQuestionDeadline
+      ? Math.max(Math.ceil((currentQuestionDeadline - Date.now()) / 1000), 0)
+      : currentQuestion.time_limit_seconds
+    : null;
 
   useEffect(() => {
     loadAttempt();
@@ -412,6 +482,7 @@ export default function ExamInterface() {
     const intervalId = window.setInterval(() => {
       setRemainingSeconds(current => {
         if (paused) return current;
+        setClockTick(value => value + 1);
         const nextValue = Math.max(current - 1, 0);
         if (nextValue === 0) submitExam("Time expired");
         return nextValue;
@@ -419,6 +490,16 @@ export default function ExamInterface() {
     }, 1000);
     return () => window.clearInterval(intervalId);
   }, [sessionToken, windowToken, submitting, paused, submitExam]);
+
+  useEffect(() => {
+    if (!sessionToken || !windowToken || paused) return;
+    questions.forEach(question => {
+      const deadline = questionDeadlines[question.id];
+      if (question.time_limit_seconds > 0 && deadline && Date.now() >= deadline && !expiredQuestions[question.id]) {
+        expireQuestion(question);
+      }
+    });
+  }, [clockTick, sessionToken, windowToken, paused, questions, questionDeadlines, expiredQuestions, expireQuestion]);
 
   useEffect(() => {
     if (!sessionToken || !windowToken) return;
@@ -431,14 +512,14 @@ export default function ExamInterface() {
       reportViolation("RIGHT_CLICK", "Right-click is disabled during exams.");
     };
     const onClipboard = event => {
-      const insideCode = event.target?.closest?.(".reactCodeEditor");
+      const insideCode = event.target?.closest?.(".reactCodingWorkspace");
       if (insideCode) return;
       event.preventDefault();
       reportViolation(`${event.type.toUpperCase()}_ATTEMPT`, `${event.type} is disabled during exams.`);
     };
     const onKeydown = event => {
       const key = event.key.toLowerCase();
-      const insideCode = event.target?.closest?.(".reactCodeEditor");
+      const insideCode = event.target?.closest?.(".reactCodingWorkspace");
       const codeAllowed = insideCode && (event.ctrlKey || event.metaKey) && ["a", "c", "v", "x"].includes(key);
       const blocked = !codeAllowed && (
         event.key === "F12" ||
@@ -602,6 +683,11 @@ export default function ExamInterface() {
                     <Bookmark size={18} />
                   </button>
                   <span className="status">{currentQuestion.marks} mark{currentQuestion.marks === 1 ? "" : "s"}</span>
+                  {currentQuestion.time_limit_seconds > 0 && (
+                    <span className={`questionTimerPill ${expiredQuestions[currentQuestion.id] ? "expired" : currentQuestionRemaining <= 30 ? "danger" : ""}`}>
+                      {expiredQuestions[currentQuestion.id] ? "Expired" : formatExamTime(currentQuestionRemaining ?? currentQuestion.time_limit_seconds)}
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -623,7 +709,10 @@ export default function ExamInterface() {
                 question={currentQuestion}
                 value={answers[currentQuestion.id] || ""}
                 output={outputs[currentQuestion.id] || ""}
+                stdinValue={stdinValues[currentQuestion.id] || ""}
+                expired={Boolean(expiredQuestions[currentQuestion.id])}
                 onChange={value => updateAnswer(currentQuestion, value)}
+                onStdinChange={value => setStdinValues(current => ({ ...current, [currentQuestion.id]: value }))}
                 onRun={() => runCode(currentQuestion)}
                 running={runningQuestionId === currentQuestion.id}
               />
@@ -647,7 +736,7 @@ export default function ExamInterface() {
   );
 }
 
-function AnswerEditor({ question, value, output, onChange, onRun, running }) {
+function AnswerEditor({ question, value, output, stdinValue, expired, onChange, onStdinChange, onRun, running }) {
   if (question.question_type === "mcq") {
     return (
       <div className="reactMcqList">
@@ -658,6 +747,7 @@ function AnswerEditor({ question, value, output, onChange, onRun, running }) {
               name={`q_${question.id}`}
               value={option}
               checked={value === option}
+              disabled={expired}
               onChange={() => onChange(option)}
             />
             <span>{option}</span>
@@ -672,7 +762,7 @@ function AnswerEditor({ question, value, output, onChange, onRun, running }) {
       <div className="reactCodingWorkspace">
         <div className="codingToolbar">
           <span><TerminalSquare size={18} /> Python</span>
-          <button className="button primary" type="button" onClick={onRun} disabled={running}>
+          <button className="button primary" type="button" onClick={onRun} disabled={running || expired}>
             <Play size={18} /> {running ? "Running..." : "Run Code"}
           </button>
         </div>
@@ -688,11 +778,22 @@ function AnswerEditor({ question, value, output, onChange, onRun, running }) {
               fontSize: 14,
               lineNumbers: "on",
               scrollBeyondLastLine: false,
-              automaticLayout: true
+              automaticLayout: true,
+              readOnly: expired
             }}
           />
         </div>
-        <pre className="reactTerminal">{output || "Run output will appear here."}</pre>
+        <label className="stdinLabel" htmlFor={`stdin-${question.id}`}>stdin for input()</label>
+        <textarea
+          id={`stdin-${question.id}`}
+          className="reactStdinInput"
+          value={stdinValue}
+          onChange={event => onStdinChange(event.target.value)}
+          rows={3}
+          placeholder="Each line is passed to Python stdin"
+          disabled={expired}
+        />
+        <XtermOutput output={output || "Run output will appear here."} />
       </div>
     );
   }
@@ -702,8 +803,46 @@ function AnswerEditor({ question, value, output, onChange, onRun, running }) {
       className="reactAnswerTextarea"
       value={value}
       onChange={event => onChange(event.target.value)}
+      disabled={expired}
       rows={question.question_type === "long" ? 12 : 7}
       placeholder="Write your answer here"
     />
   );
+}
+
+function XtermOutput({ output }) {
+  const hostRef = useRef(null);
+  const terminalRef = useRef(null);
+
+  useEffect(() => {
+    if (!hostRef.current) return undefined;
+    const terminal = new Terminal({
+      convertEol: true,
+      cursorBlink: false,
+      disableStdin: true,
+      fontFamily: '"JetBrains Mono", "Fira Code", Consolas, monospace',
+      fontSize: 13,
+      rows: 8,
+      theme: {
+        background: "#0b1220",
+        foreground: "#dbeafe",
+        cursor: "#dbeafe"
+      }
+    });
+    terminal.open(hostRef.current);
+    terminalRef.current = terminal;
+    return () => {
+      terminal.dispose();
+      terminalRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const terminal = terminalRef.current;
+    if (!terminal) return;
+    terminal.clear();
+    String(output || "").split(/\r?\n/).forEach(line => terminal.writeln(line));
+  }, [output]);
+
+  return <div className="reactTerminalHost" ref={hostRef} />;
 }

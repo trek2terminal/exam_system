@@ -704,6 +704,28 @@ p {
   gap: 9px;
 }
 
+.questionTimerPill {
+  min-width: 74px;
+  display: inline-flex;
+  justify-content: center;
+  border-radius: 8px;
+  padding: 4px 9px;
+  background: rgba(37, 99, 235, 0.09);
+  color: var(--primary);
+  font-weight: 900;
+  font-size: 0.78rem;
+}
+
+.questionTimerPill.danger {
+  background: rgba(220, 38, 38, 0.1);
+  color: var(--danger);
+}
+
+.questionTimerPill.expired {
+  background: #fef2f2;
+  color: var(--danger);
+}
+
 .iconButton.active {
   border-color: var(--warning);
   color: var(--warning);
@@ -794,10 +816,39 @@ p {
   overflow: hidden;
 }
 
+.stdinLabel {
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.reactStdinInput {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+}
+
 .reactTerminal {
   min-height: 140px;
   padding: 14px;
   white-space: pre-wrap;
+}
+
+.reactTerminalHost {
+  min-height: 176px;
+  border: 1px solid #1e293b;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #0b1220;
+  padding: 8px;
+}
+
+.reactTerminalHost .xterm {
+  padding: 4px;
 }
 
 .questionNavFooter {

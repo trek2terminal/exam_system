@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Link, Navigate, Route, Routes } from "react-router-dom";
 import {
   Bell,
@@ -18,8 +18,9 @@ import {
   Trophy,
   Users
 } from "lucide-react";
-import ExamInterface from "./ExamInterface.jsx";
 import { useAppStore } from "./store/appStore";
+
+const ExamInterface = lazy(() => import("./ExamInterface.jsx"));
 
 const loginLinks = [
   { label: "Admin", href: "/admin/login" },
@@ -356,7 +357,11 @@ function ProtectedExamRoute({ currentRole, settings }) {
   if (currentRole !== "student") {
     return <Navigate to={rolePaths[currentRole] || "/"} replace />;
   }
-  return <ExamInterface />;
+  return (
+    <Suspense fallback={<div className="loadingScreen">Loading exam workspace...</div>}>
+      <ExamInterface />
+    </Suspense>
+  );
 }
 
 export default function App() {

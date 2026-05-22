@@ -27,6 +27,8 @@ When `frontend/dist` exists, Flask serves the built migration shell at `/react`.
 - Persist the light/dark theme preference in the browser.
 - Render the student dashboard with assigned-exam cards, countdowns, attempt status, published-result summaries, and secure action forms back to Flask.
 - Open active attempts in `/react/exam/:sessionCode` with timer, question navigator, autosave, submit confirmation, integrity events, and Monaco-backed Python coding answers.
+- Code questions now include a real stdin textarea plus xterm-rendered output, and the exam route is lazy-loaded so Monaco/xterm do not bloat the dashboard bundle.
+- Timed questions show a countdown and lock locally when expired while the server remains the final enforcement point.
 - Load role dashboards from:
   - `/api/student/dashboard`
   - `/api/teacher/dashboard`

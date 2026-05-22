@@ -302,3 +302,22 @@ Still intentionally left for later phases:
 - Browser-test Socket.IO live push behavior in a running interactive session.
 - Stronger external sandbox isolation for Python code execution.
 - HTTPS automation for final hosted deployment.
+
+## Latest Implementation Batch 7 - 2026-05-22
+
+Completed in this batch:
+- Replaced the React coding prompt-based stdin flow with a dedicated stdin textarea for each coding question.
+- Rendered Python execution output through xterm.js in the React exam interface.
+- Added React per-question countdown pills for timed questions.
+- Added local timed-question expiry handling that disables the current question, syncs expiry to `/question-expired`, and advances to the next question when possible.
+- Allowed clipboard/shortcut exceptions inside the React coding workspace to match the existing coding-question behavior.
+- Lazy-loaded the React exam route so Monaco/xterm are split into a separate exam bundle instead of increasing the dashboard bundle.
+- Verified lint, production build, split React assets, Flask `/react/exam/:sessionCode` serving, `/api/bootstrap`, and migration status.
+
+Still intentionally left for later phases:
+- Browser-test the React exam interface interactively with a real student attempt, including fullscreen behavior and Monaco/xterm rendering.
+- Move teacher review screens into React.
+- Move admin/teacher proctoring screens into React.
+- Browser-test Socket.IO live push behavior in a running interactive session.
+- Stronger external sandbox isolation for Python code execution.
+- HTTPS automation for final hosted deployment.
