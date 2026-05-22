@@ -285,6 +285,10 @@ async function refreshProctoring() {
 
         renderSessions(data.sessions);
         renderViolations(data.recent_violations);
+        window.ExamRealtime?.joinProctorExams(
+            [...new Set((data.sessions || []).map(item => item.exam_id).filter(Boolean))],
+            'refreshProctoring'
+        );
     } catch (error) {
         showToast(error.message || 'Could not refresh proctoring status', 'error');
     }

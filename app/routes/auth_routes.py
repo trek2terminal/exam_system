@@ -176,6 +176,7 @@ def admin_login():
         session["admin_username"] = admin.username
         session["role"] = "admin"
         session["login_time"] = datetime.utcnow().isoformat()
+        session["admin_last_activity"] = datetime.utcnow().isoformat()
 
         AuditLog(
             user_id=admin.id,

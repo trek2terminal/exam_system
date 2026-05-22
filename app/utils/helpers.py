@@ -67,6 +67,19 @@ def admin_required(view):
             session.clear()
             flash("Your admin session is no longer active. Please log in again.", "danger")
             return redirect(url_for("auth.admin_login"))
+        idle_timeout = int(current_app.config.get("ADMIN_IDLE_TIMEOUT_SECONDS", 2 * 60 * 60))
+        last_activity = session.get("admin_last_activity")
+        if last_activity:
+            try:
+                elapsed = (datetime.utcnow() - datetime.fromisoformat(last_activity)).total_seconds()
+            except ValueError:
+                elapsed = 0
+            if elapsed > idle_timeout:
+                session.clear()
+                flash("Your admin session expired due to inactivity. Please log in again.", "warning")
+                return redirect(url_for("auth.admin_login"))
+        session["admin_last_activity"] = datetime.utcnow().isoformat()
+        session.modified = True
         return view(*args, **kwargs)
 
     return wrapper
@@ -167,7 +180,7 @@ def draw_wrapped_text(pdf, text, x, y, width, font_name="Helvetica", font_size=1
     return y
 
 
-def create_submission_pdf(student_session):
+def create_submission_pdf(student_session, include_unpublished_feedback=False):
     """Generate detailed PDF report of student submission"""
     buffer = BytesIO()
     pdf = canvas.Canvas(buffer, pagesize=A4)
@@ -183,9 +196,10 @@ def create_submission_pdf(student_session):
     code_output_map = {a.question_id: a.code_output for a in answers if getattr(a, "code_output", None)}
 
     result = Result.query.filter_by(session_id=student_session.id).first()
+    result_visible = bool(result and (result.published or include_unpublished_feedback))
     marks_map = {}
     remarks_map = {}
-    if result:
+    if result_visible:
         for qm in result.question_marks:
             marks_map[qm.question_id] = qm.marks_awarded
             remarks_map[qm.question_id] = qm.teacher_remark or ""
@@ -241,6 +255,20 @@ def create_submission_pdf(student_session):
     y -= 6 * mm
     pdf.drawString(left, y, f"Access Code: {exam.access_code} | Date: {datetime.utcnow().strftime('%d %b %Y %H:%M')}")
     y -= 12 * mm
+    if result_visible:
+        pdf.setFont("Helvetica-Bold", 11)
+        pdf.drawString(
+            left,
+            y,
+            f"Result: {result.total_marks_obtained} / {result.total_marks} ({result.percentage}%)",
+        )
+        y -= 7 * mm
+        if result.teacher_remarks:
+            pdf.setFont("Helvetica-Bold", 10)
+            pdf.drawString(left, y, "Overall Teacher Remark:")
+            y -= 5 * mm
+            y = draw_wrapped_text(pdf, result.teacher_remarks, left, y, right_width, font_size=10, leading=13)
+            y -= 4 * mm
 
     # Questions & Answers
     for q in questions:
@@ -271,7 +299,7 @@ def create_submission_pdf(student_session):
         answer_text = answers_map.get(q.id, "[No answer submitted]")
         y = draw_wrapped_text(pdf, answer_text, left, y, right_width, font_size=10, leading=13)
 
-        if result and getattr(q, "model_answer", None):
+        if result_visible and getattr(q, "model_answer", None):
             pdf.setFont("Helvetica-Bold", 10)
             y -= 3 * mm
             pdf.drawString(left, y, "Model Answer:")
@@ -286,7 +314,7 @@ def create_submission_pdf(student_session):
             y = draw_wrapped_text(pdf, code_output_map[q.id], left, y, right_width, font_size=9, leading=12)
 
         # Show marks if evaluated
-        if result:
+        if result_visible:
             awarded = marks_map.get(q.id, 0)
             pdf.setFont("Helvetica-Bold", 10)
             y -= 3 * mm

@@ -32,6 +32,11 @@
       <a class="btn secondary" href="{{ url_for('student.export_pdf', session_code=student_session.session_code) }}">
         <i class="fas fa-file-pdf"></i> Download answer copy
       </a>
+      {% if result and result.published %}
+        <a class="btn primary" href="{{ url_for('student.result_pdf', session_code=student_session.session_code) }}">
+          <i class="fas fa-file-pdf"></i> Download result sheet
+        </a>
+      {% endif %}
     </div>
 
     {% if result and result.published %}

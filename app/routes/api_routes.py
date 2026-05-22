@@ -14,6 +14,7 @@ from app.services.notification_service import NotificationService
 from app.services.result_service import ResultService
 from app.services.security_service import SecurityService
 from app.services.settings_service import SettingsService
+from app.socketio.realtime_events import emit_to_proctors, emit_to_session
 from app.utils.network import get_client_ip
 from app.utils.rate_limiter import rate_limit
 
@@ -90,6 +91,10 @@ def _parse_int_field(payload, field_name):
     value = payload.get(field_name)
     if value in (None, ""):
         return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 @api_bp.route("/notifications/mark-read", methods=["POST"])
@@ -99,10 +104,6 @@ def mark_notifications_read():
         return jsonify({"ok": False, "message": "Not logged in"}), 401
     count = NotificationService.mark_user_notifications_read(user_id)
     return jsonify({"ok": True, "read": count})
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
 
 
 @api_bp.route("/student/session/<session_code>/status")
@@ -298,6 +299,10 @@ def execute_code(session_code):
         answer = Answer(session_id=student_session.id, question_id=question.id)
         db.session.add(answer)
     AutoSaveService.ensure_question_timer(answer, question)
+    if AutoSaveService.answer_timer_expired(answer):
+        answer.question_time_expired = True
+        db.session.commit()
+        return jsonify({"ok": False, "message": "This question's time limit has expired."}), 403
     if answer.question_time_expired:
         return jsonify({"ok": False, "message": "This question's time limit has expired."}), 403
 
@@ -353,6 +358,19 @@ def heartbeat(session_code):
     if should_submit and student_session.status == "active":
         ExamService.end_exam(session_code, reason="Auto-submitted due to security violations")
 
+    emit_to_proctors(
+        student_session.exam_set_id,
+        "proctor:student_status",
+        {
+            "session_id": student_session.id,
+            "student_name": student_session.student_name,
+            "roll_no": student_session.roll_no,
+            "status": student_session.status,
+            "remaining_seconds": remaining_seconds,
+            "focus_violations": student_session.focus_violations,
+        },
+    )
+
     return jsonify(
         {
             "ok": True,
@@ -389,7 +407,7 @@ def record_violation(session_code):
     detail = (data.get("detail") or "").strip()
     client_count = _parse_int_field(data, "violation_count") or 0
 
-    SecurityService.record_violation(
+    violation = SecurityService.record_violation(
         session_code=session_code,
         violation_type=violation_type,
         detail=detail,
@@ -400,6 +418,19 @@ def record_violation(session_code):
 
     max_violations = SettingsService.max_violations_allowed()
     admin_review_required = student_session.focus_violations >= max_violations
+    emit_to_proctors(
+        student_session.exam_set_id,
+        "proctor:violation_alert",
+        {
+            "session_id": student_session.id,
+            "student_name": student_session.student_name,
+            "roll_no": student_session.roll_no,
+            "type": violation.violation_type if violation else violation_type,
+            "detail": detail,
+            "count": student_session.focus_violations,
+            "admin_review_required": admin_review_required,
+        },
+    )
 
     return jsonify(
         {
@@ -463,5 +494,20 @@ def submit_session(session_code):
         related_entity_id=student_session.id,
     )
     db.session.commit()
+    emit_to_proctors(
+        student_session.exam_set_id,
+        "proctor:exam_submitted",
+        {
+            "session_id": student_session.id,
+            "student_name": student_session.student_name,
+            "roll_no": student_session.roll_no,
+            "status": student_session.status,
+        },
+    )
+    emit_to_session(
+        student_session,
+        "exam:submitted",
+        {"message": "Your exam has been submitted.", "redirect": f"/student/submitted/{session_code}"},
+    )
 
     return jsonify({"ok": True, "redirect": f"/student/submitted/{session_code}"})

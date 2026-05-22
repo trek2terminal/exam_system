@@ -399,9 +399,15 @@ code {
 <script>
 async function toggleUserStatus(userId) {
     if (!confirm('Toggle user status?')) return;
+    const adminPassword = prompt('Enter your admin password to confirm this account change.');
+    if (!adminPassword) return;
 
     try {
-        const response = await fetch(`/admin/users/${userId}/toggle-status`, { method: 'POST' });
+        const response = await fetch(`/admin/users/${userId}/toggle-status`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ admin_password: adminPassword })
+        });
         const data = await response.json();
         if (data.ok) {
             showToast(data.message || 'User status updated.', 'success');
@@ -415,10 +421,16 @@ async function toggleUserStatus(userId) {
 }
 
 async function deleteUser(userId) {
-    if (!confirm('Delete this user? This action cannot be undone.')) return;
+    if (!confirm('Deactivate this user? Their records will be retained for audit and results.')) return;
+    const adminPassword = prompt('Enter your admin password to confirm this account change.');
+    if (!adminPassword) return;
 
     try {
-        const response = await fetch(`/admin/users/${userId}/delete`, { method: 'POST' });
+        const response = await fetch(`/admin/users/${userId}/delete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ admin_password: adminPassword })
+        });
         const data = await response.json();
         if (data.ok) {
             showToast(data.message || 'User deleted.', 'success');

@@ -63,6 +63,11 @@ class AutoSaveService:
 
         if answer:
             AutoSaveService.ensure_question_timer(answer, question)
+            if AutoSaveService.answer_timer_expired(answer):
+                answer.question_time_expired = True
+                answer.saved_at = datetime.utcnow()
+                db.session.commit()
+                return False, "This question's time limit has expired."
             if answer.question_time_expired:
                 return False, "This question's time limit has expired."
             answer.answer_text = answer_text

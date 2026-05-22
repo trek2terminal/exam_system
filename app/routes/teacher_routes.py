@@ -4,7 +4,7 @@ import json
 import os
 import secrets
 from datetime import datetime
-from flask import Blueprint, current_app, render_template, redirect, url_for, request, session, flash, jsonify
+from flask import Blueprint, current_app, render_template, redirect, url_for, request, session, flash, jsonify, send_file
 from sqlalchemy import and_
 from werkzeug.utils import secure_filename
 from app.models.database import db
@@ -13,12 +13,13 @@ from app.models.group_model import StudentGroup
 from app.models.submission_model import StudentSession, Answer
 from app.models.result_model import Result, QuestionMark
 from app.models.audit_model import ViolationLog
+from app.models.user_model import User
 from app.services.exam_service import ExamService
 from app.services.exam_session_guard import LOCKED_SESSION_STATUSES
 from app.services.notification_service import NotificationService
 from app.services.parser_service import QuestionParserService
 from app.utils.export_utils import csv_response, format_datetime
-from app.utils.helpers import teacher_required, parse_options
+from app.utils.helpers import teacher_required, parse_options, create_submission_pdf
 
 teacher_bp = Blueprint("teacher", __name__, url_prefix="/teacher")
 
@@ -97,6 +98,7 @@ def _teacher_session_snapshot(student_session):
     )
     return {
         "id": student_session.id,
+        "exam_id": exam.id,
         "student_name": student_session.student_name,
         "roll_no": student_session.roll_no,
         "exam_name": exam.exam_name,
@@ -425,14 +427,14 @@ def question_bank():
         question_type = request.form.get("question_type", "short").strip().lower()
         correct_answer = request.form.get("correct_answer", "").strip()
         model_answer = request.form.get("model_answer", "").strip()
-            code_snippet = request.form.get("code_snippet", "").strip()
-            code_language = request.form.get("code_language", "").strip() or None
-            try:
-                time_limit_seconds = int(request.form.get("time_limit_seconds") or 0)
-            except ValueError:
-                time_limit_seconds = 0
-            time_limit_seconds = max(0, time_limit_seconds)
-            image_paths = _save_question_images(request.files.getlist("question_images"))
+        code_snippet = request.form.get("code_snippet", "").strip()
+        code_language = request.form.get("code_language", "").strip() or None
+        try:
+            time_limit_seconds = int(request.form.get("time_limit_seconds") or 0)
+        except ValueError:
+            time_limit_seconds = 0
+        time_limit_seconds = max(0, time_limit_seconds)
+        image_paths = _save_question_images(request.files.getlist("question_images"))
         options = parse_options(request.form.get("options", ""))
 
         try:
@@ -455,11 +457,11 @@ def question_bank():
             question_type=question_type,
             marks=marks,
             correct_answer=correct_answer,
-                model_answer=model_answer,
-                code_snippet=code_snippet,
-                code_language=code_language,
-                time_limit_seconds=time_limit_seconds,
-            )
+            model_answer=model_answer,
+            code_snippet=code_snippet,
+            code_language=code_language,
+            time_limit_seconds=time_limit_seconds,
+        )
         bank_item.set_options(options)
         bank_item.set_image_paths(image_paths)
         db.session.add(bank_item)
@@ -1150,4 +1152,22 @@ def student_view(session_id):
         result=result,
         marks_map=marks_map,
         remarks_map=remarks_map,
+    )
+
+
+@teacher_bp.route("/session/<int:session_id>/answer-pdf")
+@teacher_required
+def student_answer_pdf(session_id):
+    student_session = StudentSession.query.get_or_404(session_id)
+    if student_session.exam_set.created_by != session.get("teacher_id"):
+        flash("You do not have permission to export this submission.", "danger")
+        return redirect(url_for("teacher.results"))
+
+    pdf_buffer = create_submission_pdf(student_session, include_unpublished_feedback=True)
+    filename = f"answer_sheet_{student_session.roll_no}_{student_session.session_code}.pdf"
+    return send_file(
+        pdf_buffer,
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=filename,
     )

@@ -478,8 +478,31 @@ def export_pdf(session_code):
         flash("Answer copies are available after the exam is submitted.", "info")
         return redirect(url_for("student.exam", session_code=session_code))
 
-    pdf_buffer = create_submission_pdf(student_session)
+    pdf_buffer = create_submission_pdf(student_session, include_unpublished_feedback=False)
     filename = f"submission_{student_session.roll_no}_{student_session.session_code}.pdf"
+
+    return send_file(
+        pdf_buffer,
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=filename,
+    )
+
+
+@student_bp.route("/result/<session_code>/pdf")
+def result_pdf(session_code):
+    owner_redirect = _redirect_if_not_owner(session_code)
+    if owner_redirect:
+        return owner_redirect
+
+    student_session = StudentSession.query.filter_by(session_code=session_code).first_or_404()
+    result = Result.query.filter_by(session_id=student_session.id, published=True).first()
+    if not result:
+        flash("Result PDF is available only after your teacher publishes the result.", "info")
+        return redirect(url_for("student.submitted", session_code=session_code))
+
+    pdf_buffer = create_submission_pdf(student_session, include_unpublished_feedback=False)
+    filename = f"result_{student_session.roll_no}_{student_session.session_code}.pdf"
 
     return send_file(
         pdf_buffer,

@@ -88,6 +88,13 @@ This project should follow that same practical model.
 - Admin suspicious activity report across repeated violation-heavy exam sessions.
 - Admin login hidden from the common role selector, harder admin lockout after 3 failed attempts, and `python run.py unlock-admin` recovery.
 - Forced teacher password change after admin-created temporary credentials.
+- Notification bell with unread count for logged-in users, plus admin/teacher/student notification records.
+- Private admin-to-student messages from live proctoring, delivered to the student's exam screen through heartbeat.
+- Exam attempt limits, including `0` for unlimited attempts and dashboard attempt status.
+- Per-question time limits with client countdown, auto-lock after expiry, and server-side save/code-run rejection after expiry.
+- Teacher read-only live proctoring view for exams created by that teacher.
+- Admin password re-entry for destructive or sensitive actions such as terminate, pause/resume, reduce time, group deletion, private message, and database backup.
+- Admin complete exam report PDF export with questions, sessions, scores, and violation counts.
 
 ## Python Feature Roadmap
 
@@ -158,6 +165,9 @@ This project should follow that same practical model.
 - Violation alert events.
 - Time reduction/termination/second chance events.
 - Student private messages.
+- Optional Flask-SocketIO server wiring with polling fallback when the package is not installed.
+- Student-side realtime handlers for termination, time adjustment, pause/resume, second chance, submit, and private messages.
+- Admin/teacher proctoring pages join realtime exam rooms after their normal status refresh.
 
 ### Phase 8 - React Frontend
 
@@ -187,3 +197,21 @@ This project should follow that same practical model.
 - Answers survive refreshes/reconnects.
 - Security actions are logged with user/IP/time/reason.
 - The current Python app must stay runnable during every migration step.
+
+## Latest Implementation Batch - 2026-05-22
+
+Completed in this batch:
+- Fixed the exam API integer parser so heartbeat, violation count, answer save, code run, and question timer endpoints parse numeric fields correctly.
+- Added optional Flask-SocketIO initialization, Socket.IO requirements, realtime room helpers, and browser handlers while keeping polling as the fallback.
+- Emitted realtime events for heartbeat status, violation alerts, exam submission, admin termination, second chance, time reduction, pause/resume, and admin messages.
+- Added student result-sheet PDF download and teacher answer-sheet PDF download.
+- Fixed PDF result privacy: unpublished marks, teacher remarks, and model answers no longer appear in student answer-copy PDFs.
+- Changed admin user delete into soft delete/deactivation; teacher removal now archives the teacher's exams instead of deleting data.
+- Added admin password confirmation for account status toggle, account edit, and account soft delete.
+- Added admin idle timeout tracking with a 2-hour inactivity limit while keeping longer normal student/teacher sessions.
+
+Still intentionally left for later phases:
+- Full React + Vite migration with Monaco Editor, xterm.js, Zustand, Axios interceptors, shadcn/Tailwind.
+- Installing and verifying Flask-SocketIO client/server dependencies in the real environment, then browser-testing live push updates.
+- Production-grade Python execution isolation using OS-level limits beyond the current static blocklist, timeout, and subprocess capture.
+- External deployment hardening: HTTPS certificates, reverse proxy config validation, Redis-backed rate limiting/session store if hosted multi-process.

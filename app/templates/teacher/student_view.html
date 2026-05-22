@@ -9,7 +9,7 @@
       <p class="muted">{{ student_session.student_name }} | Roll No {{ student_session.roll_no }} | {{ student_session.exam_set.exam_name }}</p>
     </div>
     <div class="actions">
-      <a class="btn secondary" href="{{ url_for('student.export_pdf', session_code=student_session.session_code) }}">Download Answer PDF</a>
+      <a class="btn secondary" href="{{ url_for('teacher.student_answer_pdf', session_id=student_session.id) }}">Download Answer PDF</a>
       <a class="btn secondary" href="{{ url_for('teacher.results') }}">Back</a>
     </div>
   </div>

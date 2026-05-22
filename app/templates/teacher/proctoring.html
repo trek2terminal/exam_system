@@ -70,6 +70,10 @@ async function refreshTeacherProctoring() {
   document.getElementById('pausedCount').textContent = data.counts.paused_sessions;
   document.getElementById('flaggedCount').textContent = data.counts.flagged_sessions;
   renderTeacherSessions(data.sessions);
+  window.ExamRealtime?.joinProctorExams(
+    [...new Set((data.sessions || []).map(item => item.exam_id).filter(Boolean))],
+    'refreshTeacherProctoring'
+  );
 }
 
 document.addEventListener('DOMContentLoaded', () => {

@@ -52,6 +52,9 @@
             <a class="btn primary" href="{{ url_for('student.submitted', session_code=student_session.session_code) }}">
               <i class="fas fa-eye"></i> View feedback
             </a>
+            <a class="btn secondary" href="{{ url_for('student.result_pdf', session_code=student_session.session_code) }}">
+              <i class="fas fa-file-pdf"></i> Result PDF
+            </a>
           </div>
         </article>
       {% else %}

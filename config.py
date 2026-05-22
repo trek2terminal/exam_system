@@ -22,7 +22,8 @@ class Config:
     # Session Security
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"
-    PERMANENT_SESSION_LIFETIME = timedelta(minutes=45)
+    PERMANENT_SESSION_LIFETIME = timedelta(hours=8)
+    ADMIN_IDLE_TIMEOUT_SECONDS = 2 * 60 * 60
 
     # Automatically set secure cookie based on environment
     SESSION_COOKIE_SECURE = APP_ENV == "production"

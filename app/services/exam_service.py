@@ -187,6 +187,32 @@ class ExamService:
         student_session.pause_reason = (reason or "").strip()[:1000] or "Pause requested by student"
         student_session.updated_at = datetime.utcnow()
         db.session.commit()
+        try:
+            from app.services.notification_service import NotificationService
+            from app.socketio.realtime_events import emit_to_proctors
+
+            NotificationService.notify_role(
+                "admin",
+                f"{student_session.student_name} requested a pause in {student_session.exam_set.exam_name}.",
+                notification_type="pause_request",
+                related_entity_type="student_session",
+                related_entity_id=student_session.id,
+            )
+            db.session.commit()
+            emit_to_proctors(
+                student_session.exam_set_id,
+                "proctor:student_status",
+                {
+                    "session_id": student_session.id,
+                    "student_name": student_session.student_name,
+                    "roll_no": student_session.roll_no,
+                    "status": student_session.status,
+                    "pause_requested": True,
+                    "pause_reason": student_session.pause_reason,
+                },
+            )
+        except Exception:
+            pass
         return True
 
     @staticmethod

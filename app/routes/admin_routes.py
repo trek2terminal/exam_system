@@ -19,6 +19,7 @@ from app.services.exam_service import ExamService
 from app.services.exam_session_guard import LOCKED_SESSION_STATUSES
 from app.services.notification_service import NotificationService
 from app.services.settings_service import SettingsService
+from app.socketio.realtime_events import emit_to_proctors, emit_to_session
 from app.utils.export_utils import csv_response, format_datetime
 from app.utils.helpers import admin_required
 from app.utils.network import get_client_ip
@@ -87,14 +88,34 @@ def _find_student_for_group(identifier):
 
 def _admin_password_confirmed():
     password = request.form.get("admin_password", "")
+    return _admin_password_ok(password, flash_errors=True)
+
+
+def _admin_password_ok(password, flash_errors=False):
     if not password:
-        flash("Enter your admin password to confirm this action.", "danger")
+        if flash_errors:
+            flash("Enter your admin password to confirm this action.", "danger")
         return False
     admin = User.query.get(session.get("admin_id"))
     if not admin or not admin.check_password(password):
-        flash("Admin password confirmation failed.", "danger")
+        if flash_errors:
+            flash("Admin password confirmation failed.", "danger")
         return False
     return True
+
+
+def _json_admin_password_error():
+    return jsonify({"ok": False, "message": "Admin password confirmation failed."}), 403
+
+
+def _admin_password_confirmed_json():
+    payload = request.get_json(silent=True) if request.is_json else None
+    password = ""
+    if isinstance(payload, dict):
+        password = payload.get("admin_password", "")
+    if not password:
+        password = request.form.get("admin_password", "")
+    return _admin_password_ok(password)
 
 
 def _session_snapshot(student_session):
@@ -113,6 +134,7 @@ def _session_snapshot(student_session):
 
     return {
         "id": student_session.id,
+        "exam_id": exam.id,
         "student_name": student_session.student_name,
         "roll_no": student_session.roll_no,
         "exam_name": exam.exam_name,
@@ -425,6 +447,8 @@ def create_teacher():
 @admin_required
 def toggle_user_status(user_id):
     """Enable/Disable user account"""
+    if not _admin_password_confirmed_json():
+        return _json_admin_password_error()
     user = User.query.get_or_404(user_id)
 
     if user.id == session.get("admin_id"):
@@ -457,6 +481,9 @@ def edit_user(user_id):
     user = User.query.get_or_404(user_id)
 
     if request.method == "POST":
+        if not _admin_password_confirmed():
+            return render_template("admin/edit_user.html", user=user, form_data=request.form), 403
+
         name = request.form.get("name", "").strip()
         username = request.form.get("username", "").strip()
         email = request.form.get("email", "").strip() or None
@@ -548,13 +575,20 @@ def edit_user(user_id):
 @admin_required
 def delete_user(user_id):
     """Delete user account"""
+    if not _admin_password_confirmed_json():
+        return _json_admin_password_error()
     user = User.query.get_or_404(user_id)
 
     if user.role == "admin":
         return jsonify({"ok": False, "message": "Cannot delete admin accounts"}), 400
 
     username = user.username
-    db.session.delete(user)
+    archived_exams = 0
+    if user.role == "teacher":
+        archived_exams = ExamSet.query.filter_by(created_by=user.id).update({"status": "archived"})
+    user.is_active = False
+    user.is_verified = False
+    user.updated_at = datetime.utcnow()
     db.session.commit()
 
     AuditLog(
@@ -562,12 +596,12 @@ def delete_user(user_id):
         action="delete_user",
         resource_type="user",
         resource_id=user_id,
-        changes=f"Deleted user: {username}",
+        changes=f"Soft deleted user: {username}; archived_exams={archived_exams}",
         status="success",
         ip_address=get_client_ip()
     ).save()
 
-    return jsonify({"ok": True, "message": f"User {username} deleted"})
+    return jsonify({"ok": True, "message": f"User {username} deactivated and retained"})
 
 
 # ==================== EXAM MANAGEMENT ====================
@@ -667,6 +701,90 @@ def view_exam(exam_id):
         total_sessions=total_sessions,
         submitted=submitted,
         active_sessions=active_sessions
+    )
+
+
+@admin_bp.route("/exams/<int:exam_id>/report.pdf")
+@admin_required
+def export_exam_report_pdf(exam_id):
+    exam = ExamSet.query.get_or_404(exam_id)
+    sessions = (
+        StudentSession.query.filter_by(exam_set_id=exam.id)
+        .order_by(StudentSession.created_at.asc())
+        .all()
+    )
+    questions = Question.query.filter_by(exam_set_id=exam.id).order_by(Question.question_number.asc()).all()
+
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    from reportlab.lib.utils import simpleSplit
+    from reportlab.pdfgen import canvas
+
+    buffer = io.BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+    left = 16 * mm
+    y = height - 18 * mm
+    usable_width = width - (2 * left)
+
+    def page_break(required=20 * mm):
+        nonlocal y
+        if y < required:
+            pdf.showPage()
+            y = height - 18 * mm
+
+    def line(text, font="Helvetica", size=10, leading=6 * mm):
+        nonlocal y
+        pdf.setFont(font, size)
+        for part in simpleSplit(str(text or "-"), font, size, usable_width):
+            page_break()
+            pdf.drawString(left, y, part)
+            y -= leading
+
+    pdf.setFont("Helvetica-Bold", 17)
+    pdf.drawString(left, y, f"Exam Report: {exam.exam_name}")
+    y -= 10 * mm
+    line(f"Subject: {exam.subject} | Set: {exam.set_code} | Status: {exam.status}", size=10)
+    line(f"Duration: {exam.duration_minutes} minutes | Total Marks: {exam.total_marks} | Access Code: {exam.access_code}", size=10)
+    if exam.start_time or exam.end_time:
+        line(f"Window: {format_datetime(exam.start_time) if exam.start_time else 'Open'} to {format_datetime(exam.end_time) if exam.end_time else 'No end'}", size=10)
+    y -= 4 * mm
+
+    total_sessions = len(sessions)
+    submitted = sum(1 for item in sessions if item.status in LOCKED_SESSION_STATUSES)
+    active = sum(1 for item in sessions if item.status == "active")
+    violations = sum(item.focus_violations for item in sessions)
+    line("Summary", font="Helvetica-Bold", size=13)
+    line(f"Sessions: {total_sessions} | Submitted/Locked: {submitted} | Active: {active} | Total Violations: {violations}")
+    y -= 4 * mm
+
+    line("Questions", font="Helvetica-Bold", size=13)
+    for question in questions:
+        page_break(35 * mm)
+        line(f"Q{question.question_number}. [{question.question_type.upper()}] {question.marks} marks", font="Helvetica-Bold")
+        line(question.question_text, size=9, leading=5 * mm)
+    y -= 4 * mm
+
+    line("Student Sessions", font="Helvetica-Bold", size=13)
+    for student_session in sessions:
+        result = student_session.result
+        score = f"{result.total_marks_obtained}/{result.total_marks} ({result.percentage}%)" if result else "Not evaluated"
+        page_break(20 * mm)
+        line(
+            f"{student_session.student_name} | Roll {student_session.roll_no} | {student_session.status} | Score: {score} | Violations: {student_session.focus_violations}",
+            size=9,
+            leading=5 * mm,
+        )
+
+    pdf.showPage()
+    pdf.save()
+    buffer.seek(0)
+    safe_code = "".join(ch if ch.isalnum() else "_" for ch in (exam.set_code or str(exam.id)))
+    return send_file(
+        buffer,
+        as_attachment=True,
+        download_name=f"exam_report_{safe_code}.pdf",
+        mimetype="application/pdf",
     )
 
 
@@ -922,6 +1040,16 @@ def terminate_session(session_id):
 
     if student_session.status not in ["submitted", "evaluated", "terminated"]:
         ExamService.end_exam(student_session.session_code, reason=reason, status="terminated")
+        emit_to_session(
+            student_session,
+            "exam:terminated",
+            {"reason": reason, "redirect": url_for("student.submitted", session_code=student_session.session_code)},
+        )
+        emit_to_proctors(
+            student_session.exam_set_id,
+            "proctor:student_status",
+            _session_snapshot(student_session),
+        )
 
     AuditLog(
         user_id=session.get("admin_id"),
@@ -963,6 +1091,16 @@ def grant_second_chance(session_id):
     if not student_session.start_time:
         student_session.start_time = datetime.utcnow()
     db.session.commit()
+    emit_to_session(
+        student_session,
+        "exam:second_chance",
+        {"message": "Admin has granted you a second chance. Your exam can resume."},
+    )
+    emit_to_proctors(
+        student_session.exam_set_id,
+        "proctor:student_status",
+        _session_snapshot(student_session),
+    )
 
     AuditLog(
         user_id=session.get("admin_id"),
@@ -1004,6 +1142,16 @@ def reduce_session_time(session_id):
     else:
         student_session.start_time = (student_session.start_time or datetime.utcnow()) - timedelta(minutes=minutes)
     db.session.commit()
+    emit_to_session(
+        student_session,
+        "exam:time_reduced",
+        {"newRemainingSeconds": ExamService.remaining_seconds_for_session(student_session)},
+    )
+    emit_to_proctors(
+        student_session.exam_set_id,
+        "proctor:student_status",
+        _session_snapshot(student_session),
+    )
 
     AuditLog(
         user_id=session.get("admin_id"),
@@ -1031,6 +1179,16 @@ def pause_session(session_id):
     if not ExamService.pause_session(student_session):
         flash("Only active sessions can be paused.", "danger")
         return redirect(request.referrer or url_for("admin.proctoring"))
+    emit_to_session(
+        student_session,
+        "exam:paused",
+        {"message": "An admin has paused your exam timer. Stay on this screen."},
+    )
+    emit_to_proctors(
+        student_session.exam_set_id,
+        "proctor:student_status",
+        _session_snapshot(student_session),
+    )
 
     AuditLog(
         user_id=session.get("admin_id"),
@@ -1058,6 +1216,16 @@ def resume_session(session_id):
     if not ExamService.resume_session(student_session):
         flash("Only paused sessions can be resumed.", "danger")
         return redirect(request.referrer or url_for("admin.proctoring"))
+    emit_to_session(
+        student_session,
+        "exam:resumed",
+        {"message": "Your exam has resumed.", "remainingSeconds": ExamService.remaining_seconds_for_session(student_session)},
+    )
+    emit_to_proctors(
+        student_session.exam_set_id,
+        "proctor:student_status",
+        _session_snapshot(student_session),
+    )
 
     AuditLog(
         user_id=session.get("admin_id"),
@@ -1092,6 +1260,11 @@ def send_session_message(session_id):
         notification_type="admin_message",
         related_entity_type="student_session",
         related_entity_id=student_session.id,
+    )
+    emit_to_session(
+        student_session,
+        "exam:admin_message",
+        {"message": message[:500]},
     )
     AuditLog(
         user_id=session.get("admin_id"),

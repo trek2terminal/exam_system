@@ -64,6 +64,15 @@ def create_app(config_class=None):
     app.register_blueprint(student_bp)
     app.register_blueprint(api_bp)
 
+    try:
+        from app.socketio.realtime_events import init_socketio
+
+        realtime = init_socketio(app)
+        app.config["REALTIME_ENABLED"] = bool(realtime)
+    except Exception:
+        app.config["REALTIME_ENABLED"] = False
+        app.logger.exception("Realtime layer could not be initialized; polling fallback remains active.")
+
     app.config["_LAST_EXPIRED_EXAM_SWEEP"] = 0
 
     @app.before_request
@@ -123,7 +132,7 @@ def create_app(config_class=None):
                 "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; "
                 "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com data:; "
                 "img-src 'self' data:; "
-                "connect-src 'self'; "
+                "connect-src 'self' ws: wss:; "
                 "frame-ancestors 'none'; "
                 "base-uri 'self'; "
                 "form-action 'self'"

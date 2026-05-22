@@ -11,6 +11,9 @@
         </div>
         <div>
             <span class="status-badge status-{{ exam.status }}">{{ exam.status | title }}</span>
+            <a class="btn secondary" href="{{ url_for('admin.export_exam_report_pdf', exam_id=exam.id) }}">
+                <i class="fas fa-file-pdf"></i> Report PDF
+            </a>
         </div>
     </div>
 

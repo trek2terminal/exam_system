@@ -136,4 +136,8 @@ if __name__ == "__main__":
     if os.environ.get("WERKZEUG_RUN_MAIN") != "true":
         print_startup_urls(port)
 
-    app.run(host="0.0.0.0", port=port, debug=debug_mode, threaded=True)
+    socketio = app.extensions.get("socketio")
+    if socketio:
+        socketio.run(app, host="0.0.0.0", port=port, debug=debug_mode, allow_unsafe_werkzeug=True)
+    else:
+        app.run(host="0.0.0.0", port=port, debug=debug_mode, threaded=True)
