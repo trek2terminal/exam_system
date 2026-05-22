@@ -396,3 +396,15 @@ Completed in this batch:
 
 Still intentionally left for later phases:
 - Browser-test realtime push with two real browser sessions on the running LAN app.
+
+## Latest Implementation Batch 13 - 2026-05-22
+
+Completed in this batch:
+- Added a repeatable realtime smoke command: `python run.py smoke:realtime`.
+- The smoke command creates temporary admin, teacher, non-owner teacher, student, exam, question, and active session rows.
+- It verifies admin proctor room join, owning teacher proctor room join, non-owner teacher rejection, student private room join, bad student token rejection, student violation delivery to proctors, and admin message delivery to the student socket.
+- It disconnects all Socket.IO test clients and cleans up temporary database rows after the check.
+- Updated deployment notes so admins can run the realtime smoke check before exam day.
+
+Still intentionally left for later phases:
+- Browser-test the full React UI with two real browser sessions on the running LAN app.

@@ -130,6 +130,12 @@ if __name__ == "__main__":
         if cmd in {"unlock-admin", "admin-unlock"}:
             unlock_admin_account()
             sys.exit(0)
+        if cmd in {"smoke:realtime", "realtime-smoke", "smoke-realtime"}:
+            from app.utils.realtime_smoke import run_realtime_smoke
+
+            app = create_app()
+            ok = run_realtime_smoke(app)
+            sys.exit(0 if ok else 1)
 
     app = create_app()
     use_reloader = debug_mode and os.environ.get("FLASK_USE_RELOADER", "1") != "0"

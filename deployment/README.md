@@ -10,6 +10,14 @@ python run.py
 
 The terminal prints copy-ready Wi-Fi URLs for Admin, Teacher, and Student.
 
+Before exam day, run the realtime smoke check:
+
+```powershell
+python run.py smoke:realtime
+```
+
+It creates temporary admin/teacher/student/exam/session rows, verifies proctor room authorization, verifies the student private Socket.IO room, sends a test violation to proctors, sends an admin message to the student room, and then cleans up the temporary rows.
+
 ## Production-Style Python Server
 
 Install dependencies and run migrations:
