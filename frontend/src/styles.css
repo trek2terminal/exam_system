@@ -851,6 +851,176 @@ p {
   padding: 4px;
 }
 
+.teacherReviewWorkspace,
+.teacherMarkWorkspace {
+  display: grid;
+  gap: 18px;
+}
+
+.reviewHeader,
+.teacherSummaryBox,
+.teacherQuestionReview,
+.reviewTable,
+.stickySaveBar {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 12px 30px rgba(16, 24, 40, 0.06);
+}
+
+.reviewHeader {
+  padding: 22px;
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: center;
+}
+
+.reviewScoreBox {
+  min-width: 150px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  text-align: center;
+}
+
+.reviewScoreBox span,
+.reviewTableHead,
+.teacherSummaryBox label,
+.markGrid label {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.reviewScoreBox strong {
+  display: block;
+  font-size: 1.55rem;
+  color: var(--text);
+}
+
+.reviewTable {
+  display: grid;
+  overflow: hidden;
+}
+
+.reviewTableHead,
+.reviewRow {
+  display: grid;
+  grid-template-columns: minmax(210px, 1.4fr) 120px 100px 120px 100px minmax(180px, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 14px 16px;
+}
+
+.reviewTableHead {
+  background: rgba(102, 112, 133, 0.09);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+}
+
+.reviewRow {
+  border-top: 1px solid var(--border);
+}
+
+.reviewRow p {
+  margin-bottom: 0;
+}
+
+.teacherSummaryBox {
+  padding: 18px;
+  display: grid;
+  gap: 12px;
+}
+
+.teacherSummaryBox textarea,
+.markGrid input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+}
+
+.checkboxLine {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.teacherQuestionReviewList {
+  display: grid;
+  gap: 14px;
+}
+
+.teacherQuestionReview {
+  padding: 20px;
+  display: grid;
+  gap: 14px;
+}
+
+.answerReviewBox {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 13px;
+  background: rgba(102, 112, 133, 0.06);
+}
+
+.answerReviewBox.model {
+  background: rgba(37, 99, 235, 0.07);
+}
+
+.answerReviewBox pre,
+.answerReviewBox p {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  color: var(--text);
+}
+
+.answerReviewBox pre {
+  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+}
+
+.markGrid {
+  display: grid;
+  grid-template-columns: 180px minmax(240px, 1fr);
+  gap: 12px;
+}
+
+.markGrid label {
+  display: grid;
+  gap: 6px;
+}
+
+.stickySaveBar {
+  position: sticky;
+  bottom: 12px;
+  z-index: 30;
+  padding: 12px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.successBanner {
+  border: 1px solid rgba(15, 118, 110, 0.3);
+  border-radius: 8px;
+  padding: 13px 16px;
+  background: rgba(15, 118, 110, 0.1);
+  color: var(--success);
+  font-weight: 800;
+}
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+
 .questionNavFooter {
   display: flex;
   justify-content: space-between;
@@ -1026,5 +1196,23 @@ p {
   .questionNavFooter,
   .examHeaderActions {
     justify-content: stretch;
+  }
+
+  .reviewHeader,
+  .stickySaveBar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .reviewTableHead {
+    display: none;
+  }
+
+  .reviewRow {
+    grid-template-columns: 1fr;
+  }
+
+  .markGrid {
+    grid-template-columns: 1fr;
   }
 }

@@ -29,6 +29,7 @@ When `frontend/dist` exists, Flask serves the built migration shell at `/react`.
 - Open active attempts in `/react/exam/:sessionCode` with timer, question navigator, autosave, submit confirmation, integrity events, and Monaco-backed Python coding answers.
 - Code questions now include a real stdin textarea plus xterm-rendered output, and the exam route is lazy-loaded so Monaco/xterm do not bloat the dashboard bundle.
 - Timed questions show a countdown and lock locally when expired while the server remains the final enforcement point.
+- Teacher review is available under `/react/teacher/exam/:examId/review` and `/react/teacher/session/:sessionId/review` with marks, remarks, publish controls, answer PDF links, and classic Flask fallback links.
 - Load role dashboards from:
   - `/api/student/dashboard`
   - `/api/teacher/dashboard`
@@ -37,7 +38,7 @@ When `frontend/dist` exists, Flask serves the built migration shell at `/react`.
 
 ## Next Migration Tasks
 
-- Move student exam list and results screens into React.
-- Wrap the current Monaco/xterm coding experience as React components.
-- Add protected React routes per role.
-- Replace the Jinja dashboards only after feature parity is verified.
+- Browser-test the React student exam and teacher review flows with real sessions.
+- Move admin and teacher proctoring screens into React.
+- Add React notification/proctoring live updates once Socket.IO is verified interactively.
+- Replace individual Jinja pages only after each React page reaches parity and has a fallback path.

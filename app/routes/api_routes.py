@@ -5,7 +5,7 @@ from flask import Blueprint, current_app, jsonify, request, session, url_for
 from app.models.audit_model import AuditLog
 from app.models.database import db
 from app.models.exam_model import ExamEnrollment, ExamSet, Question
-from app.models.result_model import Result
+from app.models.result_model import QuestionMark, Result
 from app.models.submission_model import Answer, StudentSession
 from app.models.user_model import User
 from app.services.autosave_service import AutoSaveService
@@ -185,6 +185,66 @@ def _student_exam_action_payload(exam, student_session, attempts_remaining, wind
     }
 
 
+def _require_teacher_owner(exam_id=None, student_session=None):
+    teacher_id = session.get("teacher_id")
+    if session.get("role") != "teacher" or not teacher_id:
+        return None, (jsonify({"ok": False, "message": "Teacher login required"}), 401)
+
+    if student_session:
+        exam = student_session.exam_set
+    else:
+        exam = ExamSet.query.get_or_404(exam_id)
+
+    if exam.created_by != teacher_id:
+        return None, (jsonify({"ok": False, "message": "You do not have permission to view this exam."}), 403)
+    return exam, None
+
+
+def _question_payload(question):
+    return {
+        "id": question.id,
+        "question_number": question.question_number,
+        "question_text": question.question_text,
+        "question_type": question.question_type,
+        "marks": question.marks,
+        "options": question.options_as_list(),
+        "correct_answer": question.correct_answer,
+        "explanation": question.explanation,
+        "model_answer": question.model_answer,
+        "image_urls": [url_for("static", filename=path) for path in question.image_paths_as_list()],
+        "code_snippet": question.code_snippet,
+        "code_language": question.code_language or "python",
+    }
+
+
+def _session_review_summary(student_session):
+    result = student_session.result
+    return {
+        "id": student_session.id,
+        "session_code": student_session.session_code,
+        "student_name": student_session.student_name,
+        "roll_no": student_session.roll_no,
+        "status": student_session.status,
+        "focus_violations": student_session.focus_violations,
+        "started_at": _iso_datetime(student_session.start_time),
+        "submitted_at": _iso_datetime(student_session.submitted_at),
+        "result": {
+            "total_marks_obtained": result.total_marks_obtained,
+            "total_marks": result.total_marks,
+            "percentage": result.percentage,
+            "published": result.published,
+            "published_at": _iso_datetime(result.published_at),
+        }
+        if result
+        else None,
+        "links": {
+            "review": f"/react/teacher/session/{student_session.id}/review",
+            "flask_review": url_for("teacher.student_view", session_id=student_session.id),
+            "answer_pdf": url_for("teacher.student_answer_pdf", session_id=student_session.id),
+        },
+    }
+
+
 @api_bp.route("/bootstrap")
 def bootstrap():
     settings = SettingsService.get_settings()
@@ -358,9 +418,234 @@ def teacher_dashboard_api():
                     "duration_minutes": exam.duration_minutes,
                     "question_count": len(exam.questions),
                     "session_count": len(exam.sessions),
+                    "review_url": f"/react/teacher/exam/{exam.id}/review",
+                    "flask_results_url": url_for("teacher.exam_results", exam_id=exam.id),
                 }
                 for exam in exams
             ],
+        }
+    )
+
+
+@api_bp.route("/teacher/exam/<int:exam_id>/review")
+def teacher_exam_review_api(exam_id):
+    exam, error_response = _require_teacher_owner(exam_id=exam_id)
+    if error_response:
+        return error_response
+
+    sessions = (
+        StudentSession.query.filter_by(exam_set_id=exam.id)
+        .order_by(StudentSession.created_at.desc())
+        .all()
+    )
+    questions = Question.query.filter_by(exam_set_id=exam.id).order_by(Question.question_number.asc()).all()
+    evaluated_count = sum(1 for student_session in sessions if student_session.result)
+    published_count = sum(
+        1 for student_session in sessions if student_session.result and student_session.result.published
+    )
+    locked_count = sum(1 for student_session in sessions if student_session.status in LOCKED_SESSION_STATUSES)
+
+    return jsonify(
+        {
+            "ok": True,
+            "exam": {
+                "id": exam.id,
+                "exam_name": exam.exam_name,
+                "subject": exam.subject,
+                "set_code": exam.set_code,
+                "status": exam.status,
+                "access_code": exam.access_code,
+                "total_marks": exam.total_marks,
+                "duration_minutes": exam.duration_minutes,
+            },
+            "stats": {
+                "attempts": len(sessions),
+                "submitted": locked_count,
+                "evaluated": evaluated_count,
+                "published": published_count,
+                "pending_review": max(locked_count - evaluated_count, 0),
+            },
+            "questions": [_question_payload(question) for question in questions],
+            "sessions": [_session_review_summary(student_session) for student_session in sessions],
+            "links": {
+                "csv_export": url_for("teacher.export_exam_results", exam_id=exam.id),
+                "similarity": url_for("teacher.similarity_report", exam_id=exam.id),
+                "flask_results": url_for("teacher.exam_results", exam_id=exam.id),
+            },
+        }
+    )
+
+
+@api_bp.route("/teacher/exam/<int:exam_id>/publish-results", methods=["POST"])
+def teacher_publish_exam_results_api(exam_id):
+    exam, error_response = _require_teacher_owner(exam_id=exam_id)
+    if error_response:
+        return error_response
+
+    payload = _get_json_payload()
+    publish = bool(payload.get("publish"))
+    sessions = StudentSession.query.filter_by(exam_set_id=exam.id).all()
+    changed_count = 0
+
+    for student_session in sessions:
+        result = student_session.result
+        if not result:
+            continue
+        result.published = publish
+        result.published_at = datetime.utcnow() if publish else None
+        if publish:
+            student = User.query.filter(
+                User.role == "student",
+                db.func.upper(User.roll_number) == (student_session.roll_no or "").upper(),
+            ).first()
+            if student:
+                NotificationService.notify_user(
+                    student.id,
+                    f"Results published for {exam.exam_name}.",
+                    notification_type="result_published",
+                    related_entity_type="exam",
+                    related_entity_id=exam.id,
+                )
+        changed_count += 1
+
+    db.session.commit()
+    return jsonify({"ok": True, "changed": changed_count, "published": publish})
+
+
+@api_bp.route("/teacher/session/<int:session_id>/review", methods=["GET", "POST"])
+def teacher_session_review_api(session_id):
+    student_session = StudentSession.query.get_or_404(session_id)
+    exam, error_response = _require_teacher_owner(student_session=student_session)
+    if error_response:
+        return error_response
+
+    questions = Question.query.filter_by(exam_set_id=student_session.exam_set_id).order_by(Question.question_number.asc()).all()
+    answers = Answer.query.filter_by(session_id=student_session.id).all()
+    answer_by_question = {answer.question_id: answer for answer in answers}
+    result = Result.query.filter_by(session_id=student_session.id).first()
+
+    if request.method == "POST":
+        if student_session.status not in LOCKED_SESSION_STATUSES:
+            return jsonify({"ok": False, "message": "Marks can be saved after the student submits."}), 409
+
+        payload = _get_json_payload()
+        marks_items = payload.get("marks")
+        if not isinstance(marks_items, list):
+            return jsonify({"ok": False, "message": "Marks payload must be a list."}), 400
+
+        marks_by_question = {int(item.get("question_id")): item for item in marks_items if item.get("question_id")}
+        total_obtained = 0
+        total_possible = sum(question.marks for question in questions)
+        clean_marks = {}
+        clean_remarks = {}
+
+        for question in questions:
+            item = marks_by_question.get(question.id, {})
+            try:
+                marks_awarded = int(item.get("marks_awarded", 0) or 0)
+            except (TypeError, ValueError):
+                return jsonify({"ok": False, "message": f"Q{question.question_number} marks must be a number."}), 400
+            if marks_awarded < 0 or marks_awarded > question.marks:
+                return (
+                    jsonify(
+                        {
+                            "ok": False,
+                            "message": f"Q{question.question_number} marks must be between 0 and {question.marks}.",
+                        }
+                    ),
+                    400,
+                )
+            clean_marks[question.id] = marks_awarded
+            clean_remarks[question.id] = (item.get("teacher_remark") or "").strip()
+            total_obtained += marks_awarded
+
+        if not result:
+            result = Result(session_id=student_session.id)
+            db.session.add(result)
+            db.session.flush()
+        else:
+            QuestionMark.query.filter_by(result_id=result.id).delete()
+
+        result.total_marks = total_possible
+        result.total_marks_obtained = total_obtained
+        result.teacher_remarks = (payload.get("teacher_remarks") or "").strip()
+        result.evaluated_by = session.get("teacher_id")
+        result.published = bool(payload.get("published"))
+        result.published_at = datetime.utcnow() if result.published else None
+        result.calculate_percentage()
+
+        for question in questions:
+            db.session.add(
+                QuestionMark(
+                    result_id=result.id,
+                    question_id=question.id,
+                    marks_awarded=clean_marks[question.id],
+                    teacher_remark=clean_remarks[question.id],
+                )
+            )
+
+        student_session.status = "evaluated"
+        if result.published:
+            student = User.query.filter(
+                User.role == "student",
+                db.func.upper(User.roll_number) == (student_session.roll_no or "").upper(),
+            ).first()
+            if student:
+                NotificationService.notify_user(
+                    student.id,
+                    f"Results published for {exam.exam_name}.",
+                    notification_type="result_published",
+                    related_entity_type="student_session",
+                    related_entity_id=student_session.id,
+                )
+        db.session.commit()
+        result = Result.query.filter_by(session_id=student_session.id).first()
+
+    marks_by_question = {}
+    if result:
+        marks_by_question = {question_mark.question_id: question_mark for question_mark in result.question_marks}
+
+    review_questions = []
+    for question in questions:
+        answer = answer_by_question.get(question.id)
+        question_mark = marks_by_question.get(question.id)
+        review_questions.append(
+            {
+                **_question_payload(question),
+                "answer": {
+                    "answer_text": answer.answer_text if answer else "",
+                    "code_output": answer.code_output if answer else "",
+                    "execution_status": answer.execution_status if answer else None,
+                    "execution_time_ms": answer.execution_time_ms if answer else None,
+                    "saved_at": _iso_datetime(answer.saved_at) if answer else None,
+                },
+                "mark": {
+                    "marks_awarded": question_mark.marks_awarded if question_mark else 0,
+                    "teacher_remark": question_mark.teacher_remark if question_mark else "",
+                },
+            }
+        )
+
+    return jsonify(
+        {
+            "ok": True,
+            "exam": {
+                "id": exam.id,
+                "exam_name": exam.exam_name,
+                "subject": exam.subject,
+                "set_code": exam.set_code,
+                "total_marks": exam.total_marks,
+            },
+            "student_session": _session_review_summary(student_session),
+            "locked_for_review": student_session.status in LOCKED_SESSION_STATUSES,
+            "teacher_remarks": result.teacher_remarks if result else "",
+            "published": bool(result.published) if result else False,
+            "questions": review_questions,
+            "links": {
+                "exam_review": f"/react/teacher/exam/{exam.id}/review",
+                "answer_pdf": url_for("teacher.student_answer_pdf", session_id=student_session.id),
+                "flask_review": url_for("teacher.student_view", session_id=student_session.id),
+            },
         }
     )
 

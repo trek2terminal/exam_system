@@ -21,6 +21,7 @@ import {
 import { useAppStore } from "./store/appStore";
 
 const ExamInterface = lazy(() => import("./ExamInterface.jsx"));
+const TeacherReview = lazy(() => import("./TeacherReview.jsx"));
 
 const loginLinks = [
   { label: "Admin", href: "/admin/login" },
@@ -305,7 +306,11 @@ function TeacherDashboard({ dashboard }) {
             <h3>{exam.exam_name}</h3>
             <p>{exam.question_count} questions | {exam.session_count} sessions</p>
           </div>
-          <strong>{exam.total_marks} marks</strong>
+          <div className="actionRow">
+            <strong>{exam.total_marks} marks</strong>
+            <Link className="button primary" to={`/teacher/exam/${exam.id}/review`}>Review</Link>
+            <a className="button quiet" href={exam.flask_results_url}>Classic</a>
+          </div>
         </article>
       ))}
     </section>
@@ -360,6 +365,20 @@ function ProtectedExamRoute({ currentRole, settings }) {
   return (
     <Suspense fallback={<div className="loadingScreen">Loading exam workspace...</div>}>
       <ExamInterface />
+    </Suspense>
+  );
+}
+
+function ProtectedTeacherReviewRoute({ currentRole, settings, mode }) {
+  if (!currentRole) {
+    return <LoginPanel settings={settings} />;
+  }
+  if (currentRole !== "teacher") {
+    return <Navigate to={rolePaths[currentRole] || "/"} replace />;
+  }
+  return (
+    <Suspense fallback={<div className="loadingScreen">Loading review workspace...</div>}>
+      <TeacherReview mode={mode} />
     </Suspense>
   );
 }
@@ -423,6 +442,26 @@ export default function App() {
               currentRole={role}
               dashboard={dashboard}
               settings={bootstrap?.settings}
+            />
+          }
+        />
+        <Route
+          path="/teacher/exam/:examId/review"
+          element={
+            <ProtectedTeacherReviewRoute
+              currentRole={role}
+              settings={bootstrap?.settings}
+              mode="exam"
+            />
+          }
+        />
+        <Route
+          path="/teacher/session/:sessionId/review"
+          element={
+            <ProtectedTeacherReviewRoute
+              currentRole={role}
+              settings={bootstrap?.settings}
+              mode="session"
             />
           }
         />

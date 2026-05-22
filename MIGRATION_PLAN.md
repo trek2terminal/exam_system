@@ -321,3 +321,21 @@ Still intentionally left for later phases:
 - Browser-test Socket.IO live push behavior in a running interactive session.
 - Stronger external sandbox isolation for Python code execution.
 - HTTPS automation for final hosted deployment.
+
+## Latest Implementation Batch 8 - 2026-05-22
+
+Completed in this batch:
+- Added teacher review APIs for exam-level review data, per-student answer review, mark saving, result publish/hide, and teacher ownership enforcement.
+- Added backend validation for React-submitted marks so every question score must be numeric and within the question's max marks.
+- Added React teacher review routes at `/react/teacher/exam/:examId/review` and `/react/teacher/session/:sessionId/review`.
+- Updated the React teacher dashboard with Review and Classic links per exam.
+- Built the React exam review list with attempts, submitted/evaluated/published stats, CSV export, similarity report, publish evaluated, hide published, and per-student review links.
+- Built the React per-student marking screen with model answers, submitted answers, coding output, marks, remarks, summary teacher remarks, publish checkbox, answer PDF link, and classic fallback link.
+- Verified lint, production build, React route serving, split teacher review asset serving, `/api/bootstrap`, and temporary authenticated teacher review API smoke tests including save/publish.
+
+Still intentionally left for later phases:
+- Browser-test the React teacher review screens with real submissions.
+- Move admin/teacher proctoring screens into React.
+- Browser-test Socket.IO live push behavior in a running interactive session.
+- Stronger external sandbox isolation for Python code execution.
+- HTTPS automation for final hosted deployment.
