@@ -25,6 +25,7 @@ When `frontend/dist` exists, Flask serves the built migration shell at `/react`.
 - Bootstrap current role/session state from `/api/bootstrap`.
 - Route role dashboards under `/react/student`, `/react/teacher`, and `/react/admin`.
 - Persist the light/dark theme preference in the browser.
+- Render the student dashboard with assigned-exam cards, countdowns, attempt status, published-result summaries, and secure action forms back to Flask.
 - Load role dashboards from:
   - `/api/student/dashboard`
   - `/api/teacher/dashboard`

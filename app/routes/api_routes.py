@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from flask import Blueprint, current_app, jsonify, request, session
+from flask import Blueprint, current_app, jsonify, request, session, url_for
 
 from app.models.audit_model import AuditLog
 from app.models.database import db
@@ -11,7 +11,7 @@ from app.models.user_model import User
 from app.services.autosave_service import AutoSaveService
 from app.services.code_execution_service import CodeExecutionService
 from app.services.exam_service import ExamService
-from app.services.exam_session_guard import ExamSessionGuard, MUTABLE_SESSION_STATUS
+from app.services.exam_session_guard import ExamSessionGuard, LOCKED_SESSION_STATUSES, MUTABLE_SESSION_STATUS
 from app.services.notification_service import NotificationService
 from app.services.result_service import ResultService
 from app.services.security_service import SecurityService
@@ -111,6 +111,71 @@ def _parse_int_field(payload, field_name):
         return None
 
 
+def _iso_datetime(value):
+    return value.isoformat() if value else None
+
+
+def _student_exam_window_payload(exam, student_session=None, now=None):
+    now = now or datetime.utcnow()
+    time_state = None
+    if student_session and student_session.status not in LOCKED_SESSION_STATUSES:
+        time_state = ExamService.enforce_time_window(student_session)
+    elif exam.has_ended(now):
+        time_state = "ended"
+    elif not exam.has_started(now):
+        time_state = "not_started"
+    else:
+        time_state = "open"
+
+    return {
+        "time_state": time_state,
+        "is_open": exam.is_open_for_student(now),
+        "has_started": exam.has_started(now),
+        "has_ended": exam.has_ended(now),
+        "seconds_until_start": max(int((exam.start_time - now).total_seconds()), 0) if exam.start_time else 0,
+        "seconds_until_end": max(int((exam.end_time - now).total_seconds()), 0) if exam.end_time else None,
+    }
+
+
+def _student_exam_action_payload(exam, student_session, attempts_remaining, window):
+    locked = bool(student_session and student_session.status in LOCKED_SESSION_STATUSES)
+    no_attempts_left = attempts_remaining == 0
+
+    if locked and no_attempts_left:
+        return {
+            "label": "View submission",
+            "href": url_for("student.submitted", session_code=student_session.session_code),
+            "method": "get",
+            "variant": "secondary",
+            "disabled": False,
+        }
+
+    if exam.status == "closed" or window.get("has_ended"):
+        return {
+            "label": "Closed",
+            "href": None,
+            "method": "get",
+            "variant": "secondary",
+            "disabled": True,
+        }
+
+    if locked:
+        label = "Start next attempt"
+    elif exam.status == "active" and window.get("is_open"):
+        label = "Resume" if student_session else "Start exam"
+    else:
+        label = "Join waiting room"
+
+    return {
+        "label": label,
+        "ready_label": "Start exam" if exam.status == "active" else label,
+        "href": url_for("student.start_assigned_exam", exam_id=exam.id),
+        "method": "post",
+        "variant": "primary",
+        "disabled": False,
+    }
+
+
 @api_bp.route("/bootstrap")
 def bootstrap():
     settings = SettingsService.get_settings()
@@ -150,6 +215,7 @@ def student_dashboard_api():
         return jsonify({"ok": False, "message": "Student login required"}), 401
 
     roll_no = (session.get("roll_no") or "").strip().upper()
+    now = datetime.utcnow()
     enrollments = (
         ExamEnrollment.query.filter(db.func.upper(ExamEnrollment.roll_no) == roll_no)
         .join(ExamSet)
@@ -158,6 +224,13 @@ def student_dashboard_api():
     )
     settings = SettingsService.get_settings()
     cards = []
+    stats = {
+        "assigned": 0,
+        "available": 0,
+        "upcoming": 0,
+        "submitted": 0,
+        "published_results": 0,
+    }
     for enrollment in enrollments:
         exam = enrollment.exam_set
         latest_session = (
@@ -168,6 +241,25 @@ def student_dashboard_api():
             .order_by(StudentSession.created_at.desc())
             .first()
         )
+        attempts_remaining = ExamService.attempts_remaining(exam.id, roll_no)
+        window = _student_exam_window_payload(exam, latest_session, now=now)
+        action = _student_exam_action_payload(exam, latest_session, attempts_remaining, window)
+        published_result = (
+            latest_session.result
+            if latest_session and latest_session.result and latest_session.result.published
+            else None
+        )
+
+        stats["assigned"] += 1
+        if window["is_open"] and exam.status == "active":
+            stats["available"] += 1
+        if window["time_state"] == "not_started":
+            stats["upcoming"] += 1
+        if latest_session and latest_session.status in LOCKED_SESSION_STATUSES:
+            stats["submitted"] += 1
+        if published_result:
+            stats["published_results"] += 1
+
         cards.append(
             {
                 "exam_id": exam.id,
@@ -175,27 +267,62 @@ def student_dashboard_api():
                 "subject": exam.subject,
                 "set_code": exam.set_code,
                 "status": exam.status,
-                "start_time": exam.start_time.isoformat() if exam.start_time else None,
-                "end_time": exam.end_time.isoformat() if exam.end_time else None,
+                "start_time": _iso_datetime(exam.start_time),
+                "end_time": _iso_datetime(exam.end_time),
                 "duration_minutes": exam.duration_minutes,
+                "extra_time_minutes": enrollment.extra_time_minutes or 0,
+                "effective_duration_minutes": exam.duration_minutes + int(enrollment.extra_time_minutes or 0),
+                "total_marks": exam.total_marks,
+                "question_count": len(exam.questions),
+                "attempt_limit": exam.attempt_limit,
                 "attempt_count": ExamService.attempt_count(exam.id, roll_no),
-                "attempts_remaining": ExamService.attempts_remaining(exam.id, roll_no),
+                "attempts_remaining": attempts_remaining,
+                "window": window,
+                "action": action,
                 "latest_session": {
                     "session_code": latest_session.session_code,
                     "status": latest_session.status,
                     "remaining_seconds": ExamService.remaining_seconds_for_session(latest_session),
+                    "focus_violations": latest_session.focus_violations,
+                    "submitted_at": _iso_datetime(latest_session.submitted_at),
                 }
                 if latest_session
+                else None,
+                "result": {
+                    "total_marks_obtained": published_result.total_marks_obtained,
+                    "total_marks": published_result.total_marks,
+                    "percentage": published_result.percentage,
+                    "published_at": _iso_datetime(published_result.published_at),
+                    "href": url_for("student.submitted", session_code=latest_session.session_code),
+                    "pdf_href": url_for("student.result_pdf", session_code=latest_session.session_code),
+                }
+                if published_result
                 else None,
             }
         )
 
+    hour = datetime.now().hour
+    if hour < 12:
+        greeting = "Good morning"
+    elif hour < 17:
+        greeting = "Good afternoon"
+    else:
+        greeting = "Good evening"
+
     return jsonify(
         {
             "ok": True,
-            "student": {"name": session.get("student_name"), "roll_no": roll_no},
+            "student": {"name": session.get("student_name"), "roll_no": roll_no, "greeting": greeting},
             "quote": SettingsService.random_quote(settings),
+            "announcement_message": settings.announcement_message if settings else None,
+            "server_time": _iso_datetime(now),
+            "stats": stats,
             "exams": cards,
+            "links": {
+                "join_exam": url_for("student.join_exam"),
+                "results": url_for("student.results"),
+                "dashboard": url_for("student.dashboard"),
+            },
         }
     )
 

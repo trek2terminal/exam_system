@@ -232,6 +232,268 @@ p {
   gap: 18px;
 }
 
+.studentWorkspace {
+  display: grid;
+  gap: 18px;
+}
+
+.announcement,
+.studentHero,
+.studentStats article,
+.studentExamCard,
+.emptyState {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 12px 30px rgba(16, 24, 40, 0.06);
+}
+
+.announcement {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 16px;
+  color: var(--text);
+  border-left: 4px solid var(--warning);
+}
+
+.studentHero {
+  min-height: 190px;
+  padding: 30px;
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: center;
+}
+
+.studentHero h2 {
+  max-width: 780px;
+  font-size: clamp(2rem, 4vw, 3.6rem);
+}
+
+.studentIdentity {
+  min-width: 190px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+}
+
+.studentIdentity span,
+.studentIdentity small,
+.examMetaGrid span,
+.sessionStrip span,
+.examTimeline span {
+  color: var(--muted);
+}
+
+.studentIdentity strong {
+  font-size: 1.5rem;
+}
+
+.studentStats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.studentStats article {
+  padding: 16px;
+  display: grid;
+  gap: 8px;
+}
+
+.studentStats svg {
+  color: var(--primary);
+}
+
+.studentStats span {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.studentStats strong {
+  font-size: 1.8rem;
+}
+
+.rowBetween {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 16px;
+}
+
+.actionRow,
+.examActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.button {
+  min-height: 42px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+
+.button:hover {
+  transform: translateY(-1px);
+}
+
+.button.primary {
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 12px 24px rgba(37, 99, 235, 0.18);
+}
+
+.button.secondary,
+.button.quiet {
+  background: var(--panel);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.button.quiet {
+  min-width: 60px;
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+  transform: none;
+  box-shadow: none;
+}
+
+.studentExamGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+  gap: 14px;
+}
+
+.studentExamCard {
+  padding: 18px;
+  display: grid;
+  gap: 16px;
+  border-top: 4px solid var(--border);
+  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+
+.studentExamCard:hover {
+  border-color: rgba(37, 99, 235, 0.35);
+  box-shadow: 0 18px 36px rgba(16, 24, 40, 0.09);
+  transform: translateY(-2px);
+}
+
+.studentExamCard.active,
+.studentExamCard.result {
+  border-top-color: var(--success);
+}
+
+.studentExamCard.upcoming {
+  border-top-color: var(--warning);
+}
+
+.studentExamCard.closed,
+.studentExamCard.submitted {
+  border-top-color: var(--muted);
+}
+
+.examCardHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.examIcon {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: rgba(37, 99, 235, 0.1);
+  color: var(--primary);
+}
+
+.examMetaGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.examMetaGrid div {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 11px;
+  display: grid;
+  gap: 4px;
+}
+
+.examTimeline,
+.sessionStrip,
+.resultStrip,
+.softNote {
+  border-radius: 8px;
+  padding: 11px 12px;
+}
+
+.examTimeline {
+  display: grid;
+  gap: 7px;
+  background: rgba(37, 99, 235, 0.06);
+}
+
+.examTimeline span,
+.resultStrip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.examTimeline strong {
+  color: var(--warning);
+}
+
+.sessionStrip {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  background: rgba(102, 112, 133, 0.09);
+}
+
+.resultStrip {
+  background: rgba(15, 118, 110, 0.1);
+  color: var(--success);
+}
+
+.softNote {
+  background: rgba(217, 119, 6, 0.1);
+  color: var(--warning);
+  font-weight: 700;
+}
+
+.examActions form {
+  margin: 0;
+}
+
+.emptyState {
+  min-height: 260px;
+  padding: 32px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  gap: 10px;
+}
+
 .heroCard {
   padding: 28px;
 }
@@ -268,6 +530,17 @@ p {
 .status.active {
   background: #ecfdf3;
   color: var(--success);
+}
+
+.status.result,
+.status.submitted {
+  background: #ecfdf3;
+  color: var(--success);
+}
+
+.status.upcoming {
+  background: #fffbeb;
+  color: var(--warning);
 }
 
 .status.closed,
@@ -331,5 +604,15 @@ p {
 
   .contentGrid {
     grid-template-columns: 1fr;
+  }
+
+  .studentHero,
+  .rowBetween {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .studentStats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

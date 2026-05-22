@@ -269,3 +269,18 @@ Still intentionally left for later phases:
 - Browser verification of Socket.IO push behavior and React UI behavior in the running app.
 - Stronger external sandbox isolation for Python code execution.
 - HTTPS automation for final hosted deployment.
+
+## Latest Implementation Batch 5 - 2026-05-22
+
+Completed in this batch:
+- Expanded `/api/student/dashboard` with student greeting, announcement message, server time, dashboard stats, exam timing windows, attempt counts, result summaries, and server-built action links.
+- Kept student exam actions routed through the existing Flask routes, so start/resume/waiting/submission behavior still uses the protected backend flow.
+- Upgraded the React student dashboard with assigned-exam cards, live countdowns, available/upcoming/result stats, result score strips, access-code/result links, empty state, and responsive card layout.
+- Rebuilt the React production bundle and verified `/react`, `/react/student`, generated assets, `/api/bootstrap`, and authenticated/anonymous student dashboard API behavior.
+
+Still intentionally left for later phases:
+- Move the actual exam-taking interface into React after the dashboard parity layer is stable.
+- Move teacher review and admin/teacher proctoring screens into React.
+- Browser-test Socket.IO live push behavior in a running interactive session.
+- Stronger external sandbox isolation for Python code execution.
+- HTTPS automation for final hosted deployment.
