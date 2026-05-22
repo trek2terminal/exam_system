@@ -6,15 +6,25 @@ This is the Vite/React migration workspace. It currently reads live data from th
 
 ```powershell
 cd frontend
-npm install
-npm run dev
+npm.cmd install
+npm.cmd run dev
 ```
 
 Vite proxies `/api`, `/student`, `/teacher`, and `/admin` to `http://127.0.0.1:8000`.
 
+Production build:
+
+```powershell
+npm.cmd run build
+```
+
+When `frontend/dist` exists, Flask serves the built migration shell at `/react`.
+
 ## Current Scope
 
 - Bootstrap current role/session state from `/api/bootstrap`.
+- Route role dashboards under `/react/student`, `/react/teacher`, and `/react/admin`.
+- Persist the light/dark theme preference in the browser.
 - Load role dashboards from:
   - `/api/student/dashboard`
   - `/api/teacher/dashboard`

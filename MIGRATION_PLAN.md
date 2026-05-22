@@ -250,3 +250,22 @@ Still intentionally left for later phases:
 - Browser verification of Socket.IO push behavior on the final installed environment.
 - Stronger external sandbox isolation for Python code execution.
 - HTTPS automation for final hosted deployment.
+
+## Latest Implementation Batch 4 - 2026-05-22
+
+Completed in this batch:
+- Verified Node.js and npm are installed on the machine.
+- Verified the React/Vite production build with `npm.cmd run build`.
+- Added `.gitignore` entries for Python caches, local database/log artifacts, frontend dependencies, and frontend production build output.
+- Configured Vite with `/react/` as its production base path.
+- Added Flask static serving for the built React migration shell at `/react`, while preserving the existing Jinja app routes.
+- Added an ESLint 9 flat config for the React workspace so `npm.cmd run lint` works.
+- Added React Router role routes under `/react/student`, `/react/teacher`, and `/react/admin` with role redirects.
+- Added a persisted light/dark theme toggle and notification badge shell for the React UI.
+- Updated the frontend README with Windows-safe `npm.cmd` commands and the Flask `/react` preview path.
+
+Still intentionally left for later phases:
+- Move full student exam-taking, teacher review, and admin proctoring screens into React after parity checks.
+- Browser verification of Socket.IO push behavior and React UI behavior in the running app.
+- Stronger external sandbox isolation for Python code execution.
+- HTTPS automation for final hosted deployment.

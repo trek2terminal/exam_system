@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+*.pyo
+
+.env
+.venv/
+venv/
+
+instance/*.db
+logs/*.log
+data/backups/
+app/static/uploads/exports/
+
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/

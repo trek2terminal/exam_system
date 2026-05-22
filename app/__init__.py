@@ -1,6 +1,7 @@
 import os
 from time import monotonic
-from flask import Flask
+from flask import Flask, send_from_directory
+from werkzeug.utils import safe_join
 from config import DevelopmentConfig, ProductionConfig
 
 # Import extensions
@@ -77,6 +78,20 @@ def create_app(config_class=None):
     app.register_blueprint(teacher_bp)
     app.register_blueprint(student_bp)
     app.register_blueprint(api_bp)
+
+    # Serve the React migration shell when a production build exists.
+    frontend_dist = os.path.join(project_root, "frontend", "dist")
+    frontend_index = os.path.join(frontend_dist, "index.html")
+    if os.path.isfile(frontend_index):
+        @app.route("/react")
+        @app.route("/react/")
+        @app.route("/react/<path:path>")
+        def react_frontend(path=""):
+            if path:
+                requested_path = safe_join(frontend_dist, path)
+                if requested_path and os.path.isfile(requested_path):
+                    return send_from_directory(frontend_dist, path)
+            return send_from_directory(frontend_dist, "index.html")
 
     try:
         from app.socketio.realtime_events import init_socketio
