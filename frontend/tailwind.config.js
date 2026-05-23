@@ -108,6 +108,10 @@ export default {
           "0%": { transform: "rotateX(0deg)" },
           "50%": { transform: "rotateX(-18deg)" },
           "100%": { transform: "rotateX(0deg)" }
+        },
+        "lightbox-image": {
+          from: { opacity: "0", transform: "scale(0.8)" },
+          to: { opacity: "1", transform: "scale(1)" }
         }
       },
       animation: {
@@ -121,7 +125,8 @@ export default {
         "warning-bounce": "warning-bounce 300ms ease both",
         "soft-pulse": "soft-pulse 1.2s ease-in-out infinite",
         "float-slow": "float-slow 5s ease-in-out infinite",
-        "flip-second": "flip-second 240ms ease"
+        "flip-second": "flip-second 240ms ease",
+        "lightbox-image": "lightbox-image 200ms ease both"
       }
     }
   },

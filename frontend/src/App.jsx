@@ -7,15 +7,19 @@ import {
   CheckCircle2,
   Clock3,
   DoorOpen,
+  Edit3,
   FileText,
   KeyRound,
   LogIn,
+  MoreHorizontal,
   Play,
+  Plus,
   Radio,
-  Trophy
+  Trophy,
+  Users
 } from "lucide-react";
 import { PageLayout } from "./components/layout/PageLayout";
-import { Badge, Button, Card, StatCard } from "./components/ui";
+import { Badge, Button, Card, EmptyState, StatCard } from "./components/ui";
 import { cn } from "./components/ui/utils";
 import { useAppStore } from "./store/appStore";
 import { api } from "./services/api";
@@ -26,6 +30,7 @@ const Proctoring = lazy(() => import("./Proctoring.jsx"));
 
 // Page Components
 const StudentResults = lazy(() => import("./pages/StudentResults.jsx"));
+const StudentHistory = lazy(() => import("./pages/StudentHistory.jsx"));
 const LoginPage = lazy(() => import("./pages/LoginPage.jsx"));
 const RegisterPage = lazy(() => import("./pages/RegisterPage.jsx"));
 const ExamEditor = lazy(() => import("./pages/ExamEditor.jsx"));
@@ -54,6 +59,44 @@ function formatCountdown(totalSeconds) {
   if (days > 0) return `${days}d ${hours}h`;
   if (hours > 0) return `${hours}h ${minutes}m`;
   return `${minutes}m`;
+}
+
+function countdownParts(totalSeconds) {
+  const seconds = Math.max(Math.floor(totalSeconds || 0), 0);
+  return {
+    days: Math.floor(seconds / 86400),
+    hours: Math.floor((seconds % 86400) / 3600),
+    minutes: Math.floor((seconds % 3600) / 60),
+    seconds: seconds % 60
+  };
+}
+
+function FlipCountdown({ totalSeconds }) {
+  const parts = countdownParts(totalSeconds);
+  const [flip, setFlip] = useState(false);
+  const secondsUnit = parts.seconds % 10;
+  const secondsTens = Math.floor(parts.seconds / 10);
+
+  useEffect(() => {
+    setFlip(true);
+    const timeoutId = window.setTimeout(() => setFlip(false), 240);
+    return () => window.clearTimeout(timeoutId);
+  }, [secondsUnit]);
+
+  const prefix = parts.days > 0
+    ? `${parts.days}d ${parts.hours}h ${parts.minutes}m `
+    : parts.hours > 0
+      ? `${parts.hours}h ${parts.minutes}m `
+      : `${parts.minutes}m `;
+
+  return (
+    <span className="inline-flex items-center font-mono tabular-nums text-text-primary">
+      {prefix}
+      <span>{secondsTens}</span>
+      <span className={cn("inline-block origin-center", flip && "animate-flip-second")}>{secondsUnit}</span>
+      <span>s</span>
+    </span>
+  );
 }
 
 function formatDateTime(value) {
@@ -318,7 +361,7 @@ function StudentExamCard({ exam, elapsedSeconds }) {
         )}
         {secondsUntilStart > 0 && (
           <div className="font-semibold text-text-secondary">
-            Starts in {formatCountdown(secondsUntilStart)}
+            Starts in <FlipCountdown totalSeconds={secondsUntilStart} />
           </div>
         )}
       </div>
@@ -379,30 +422,131 @@ function StudentExamCard({ exam, elapsedSeconds }) {
 }
 
 function TeacherDashboard({ dashboard }) {
+  const exams = dashboard?.exams || [];
+  const stats = {
+    total: exams.length,
+    published: exams.filter(exam => ["active", "published"].includes(exam.status)).length,
+    pending: exams.reduce((sum, exam) => sum + Number(exam.pending_review_count || 0), 0),
+    enrolled: exams.reduce((sum, exam) => sum + Number(exam.enrolled_count || exam.session_count || 0), 0)
+  };
+
   return (
-    <div className="cardList">
-      <div className="rowBetween">
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <span className="eyebrow">Teacher workspace</span>
-          <h2>My exams</h2>
+          <h2 className="text-3xl font-bold text-text-primary">My Exams</h2>
+          <p className="text-text-secondary">Create, review, and monitor your assessments.</p>
         </div>
-        <Button variant="primary" size="sm" as={Link} to="/teacher/proctoring"><Radio size={18} /> Live proctoring</Button>
+        <Button variant="primary" as={Link} to="/teacher/exam/new">
+          <Plus size={18} /> New Exam
+        </Button>
       </div>
-      {(dashboard?.exams || []).map(exam => (
-        <Card key={exam.id} className="examCard">
-          <div>
-            <Badge variant={exam.status === "active" ? "success" : "secondary"} size="sm">{exam.status}</Badge>
-            <h3>{exam.exam_name}</h3>
-            <p>{exam.question_count} questions | {exam.session_count} sessions</p>
+
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard icon={BookOpenCheck} label="Total Exams" value={stats.total} />
+        <StatCard icon={CheckCircle2} label="Published Exams" value={stats.published} />
+        <StatCard icon={FileText} label="Pending Reviews" value={stats.pending} />
+        <StatCard icon={Users} label="Students Enrolled" value={stats.enrolled} />
+      </section>
+
+      <section className="space-y-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <h3 className="text-2xl font-bold text-text-primary">Exam Library</h3>
+            <Badge variant="purple" size="md">{exams.length}</Badge>
           </div>
-          <div className="actionRow">
-            <strong>{exam.total_marks} marks</strong>
-            <Button variant="primary" size="sm" as={Link} to={`/teacher/exam/${exam.id}/review`}>Review</Button>
-            <Button as="a" variant="ghost" size="sm" href={exam.flask_results_url}>Classic</Button>
+          <Button variant="secondary" size="sm" as={Link} to="/teacher/proctoring">
+            <Radio size={17} /> Live proctoring
+          </Button>
+        </div>
+
+        {exams.length > 0 ? (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {exams.map((exam, index) => (
+              <TeacherExamCard exam={exam} key={exam.id} index={index} />
+            ))}
           </div>
-        </Card>
-      ))}
+        ) : (
+          <EmptyState
+            icon={BookOpenCheck}
+            heading="No exams yet"
+            description="Create your first exam and it will appear here with review and proctoring actions."
+            action={{ label: "Create your first exam", href: "/react/teacher/exam/new" }}
+          />
+        )}
+      </section>
     </div>
+  );
+}
+
+function teacherExamTone(status) {
+  if (["active", "published"].includes(status)) return { badge: "success", strip: "bg-success" };
+  if (status === "draft") return { badge: "secondary", strip: "bg-text-muted" };
+  if (status === "closed") return { badge: "danger", strip: "bg-danger" };
+  return { badge: "warning", strip: "bg-warning" };
+}
+
+function TeacherExamCard({ exam, index }) {
+  const tone = teacherExamTone(exam.status);
+  const submitted = exam.submitted_count ?? exam.session_count ?? 0;
+  const pending = exam.pending_review_count ?? 0;
+  const enrolled = exam.enrolled_count ?? exam.session_count ?? 0;
+
+  return (
+    <Card className="overflow-hidden animate-fade-in-up" style={{ "--stagger-delay": `${index * 50}ms`, animationDelay: `${index * 50}ms` }}>
+      <div className={cn("h-1.5", tone.strip)} />
+      <div className="grid gap-4 p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <Badge variant={tone.badge}>{exam.status}</Badge>
+            <h4 className="mt-3 truncate text-lg font-semibold text-text-primary">{exam.exam_name}</h4>
+            <p className="truncate text-sm text-text-secondary">{exam.subject} {exam.set_code ? `| Set ${exam.set_code}` : ""}</p>
+          </div>
+          <details className="relative">
+            <summary className="grid h-10 w-10 cursor-pointer list-none place-items-center rounded-md text-text-muted transition hover:bg-background-elevated hover:text-text-primary">
+              <MoreHorizontal size={18} />
+            </summary>
+            <div className="absolute right-0 top-full z-20 mt-2 w-44 overflow-hidden rounded-md border border-border bg-background-surface shadow-elevated">
+              <a className="flex min-h-11 items-center gap-2 px-3 text-sm font-semibold text-text-secondary hover:bg-background-elevated" href={exam.flask_results_url}>
+                <FileText size={16} /> Classic results
+              </a>
+              <span className="flex min-h-11 items-center gap-2 px-3 text-sm font-semibold text-text-muted opacity-60">
+                <FileText size={16} /> Duplicate pending
+              </span>
+            </div>
+          </details>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 text-sm">
+          <Badge variant="info">{exam.question_count || 0} questions</Badge>
+          <Badge variant="purple">{enrolled} enrolled</Badge>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-md border border-border bg-background-base p-3">
+            <span className="text-xs font-semibold text-text-muted">Submitted</span>
+            <strong className="block text-xl text-text-primary">{submitted}</strong>
+          </div>
+          <div className="rounded-md border border-border bg-background-base p-3">
+            <span className="text-xs font-semibold text-text-muted">Pending Review</span>
+            <strong className="block text-xl text-text-primary">{pending}</strong>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" size="sm" as={Link} to={`/teacher/exam/${exam.id}/edit`}>
+            <Edit3 size={16} /> Edit
+          </Button>
+          <Button variant="primary" size="sm" as={Link} to={`/teacher/exam/${exam.id}/review`}>
+            <FileText size={16} /> Review
+          </Button>
+          <Button variant="ghost" size="sm" as={Link} to="/teacher/proctoring">
+            <Radio size={16} /> Proctor
+          </Button>
+        </div>
+      </div>
+    </Card>
   );
 }
 
@@ -665,7 +809,9 @@ export default function App() {
         <Route
           path="/student/history"
           element={role === "student" ? (
-            <PlaceholderPage title="Exam History" eyebrow="Student workspace" description="Completed attempts and submission history will appear here as the React migration expands." />
+            <PageSuspense label="Loading exam history...">
+              <StudentHistory />
+            </PageSuspense>
           ) : (
             <LoginPanel settings={bootstrap?.settings} />
           )}
@@ -694,6 +840,16 @@ export default function App() {
           path="/teacher/exams"
           element={role === "teacher" ? (
             <TeacherDashboard dashboard={dashboard} />
+          ) : (
+            <LoginPanel settings={bootstrap?.settings} />
+          )}
+        />
+        <Route
+          path="/teacher/exam/new"
+          element={role === "teacher" ? (
+            <PageSuspense label="Loading exam editor...">
+              <ExamEditor />
+            </PageSuspense>
           ) : (
             <LoginPanel settings={bootstrap?.settings} />
           )}

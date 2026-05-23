@@ -14,5 +14,6 @@ export { StepWizard } from "./StepWizard";
 export { Table } from "./Table";
 export { Textarea } from "./Textarea";
 export { ToastViewport, notify } from "./Toast";
+export { Toggle } from "./Toggle";
 export { Tooltip } from "./Tooltip";
 export { cn } from "./utils";

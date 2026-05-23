@@ -175,6 +175,7 @@ export default function ExamEditor() {
         title="Delete Question?"
         description="This question will be permanently removed from the exam."
         confirmLabel="Delete"
+        confirmWord="DELETE"
         variant="danger"
         onConfirm={confirmDelete}
         onClose={() => setShowDeleteConfirm(false)}

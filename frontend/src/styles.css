@@ -1690,3 +1690,30 @@ p {
     grid-template-columns: 1fr;
   }
 }
+
+@media (min-width: 768px) {
+  .reactExamGrid {
+    grid-template-columns: 200px minmax(0, 1fr);
+    transition: grid-template-columns 200ms ease;
+  }
+
+  .reactExamGrid.navigatorCollapsed {
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+
+  .reactQuestionPanel {
+    min-width: 0;
+    transition: width 200ms ease;
+  }
+
+  .collapsedNavigatorCard {
+    padding: 4px;
+    overflow: hidden;
+  }
+}
+
+@media (max-width: 767px) {
+  .reactExamGrid {
+    grid-template-columns: 1fr;
+  }
+}

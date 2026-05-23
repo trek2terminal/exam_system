@@ -19,6 +19,7 @@ import { api } from "./services/api";
 import { createRealtimeSocket } from "./services/realtime";
 import { Button } from "./components/ui/Button";
 import { Card } from "./components/ui/Card";
+import { ConfirmationDialog } from "./components/ui/ConfirmationDialog";
 import { Badge } from "./components/ui/Badge";
 import { Input } from "./components/ui/Input";
 import { Textarea } from "./components/ui/Textarea";
@@ -347,6 +348,7 @@ function SessionDetail({ sessionItem, isAdmin, onActionMessage, onActionError, o
   const [minutes, setMinutes] = useState(5);
   const [studentMessage, setStudentMessage] = useState("");
   const [busyAction, setBusyAction] = useState("");
+  const [pendingAction, setPendingAction] = useState("");
 
   const runAction = async action => {
     onActionError("");
@@ -354,9 +356,6 @@ function SessionDetail({ sessionItem, isAdmin, onActionMessage, onActionError, o
 
     if (!adminPassword.trim()) {
       onActionError("Enter your admin password before taking a proctoring action.");
-      return;
-    }
-    if (action === "terminate" && !window.confirm(`Terminate ${sessionItem.student_name}'s exam?`)) {
       return;
     }
 
@@ -377,6 +376,20 @@ function SessionDetail({ sessionItem, isAdmin, onActionMessage, onActionError, o
     } finally {
       setBusyAction("");
     }
+  };
+
+  const requestAction = action => {
+    if (action === "terminate") {
+      onActionError("");
+      onActionMessage("");
+      if (!adminPassword.trim()) {
+        onActionError("Enter your admin password before taking a proctoring action.");
+        return;
+      }
+      setPendingAction("terminate");
+      return;
+    }
+    runAction(action);
   };
 
   return (
@@ -432,33 +445,47 @@ function SessionDetail({ sessionItem, isAdmin, onActionMessage, onActionError, o
               value={minutes}
               onChange={event => setMinutes(event.target.value)}
             />
-            <Button variant="secondary" size="sm" disabled={Boolean(busyAction)} onClick={() => runAction("reduce_time")}>
+            <Button variant="secondary" size="sm" disabled={Boolean(busyAction)} onClick={() => requestAction("reduce_time")}>
               <TimerReset size={18} /> Reduce
             </Button>
           </div>
           <div className="actionRow">
-            <Button variant="danger" size="sm" disabled={Boolean(busyAction)} onClick={() => runAction("terminate")}>
+            <Button variant="danger" size="sm" disabled={Boolean(busyAction)} onClick={() => requestAction("terminate")}>
               <XCircle size={18} /> Terminate
             </Button>
-            <Button variant="secondary" size="sm" disabled={Boolean(busyAction)} onClick={() => runAction("second_chance")}>
+            <Button variant="secondary" size="sm" disabled={Boolean(busyAction)} onClick={() => requestAction("second_chance")}>
               <UserCheck size={18} /> Second chance
             </Button>
             {sessionItem.status === "paused" ? (
-              <Button variant="primary" size="sm" disabled={Boolean(busyAction)} onClick={() => runAction("resume")}>
+              <Button variant="primary" size="sm" disabled={Boolean(busyAction)} onClick={() => requestAction("resume")}>
                 <PlayCircle size={18} /> Resume
               </Button>
             ) : (
-              <Button variant="secondary" size="sm" disabled={Boolean(busyAction)} onClick={() => runAction("pause")}>
+              <Button variant="secondary" size="sm" disabled={Boolean(busyAction)} onClick={() => requestAction("pause")}>
                 <PauseCircle size={18} /> Pause
               </Button>
             )}
-            <Button variant="primary" size="sm" disabled={Boolean(busyAction)} onClick={() => runAction("message")}>
+            <Button variant="primary" size="sm" disabled={Boolean(busyAction)} onClick={() => requestAction("message")}>
               <MessageSquare size={18} /> Send message
             </Button>
           </div>
           {busyAction && <span className="savingHint">Applying {busyAction.replace("_", " ")}...</span>}
         </Card>
       )}
+      <ConfirmationDialog
+        open={pendingAction === "terminate"}
+        title="Terminate Exam Attempt?"
+        description={`This will immediately end ${sessionItem.student_name}'s exam attempt and notify the student.`}
+        confirmLabel="Terminate"
+        confirmWord="TERMINATE"
+        variant="danger"
+        loading={busyAction === "terminate"}
+        onConfirm={() => {
+          setPendingAction("");
+          runAction("terminate");
+        }}
+        onClose={() => setPendingAction("")}
+      />
     </div>
   );
 }

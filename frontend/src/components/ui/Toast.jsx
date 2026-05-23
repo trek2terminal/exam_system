@@ -1,5 +1,6 @@
+import { useEffect } from "react";
 import { AlertCircle, CheckCircle2, Info, TriangleAlert, X } from "lucide-react";
-import toast, { Toaster } from "react-hot-toast";
+import toast, { Toaster, useToasterStore } from "react-hot-toast";
 
 const icons = {
   success: CheckCircle2,
@@ -9,6 +10,16 @@ const icons = {
 };
 
 export function ToastViewport() {
+  const { toasts } = useToasterStore();
+
+  useEffect(() => {
+    const visibleToasts = toasts.filter(item => item.visible);
+    if (visibleToasts.length <= 4) return;
+    visibleToasts
+      .slice(0, visibleToasts.length - 4)
+      .forEach(item => toast.remove(item.id));
+  }, [toasts]);
+
   return (
     <Toaster
       position="top-right"

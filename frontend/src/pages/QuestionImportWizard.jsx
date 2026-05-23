@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Trash2, Upload } from "lucide-react";
-import { Button, Input, Textarea, StepWizard } from "../components/ui";
+import { Button, ConfirmationDialog, Input, Textarea, StepWizard } from "../components/ui";
 
 export default function QuestionImportWizard({ onImport }) {
   const [currentStep, setCurrentStep] = useState(0);
@@ -9,6 +9,7 @@ export default function QuestionImportWizard({ onImport }) {
   const [uploadedFile, setUploadedFile] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [unmatched, setUnmatched] = useState("");
+  const [pendingDeleteId, setPendingDeleteId] = useState(null);
 
   const handleNext = () => {
     if (currentStep === 2) {
@@ -67,6 +68,7 @@ export default function QuestionImportWizard({ onImport }) {
 
   const deleteQuestion = (id) => {
     setQuestions(prev => prev.filter(q => q.id !== id));
+    setPendingDeleteId(null);
   };
 
   const handleFileUpload = (event) => {
@@ -134,11 +136,11 @@ export default function QuestionImportWizard({ onImport }) {
                 <div className="rounded-lg border-2 border-dashed border-border bg-background-elevated/50 p-8 text-center transition hover:border-brand-primary hover:bg-brand-primary/5">
                   <Upload size={32} className="mx-auto mb-3 text-text-muted" />
                   <p className="font-semibold text-text-primary">Drop file here or click to browse</p>
-                  <p className="text-sm text-text-muted">Supported: .txt, .csv, .xlsx</p>
+                  <p className="text-sm text-text-muted">Supported: .txt, .csv</p>
                   <input
                     type="file"
                     onChange={handleFileUpload}
-                    accept=".txt,.csv,.xlsx"
+                    accept=".txt,.csv"
                     className="hidden"
                   />
                 </div>
@@ -188,7 +190,7 @@ export default function QuestionImportWizard({ onImport }) {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => deleteQuestion(q.id)}
+                      onClick={() => setPendingDeleteId(q.id)}
                       aria-label="Delete question"
                     >
                       <Trash2 size={16} />
@@ -241,6 +243,16 @@ export default function QuestionImportWizard({ onImport }) {
           </div>
         </div>
       )}
+      <ConfirmationDialog
+        open={pendingDeleteId != null}
+        title="Delete Imported Question?"
+        description="This detected question will be removed from the import preview."
+        confirmLabel="Delete"
+        confirmWord="DELETE"
+        variant="danger"
+        onConfirm={() => deleteQuestion(pendingDeleteId)}
+        onClose={() => setPendingDeleteId(null)}
+      />
     </StepWizard>
   );
 }

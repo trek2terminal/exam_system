@@ -12,12 +12,14 @@ import {
   ChevronRight,
   Cloud,
   Expand,
+  Grid3X3,
   Play,
   Send,
   ShieldAlert,
-  TerminalSquare
+  TerminalSquare,
+  X
 } from "lucide-react";
-import { Button, Card, Badge, Textarea } from "./components/ui";
+import { Button, Card, Badge, ConfirmationDialog, Textarea, cn } from "./components/ui";
 import { api } from "./services/api";
 import { createRealtimeSocket } from "./services/realtime";
 
@@ -60,10 +62,6 @@ function normalizeStatus(status) {
   return QUESTION_STATES.includes(status) ? status : "NOT_VISITED";
 }
 
-function isAnswered(status) {
-  return status === "ANSWERED" || status === "ANSWERED_MARKED";
-}
-
 function isFlagged(status) {
   return status === "MARKED_REVIEW" || status === "ANSWERED_MARKED";
 }
@@ -80,10 +78,41 @@ function statusLabel(status) {
   return normalizeStatus(status).replaceAll("_", " ").toLowerCase();
 }
 
+const STATUS_LEGEND = [
+  { status: "NOT_VISITED", label: "Not visited" },
+  { status: "VISITED_UNANSWERED", label: "Not answered" },
+  { status: "ANSWERED", label: "Answered" },
+  { status: "MARKED_REVIEW", label: "Marked" },
+  { status: "ANSWERED_MARKED", label: "Answered + marked" }
+];
+
+function statusDotClass(status) {
+  const normalized = normalizeStatus(status);
+  if (normalized === "ANSWERED") return "bg-success";
+  if (normalized === "MARKED_REVIEW") return "bg-brand-primary";
+  if (normalized === "ANSWERED_MARKED") return "bg-info";
+  if (normalized === "VISITED_UNANSWERED") return "bg-danger";
+  return "bg-text-muted";
+}
+
 function isoDeadlineToMs(value) {
   if (!value) return null;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date.getTime();
+}
+
+function useMonacoTheme() {
+  const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains("dark"));
+
+  useEffect(() => {
+    const updateTheme = () => setIsDark(document.documentElement.classList.contains("dark"));
+    const observer = new window.MutationObserver(updateTheme);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    updateTheme();
+    return () => observer.disconnect();
+  }, []);
+
+  return isDark ? "vs-dark" : "light";
 }
 
 export default function ExamInterface() {
@@ -102,18 +131,25 @@ export default function ExamInterface() {
   const [remainingSeconds, setRemainingSeconds] = useState(0);
   const [clockTick, setClockTick] = useState(0);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [navigatorCollapsed, setNavigatorCollapsed] = useState(false);
+  const [mobileNavigatorOpen, setMobileNavigatorOpen] = useState(false);
+  const [lightboxImage, setLightboxImage] = useState(null);
   const [autosaveState, setAutosaveState] = useState("Ready");
   const [violationCount, setViolationCount] = useState(0);
+  const [warningOverlay, setWarningOverlay] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
   const [paused, setPaused] = useState(false);
   const [runningQuestionId, setRunningQuestionId] = useState(null);
   const [fullscreenPrompt, setFullscreenPrompt] = useState(true);
   const saveTimers = useRef({});
   const submittedRef = useRef(false);
+  const lastViolationCountRef = useRef(0);
 
   const questions = examState?.questions || [];
   const currentQuestion = questions[currentIndex];
   const warningLimit = examState?.max_violations_allowed || 3;
+  const monacoTheme = useMonacoTheme();
 
   const requestHeaders = useCallback(() => ({
     "X-Exam-Token": sessionToken,
@@ -145,6 +181,7 @@ export default function ExamInterface() {
       setSessionToken(data.attempt_token);
       setWindowToken(nextWindowToken);
       setRemainingSeconds(data.remaining_seconds || 0);
+      lastViolationCountRef.current = data.student_session?.focus_violations || 0;
       setViolationCount(data.student_session?.focus_violations || 0);
       setPaused(data.student_session?.status === "paused");
 
@@ -284,6 +321,12 @@ export default function ExamInterface() {
     if (!sessionToken || !windowToken || submittedRef.current || paused) return;
     setViolationCount(current => {
       const nextCount = current + 1;
+      lastViolationCountRef.current = nextCount;
+      setWarningOverlay({
+        count: Math.min(nextCount, warningLimit),
+        type,
+        detail
+      });
       api.post(
         `/student/session/${sessionCode}/violation`,
         requestPayload({ type, detail, violation_count: nextCount }),
@@ -294,7 +337,7 @@ export default function ExamInterface() {
       }).catch(() => {});
       return nextCount;
     });
-  }, [sessionCode, sessionToken, windowToken, paused, requestHeaders, requestPayload, redirectFromPayload]);
+  }, [sessionCode, sessionToken, windowToken, paused, warningLimit, requestHeaders, requestPayload, redirectFromPayload]);
 
   const sendHeartbeat = useCallback(async () => {
     if (!sessionToken || !windowToken || submittedRef.current) return;
@@ -306,13 +349,23 @@ export default function ExamInterface() {
       );
       if (redirectFromPayload(data)) return;
       if (typeof data.remaining_seconds === "number") setRemainingSeconds(data.remaining_seconds);
-      if (typeof data.focus_violations === "number") setViolationCount(data.focus_violations);
+      if (typeof data.focus_violations === "number") {
+        if (data.focus_violations > lastViolationCountRef.current) {
+          lastViolationCountRef.current = data.focus_violations;
+          setWarningOverlay({
+            count: Math.min(data.focus_violations, warningLimit),
+            type: "FOCUS_WARNING",
+            detail: "A focus violation was detected."
+          });
+        }
+        setViolationCount(data.focus_violations);
+      }
       setPaused(Boolean(data.paused));
       if (data.submitted && data.redirect) window.location.replace(data.redirect);
     } catch {
       setAutosaveState("Connection unstable");
     }
-  }, [sessionCode, sessionToken, windowToken, violationCount, requestHeaders, requestPayload, redirectFromPayload]);
+  }, [sessionCode, sessionToken, windowToken, violationCount, warningLimit, requestHeaders, requestPayload, redirectFromPayload]);
 
   const flushOfflineQueue = useCallback(async () => {
     if (!sessionToken || !windowToken || paused) return;
@@ -353,22 +406,8 @@ export default function ExamInterface() {
   }, [sessionCode, sessionToken, windowToken, statuses, answers, saveAnswerNow, requestHeaders, requestPayload, examState]);
 
   const confirmSubmit = useCallback(() => {
-    const answered = Object.values(statuses).filter(isAnswered).length;
-    const flagged = Object.values(statuses).filter(isFlagged).length;
-    const notVisited = Object.values(statuses).filter(status => status === "NOT_VISITED").length;
-    const confirmed = window.confirm(
-      [
-        "Submit your exam now?",
-        "",
-        `Answered: ${answered}`,
-        `Marked for review: ${flagged}`,
-        `Not visited: ${notVisited}`,
-        "",
-        "Your saved answers will be sent before final submission."
-      ].join("\n")
-    );
-    if (confirmed) submitExam("Manual submission");
-  }, [statuses, submitExam]);
+    setShowSubmitConfirm(true);
+  }, []);
 
   const runCode = useCallback(async question => {
     if (expiredQuestions[question.id]) return;
@@ -454,6 +493,14 @@ export default function ExamInterface() {
 
   const answeredCount = counts.ANSWERED + counts.ANSWERED_MARKED;
   const progressPercent = questions.length ? Math.round((answeredCount / questions.length) * 100) : 0;
+  const submitSummary = useMemo(() => ({
+    answered: counts.ANSWERED + counts.ANSWERED_MARKED,
+    notAnswered: counts.VISITED_UNANSWERED,
+    notVisited: counts.NOT_VISITED,
+    markedForReview: counts.MARKED_REVIEW,
+    answeredAndMarked: counts.ANSWERED_MARKED,
+    flagged: counts.MARKED_REVIEW + counts.ANSWERED_MARKED
+  }), [counts]);
   const currentQuestionDeadline = currentQuestion ? questionDeadlines[currentQuestion.id] : null;
   const currentQuestionRemaining = currentQuestion?.time_limit_seconds
     ? currentQuestionDeadline
@@ -522,7 +569,9 @@ export default function ExamInterface() {
       toast.success(payload?.message || "Your exam has resumed.", { duration: 5000 });
     };
     const handleSecondChance = payload => {
+      lastViolationCountRef.current = 0;
       setViolationCount(0);
+      setWarningOverlay(null);
       setPaused(false);
       toast.success(payload?.message || "Second chance granted.", { duration: 5000 });
     };
@@ -685,6 +734,120 @@ export default function ExamInterface() {
         </div>
       )}
 
+      {warningOverlay && (
+        <div className="fixed inset-0 z-[1000] grid place-items-center bg-slate-950/75 p-4 animate-page-fade" role="alertdialog" aria-modal="true" aria-labelledby="violation-warning-title">
+          <section
+            className={cn(
+              "w-full max-w-md rounded-card border bg-background-surface p-6 text-center shadow-elevated animate-warning-bounce",
+              warningOverlay.count >= warningLimit ? "border-danger" : "border-warning/40"
+            )}
+          >
+            <div className={cn(
+              "mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full",
+              warningOverlay.count >= warningLimit ? "bg-danger/10 text-danger" : "bg-warning/10 text-warning"
+            )}>
+              <AlertTriangle size={30} />
+            </div>
+            <p className={cn("mb-2 text-sm font-bold uppercase", warningOverlay.count >= warningLimit ? "text-danger" : "text-warning")}>
+              Warning {warningOverlay.count} of {warningLimit}
+            </p>
+            <h2 id="violation-warning-title" className="text-2xl font-bold text-text-primary">
+              {warningOverlay.count >= warningLimit ? "Admin Has Been Alerted" : "Stay in the Exam Window"}
+            </h2>
+            <p className="mt-3 text-text-secondary">
+              {warningOverlay.count >= warningLimit
+                ? "Your warning limit has been reached. An admin is now deciding the outcome of this attempt."
+                : warningOverlay.detail || "A focus violation was detected. Keep the exam fullscreen and focused."}
+            </p>
+            {warningOverlay.count >= warningLimit && (
+              <div className="mt-4 rounded-md border border-danger/30 bg-danger/10 p-3 text-sm font-semibold text-danger">
+                Do not leave this screen. Admin review is active.
+              </div>
+            )}
+            <Button
+              variant={warningOverlay.count >= warningLimit ? "danger" : "primary"}
+              className="mt-5 w-full"
+              onClick={() => setWarningOverlay(null)}
+            >
+              Understood
+            </Button>
+          </section>
+        </div>
+      )}
+
+      <ConfirmationDialog
+        open={showSubmitConfirm}
+        title="Submit Exam?"
+        description={(
+          <div className="grid gap-4">
+            <p>Your saved answers will be sent before final submission. You cannot continue this attempt after submitting.</p>
+            <dl className="grid grid-cols-2 gap-2 text-sm">
+              <div className="rounded-md border border-border bg-background-base p-3">
+                <dt className="text-text-muted">Answered</dt>
+                <dd className="font-bold text-text-primary">{submitSummary.answered}</dd>
+              </div>
+              <div className="rounded-md border border-border bg-background-base p-3">
+                <dt className="text-text-muted">Not Answered</dt>
+                <dd className="font-bold text-text-primary">{submitSummary.notAnswered}</dd>
+              </div>
+              <div className="rounded-md border border-border bg-background-base p-3">
+                <dt className="text-text-muted">Not Visited</dt>
+                <dd className="font-bold text-text-primary">{submitSummary.notVisited}</dd>
+              </div>
+              <div className="rounded-md border border-border bg-background-base p-3">
+                <dt className="text-text-muted">Marked for Review</dt>
+                <dd className="font-bold text-text-primary">{submitSummary.markedForReview}</dd>
+              </div>
+              <div className="col-span-2 rounded-md border border-border bg-background-base p-3">
+                <dt className="text-text-muted">Answered and Marked</dt>
+                <dd className="font-bold text-text-primary">{submitSummary.answeredAndMarked}</dd>
+              </div>
+            </dl>
+            {(submitSummary.notAnswered > 0 || submitSummary.flagged > 0) && (
+              <div className="rounded-md border border-warning/30 bg-warning/10 p-3 text-sm font-semibold text-warning">
+                You have {submitSummary.notAnswered} unanswered questions and {submitSummary.flagged} flagged questions.
+              </div>
+            )}
+          </div>
+        )}
+        confirmLabel="Submit Exam"
+        variant="danger"
+        loading={submitting}
+        onConfirm={() => {
+          setShowSubmitConfirm(false);
+          submitExam("Manual submission");
+        }}
+        onClose={() => setShowSubmitConfirm(false)}
+      />
+
+      {lightboxImage && (
+        <div
+          className="fixed inset-0 z-[1001] grid place-items-center bg-slate-950/90 p-4 animate-page-fade"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Question image preview"
+          onClick={() => setLightboxImage(null)}
+        >
+          <Button
+            variant="ghost"
+            className="absolute right-4 top-4 h-11 w-11 border-white/20 bg-white/10 px-0 text-white hover:bg-white/20"
+            onClick={event => {
+              event.stopPropagation();
+              setLightboxImage(null);
+            }}
+            aria-label="Close image preview"
+          >
+            <X size={20} />
+          </Button>
+          <img
+            src={lightboxImage}
+            alt="Expanded question attachment"
+            className="max-h-[88vh] max-w-[92vw] rounded-card border border-white/15 object-contain shadow-elevated animate-lightbox-image"
+            onClick={event => event.stopPropagation()}
+          />
+        </div>
+      )}
+
       <header className="reactExamHeader">
         <div>
           <span className="eyebrow">Now writing</span>
@@ -704,53 +867,103 @@ export default function ExamInterface() {
         </div>
       </header>
 
-      <div className="reactExamGrid">
-        <aside className="reactQuestionPanel">
-          <Card className="examSideCard">
-            <div className="rowBetween">
-              <span>Answered</span>
-              <strong>{answeredCount}/{questions.length}</strong>
-            </div>
-            <div className="progressLine"><span style={{ width: `${progressPercent}%` }} /></div>
-            <p>{progressPercent}% complete</p>
-          </Card>
+      <div className={cn("reactExamGrid", navigatorCollapsed && "navigatorCollapsed")}>
+        <aside className={cn("reactQuestionPanel hidden md:grid", navigatorCollapsed && "collapsed")}>
+          {navigatorCollapsed ? (
+            <Card className="examSideCard collapsedNavigatorCard">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="mb-2 h-8 min-h-8 w-8 px-0"
+                onClick={() => setNavigatorCollapsed(false)}
+                aria-label="Expand question navigator"
+              >
+                <ChevronRight size={16} />
+              </Button>
+              <div className="grid justify-items-center gap-2">
+                {questions.map((question, index) => {
+                  const status = normalizeStatus(statuses[question.id]);
+                  return (
+                    <button
+                      key={question.id}
+                      type="button"
+                      title={`Question ${question.question_number}: ${statusLabel(status)}`}
+                      aria-label={`Go to question ${question.question_number}`}
+                      className={cn("h-3 w-3 rounded-full ring-2 ring-background-base transition hover:scale-125", statusDotClass(status))}
+                      onClick={() => visitQuestion(index)}
+                    />
+                  );
+                })}
+              </div>
+            </Card>
+          ) : (
+            <>
+              <Card className="examSideCard">
+                <div className="rowBetween">
+                  <span>Answered</span>
+                  <strong>{answeredCount}/{questions.length}</strong>
+                </div>
+                <div className="progressLine"><span style={{ width: `${progressPercent}%` }} /></div>
+                <p>{progressPercent}% complete</p>
+              </Card>
 
-          <Card className="examSideCard">
-            <div className="rowBetween">
-              <span>Focus warnings</span>
-              <strong>{Math.min(violationCount, warningLimit)}/{warningLimit}</strong>
-            </div>
-            <div className="warningDots">
-              {Array.from({ length: warningLimit }).map((_, index) => (
-                <span key={index} className={index < violationCount ? "active" : ""} />
-              ))}
-            </div>
-          </Card>
+              <Card className="examSideCard">
+                <div className="rowBetween">
+                  <span>Focus warnings</span>
+                  <strong>{Math.min(violationCount, warningLimit)}/{warningLimit}</strong>
+                </div>
+                <div className="warningDots">
+                  {Array.from({ length: warningLimit }).map((_, index) => (
+                    <span key={index} className={index < violationCount ? "active" : ""} />
+                  ))}
+                </div>
+              </Card>
 
-          <Card className="examSideCard">
-            <span className="eyebrow">Questions</span>
-            <div className="reactPalette">
-              {questions.map((question, index) => {
-                const status = normalizeStatus(statuses[question.id]);
-                return (
+              <Card className="examSideCard">
+                <div className="rowBetween">
+                  <span className="eyebrow">Questions</span>
                   <Button
-                    key={question.id}
-                    variant={status === "ANSWERED" || status === "ANSWERED_MARKED" ? "success" : status === "MARKED_REVIEW" ? "warning" : "ghost"}
+                    variant="ghost"
                     size="sm"
-                    className={status.toLowerCase().replaceAll("_", "-")}
-                    onClick={() => visitQuestion(index)}
+                    className="h-8 min-h-8 w-8 px-0"
+                    onClick={() => setNavigatorCollapsed(true)}
+                    aria-label="Collapse question navigator"
                   >
-                    {question.question_number}
+                    <ChevronLeft size={16} />
                   </Button>
-                );
-              })}
-            </div>
-            <div className="statusSummary">
-              {QUESTION_STATES.map(state => (
-                <div key={state}><span>{statusLabel(state)}</span><strong>{counts[state]}</strong></div>
-              ))}
-            </div>
-          </Card>
+                </div>
+                <div className="mb-3 grid gap-2 text-xs text-text-secondary">
+                  {STATUS_LEGEND.map(item => (
+                    <span key={item.status} className="flex items-center gap-2">
+                      <span className={cn("h-2.5 w-2.5 rounded-sm", statusDotClass(item.status))} />
+                      {item.label}
+                    </span>
+                  ))}
+                </div>
+                <div className="reactPalette">
+                  {questions.map((question, index) => {
+                    const status = normalizeStatus(statuses[question.id]);
+                    return (
+                      <Button
+                        key={question.id}
+                        variant={status === "ANSWERED" || status === "ANSWERED_MARKED" ? "success" : status === "MARKED_REVIEW" ? "warning" : "ghost"}
+                        size="sm"
+                        className={status.toLowerCase().replaceAll("_", "-")}
+                        onClick={() => visitQuestion(index)}
+                      >
+                        {question.question_number}
+                      </Button>
+                    );
+                  })}
+                </div>
+                <div className="statusSummary">
+                  {QUESTION_STATES.map(state => (
+                    <div key={state}><span>{statusLabel(state)}</span><strong>{counts[state]}</strong></div>
+                  ))}
+                </div>
+              </Card>
+            </>
+          )}
         </aside>
 
         {currentQuestion && (
@@ -782,9 +995,9 @@ export default function ExamInterface() {
               {currentQuestion.image_urls?.length > 0 && (
                 <div className="questionImages">
                   {currentQuestion.image_urls.map(url => (
-                    <a href={url} target="_blank" rel="noreferrer" key={url}>
+                    <button type="button" className="rounded-md text-left" onClick={() => setLightboxImage(url)} key={url}>
                       <img src={url} alt={`Question ${currentQuestion.question_number}`} />
-                    </a>
+                    </button>
                   ))}
                 </div>
               )}
@@ -795,6 +1008,7 @@ export default function ExamInterface() {
 
               <AnswerEditor
                 question={currentQuestion}
+                editorTheme={monacoTheme}
                 value={answers[currentQuestion.id] || ""}
                 output={outputs[currentQuestion.id] || ""}
                 stdinValue={stdinValues[currentQuestion.id] || ""}
@@ -820,11 +1034,87 @@ export default function ExamInterface() {
           </main>
         )}
       </div>
+
+      <Button
+        variant="primary"
+        className="fixed bottom-4 right-4 z-40 h-12 min-h-12 rounded-pill px-4 shadow-elevated md:hidden"
+        onClick={() => setMobileNavigatorOpen(true)}
+        aria-label="Open question navigator"
+      >
+        <Grid3X3 size={18} />
+        {submitSummary.notAnswered + submitSummary.notVisited}
+      </Button>
+
+      {mobileNavigatorOpen && (
+        <div className="fixed inset-0 z-50 md:hidden" role="presentation">
+          <button
+            type="button"
+            className="absolute inset-0 bg-slate-950/60 animate-page-fade"
+            aria-label="Close question navigator"
+            onClick={() => setMobileNavigatorOpen(false)}
+          />
+          <section className="absolute inset-x-0 bottom-0 max-h-[82vh] overflow-y-auto rounded-t-card border border-border bg-background-surface p-4 shadow-elevated animate-drawer-bottom">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <span className="eyebrow">Questions</span>
+                <h2 className="text-xl font-bold text-text-primary">Navigator</h2>
+              </div>
+              <Button variant="ghost" size="sm" className="h-11 w-11 px-0" onClick={() => setMobileNavigatorOpen(false)} aria-label="Close navigator">
+                <X size={18} />
+              </Button>
+            </div>
+
+            <div className="mb-4 rounded-card border border-border bg-background-base p-4">
+              <div className="rowBetween">
+                <span>Answered</span>
+                <strong>{answeredCount}/{questions.length}</strong>
+              </div>
+              <div className="progressLine"><span style={{ width: `${progressPercent}%` }} /></div>
+              <p>{progressPercent}% complete</p>
+            </div>
+
+            <div className="mb-4 grid grid-cols-2 gap-2 text-xs text-text-secondary">
+              {STATUS_LEGEND.map(item => (
+                <span key={item.status} className="flex items-center gap-2">
+                  <span className={cn("h-2.5 w-2.5 rounded-sm", statusDotClass(item.status))} />
+                  {item.label}
+                </span>
+              ))}
+            </div>
+
+            <div className="reactPalette">
+              {questions.map((question, index) => {
+                const status = normalizeStatus(statuses[question.id]);
+                return (
+                  <Button
+                    key={question.id}
+                    variant={status === "ANSWERED" || status === "ANSWERED_MARKED" ? "success" : status === "MARKED_REVIEW" ? "warning" : "ghost"}
+                    size="sm"
+                    className={status.toLowerCase().replaceAll("_", "-")}
+                    onClick={() => {
+                      visitQuestion(index);
+                      setMobileNavigatorOpen(false);
+                    }}
+                  >
+                    {question.question_number}
+                  </Button>
+                );
+              })}
+            </div>
+
+            <div className="statusSummary mt-4">
+              {QUESTION_STATES.map(state => (
+                <div key={state}><span>{statusLabel(state)}</span><strong>{counts[state]}</strong></div>
+              ))}
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
 
-function AnswerEditor({ question, value, output, stdinValue, expired, onChange, onStdinChange, onRun, running }) {
+function AnswerEditor({ question, editorTheme, value, output, stdinValue, expired, onChange, onStdinChange, onRun, running }) {
   if (question.question_type === "mcq") {
     return (
       <div className="reactMcqList">
@@ -861,7 +1151,7 @@ function AnswerEditor({ question, value, output, stdinValue, expired, onChange, 
           <Editor
             height="360px"
             language="python"
-            theme="vs-dark"
+            theme={editorTheme}
             value={value}
             onChange={nextValue => onChange(nextValue || "")}
             options={{
@@ -889,15 +1179,29 @@ function AnswerEditor({ question, value, output, stdinValue, expired, onChange, 
     );
   }
 
+  const maxCharacters = question.character_limit || question.max_characters || question.max_length || null;
+  const wordCount = String(value || "").trim() ? String(value || "").trim().split(/\s+/).length : 0;
+  const isLongAnswer = question.question_type === "long" || question.question_type === "long_answer";
+
   return (
-    <Textarea
-      className="reactAnswerTextarea"
-      value={value}
-      onChange={event => onChange(event.target.value)}
-      disabled={expired}
-      rows={question.question_type === "long" ? 12 : 7}
-      placeholder="Write your answer here"
-    />
+    <div className="grid gap-2">
+      <Textarea
+        className="reactAnswerTextarea"
+        value={value}
+        onChange={event => onChange(event.target.value)}
+        disabled={expired}
+        rows={isLongAnswer ? 12 : 7}
+        placeholder="Write your answer here"
+        maxLength={maxCharacters || undefined}
+      />
+      <div className="text-right text-xs font-semibold text-text-muted">
+        {isLongAnswer
+          ? `${wordCount} words`
+          : maxCharacters
+            ? `${String(value || "").length} / ${maxCharacters}`
+            : `${String(value || "").length} characters`}
+      </div>
+    </div>
   );
 }
 

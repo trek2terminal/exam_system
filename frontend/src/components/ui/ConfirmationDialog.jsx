@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { Button } from "./Button";
 import { Input } from "./Input";
@@ -12,13 +12,19 @@ export function ConfirmationDialog({
   cancelLabel = "Cancel",
   variant = "danger",
   confirmationWord,
+  confirmWord,
   onConfirm,
   onClose,
   loading = false
 }) {
   const [typed, setTyped] = useState("");
-  const requiresWord = Boolean(confirmationWord);
-  const canConfirm = !requiresWord || typed === confirmationWord;
+  const requiredWord = confirmWord || confirmationWord;
+  const requiresWord = Boolean(requiredWord);
+  const canConfirm = !requiresWord || typed === requiredWord;
+
+  useEffect(() => {
+    if (!open) setTyped("");
+  }, [open, requiredWord]);
 
   return (
     <Modal
@@ -45,11 +51,15 @@ export function ConfirmationDialog({
           <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-danger/10 text-danger">
             <AlertTriangle size={22} />
           </span>
-          <p className="text-text-secondary">{description}</p>
+          {typeof description === "string" ? (
+            <p className="text-text-secondary">{description}</p>
+          ) : (
+            <div className="text-text-secondary">{description}</div>
+          )}
         </div>
         {requiresWord && (
           <Input
-            label={`Type ${confirmationWord} to continue`}
+            label={`Type ${requiredWord} to continue`}
             value={typed}
             onChange={event => setTyped(event.target.value)}
           />

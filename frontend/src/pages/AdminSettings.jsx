@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Download, Save, Upload } from "lucide-react";
-import { Button, Card, Input, Select, Textarea } from "../components/ui";
+import { Button, Card, Input, Select, Textarea, Toggle } from "../components/ui";
 import { notify } from "../components/ui/Toast";
 
 export default function AdminSettings() {
@@ -207,7 +207,7 @@ export default function AdminSettings() {
                 <label className="font-semibold text-text-primary">Allow Self-Registration</label>
                 <Toggle
                   checked={registration.self_registration_enabled}
-                  onChange={e => handleRegistrationChange("self_registration_enabled", e.target.checked)}
+                  onChange={checked => handleRegistrationChange("self_registration_enabled", checked)}
                 />
               </div>
 
@@ -215,7 +215,7 @@ export default function AdminSettings() {
                 <label className="font-semibold text-text-primary">Require Registration Code</label>
                 <Toggle
                   checked={registration.registration_code_required}
-                  onChange={e => handleRegistrationChange("registration_code_required", e.target.checked)}
+                  onChange={checked => handleRegistrationChange("registration_code_required", checked)}
                 />
               </div>
 
@@ -272,7 +272,7 @@ export default function AdminSettings() {
                 <label className="font-semibold text-text-primary">Enable Announcement</label>
                 <Toggle
                   checked={announcement.enabled}
-                  onChange={e => handleAnnouncementChange("enabled", e.target.checked)}
+                  onChange={checked => handleAnnouncementChange("enabled", checked)}
                 />
               </div>
 
@@ -356,21 +356,6 @@ export default function AdminSettings() {
         )}
       </div>
     </div>
-  );
-}
-
-function Toggle({ checked, onChange, disabled }) {
-  return (
-    <label className="relative inline-flex items-center cursor-pointer">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={onChange}
-        disabled={disabled}
-        className="sr-only peer"
-      />
-      <div className="w-11 h-6 bg-background-elevated rounded-pill peer peer-checked:bg-brand-primary peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all" />
-    </label>
   );
 }
 

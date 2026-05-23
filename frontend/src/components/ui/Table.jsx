@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, ChevronsUpDown, Inbox } from "lucide-react";
 import { Button } from "./Button";
 import { EmptyState } from "./EmptyState";
@@ -12,6 +12,7 @@ export function Table({
   emptyMessage = "No records found",
   rowKey = "id",
   rowsPerPageOptions = [5, 10, 20],
+  renderRowActions,
   className
 }) {
   const [sort, setSort] = useState(null);
@@ -25,12 +26,20 @@ export function Table({
     return [...data].sort((left, right) => {
       const leftValue = column.accessor ? column.accessor(left) : left[sort.key];
       const rightValue = column.accessor ? column.accessor(right) : right[sort.key];
+      if (typeof leftValue === "number" && typeof rightValue === "number") {
+        return (leftValue - rightValue) * (sort.direction === "asc" ? 1 : -1);
+      }
       return String(leftValue ?? "").localeCompare(String(rightValue ?? "")) * (sort.direction === "asc" ? 1 : -1);
     });
   }, [columns, data, sort]);
 
   const pageCount = Math.max(Math.ceil(sortedData.length / rowsPerPage), 1);
   const visibleRows = sortedData.slice((page - 1) * rowsPerPage, page * rowsPerPage);
+  const totalColumns = columns.length + (renderRowActions ? 1 : 0);
+
+  useEffect(() => {
+    setPage(current => Math.min(current, pageCount));
+  }, [pageCount]);
 
   const toggleSort = key => {
     setSort(current => {
@@ -39,6 +48,13 @@ export function Table({
       return null;
     });
   };
+
+  const paginationItems = useMemo(() => {
+    if (pageCount <= 5) return Array.from({ length: pageCount }, (_, index) => index + 1);
+    if (page <= 3) return [1, 2, 3, 4, "ellipsis-end", pageCount];
+    if (page >= pageCount - 2) return [1, "ellipsis-start", pageCount - 3, pageCount - 2, pageCount - 1, pageCount];
+    return [1, "ellipsis-start", page - 1, page, page + 1, "ellipsis-end", pageCount];
+  }, [page, pageCount]);
 
   return (
     <section className={cn("overflow-hidden rounded-card border border-border bg-background-surface shadow-card", className)}>
@@ -77,12 +93,17 @@ export function Table({
                   </th>
                 );
               })}
+              {renderRowActions && (
+                <th className="whitespace-nowrap px-4 py-3 text-right font-semibold" scope="col">
+                  Actions
+                </th>
+              )}
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {loading ? (
               <tr>
-                <td colSpan={columns.length}><SkeletonTableRows rows={rowsPerPage} /></td>
+                <td colSpan={totalColumns}><SkeletonTableRows rows={rowsPerPage} /></td>
               </tr>
             ) : visibleRows.map((row, index) => (
               <tr className="group bg-background-base transition hover:bg-background-elevated/70" key={row[rowKey] || index} role="row">
@@ -91,6 +112,13 @@ export function Table({
                     {column.render ? column.render(row) : row[column.key]}
                   </td>
                 ))}
+                {renderRowActions && (
+                  <td className="px-4 py-3 text-right" role="cell">
+                    <div className="inline-flex min-h-11 items-center justify-end gap-2 opacity-100 transition md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
+                      {renderRowActions(row)}
+                    </div>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -113,6 +141,24 @@ export function Table({
             {rowsPerPageOptions.map(option => <option key={option} value={option}>{option} rows</option>)}
           </select>
           <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => setPage(current => current - 1)}>Previous</Button>
+          <div className="hidden items-center gap-1 sm:flex">
+            {paginationItems.map(item => (
+              typeof item === "number" ? (
+                <Button
+                  key={item}
+                  variant={item === page ? "primary" : "secondary"}
+                  size="sm"
+                  className="h-10 min-h-10 w-10 px-0"
+                  aria-current={item === page ? "page" : undefined}
+                  onClick={() => setPage(item)}
+                >
+                  {item}
+                </Button>
+              ) : (
+                <span key={item} className="px-2 text-text-muted" aria-hidden="true">...</span>
+              )
+            ))}
+          </div>
           <Button variant="secondary" size="sm" disabled={page >= pageCount} onClick={() => setPage(current => current + 1)}>Next</Button>
         </div>
       </footer>
