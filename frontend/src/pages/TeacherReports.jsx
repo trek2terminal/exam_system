@@ -45,9 +45,6 @@ export default function TeacherReports() {
           <h1 className="text-3xl font-bold text-text-primary">Reports</h1>
           <p className="mt-1 text-text-secondary">Export result CSVs and answer-sheet PDFs through the existing Flask report routes.</p>
         </div>
-        <Button as="a" href="/teacher/results" variant="secondary">
-          <FileText size={18} /> Classic Results
-        </Button>
       </div>
 
       {exams.length === 0 ? (
@@ -104,7 +101,7 @@ export default function TeacherReports() {
               <Button as="a" href={sessionId ? `/teacher/session/${sessionId}/answer-pdf` : "#"} variant="primary" className="w-full" aria-disabled={!sessionId}>
                 <Download size={18} /> Download PDF
               </Button>
-              <p className="text-sm text-text-muted">Session IDs are visible from the exam review list and classic teacher result screens.</p>
+              <p className="text-sm text-text-muted">Session IDs are visible from the exam review list.</p>
             </div>
           </Card>
         </div>

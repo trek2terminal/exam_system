@@ -4,34 +4,6 @@ import { Avatar, Badge, Button, Card, ConfirmationDialog, Input, Modal, Select, 
 import { api } from "../services/api";
 import { notify } from "../components/ui/Toast";
 
-function parseClassicUsers(html) {
-  const doc = new window.DOMParser().parseFromString(html, "text/html");
-  return Array.from(doc.querySelectorAll("tr.table-row")).map(row => {
-    const cells = Array.from(row.querySelectorAll("td"));
-    const actionText = cells[6]?.textContent || "";
-    const actionHtml = cells[6]?.innerHTML || "";
-    const id = actionHtml.match(/toggleUserStatus\((\d+)\)/)?.[1] || actionHtml.match(/deleteUser\((\d+)\)/)?.[1];
-    const contactLines = (cells[3]?.textContent || "")
-      .split("\n")
-      .map(item => item.trim())
-      .filter(Boolean);
-    const role = cells[2]?.textContent.trim().toLowerCase() || "user";
-    return {
-      id,
-      name: cells[0]?.querySelector(".user-name")?.textContent.trim() || "User",
-      username: cells[1]?.textContent.trim() || "",
-      role,
-      email: contactLines[0] === "N/A" ? "" : contactLines[0] || "",
-      roll_number: role === "student" ? contactLines[1] || "" : "",
-      is_active: cells[4]?.textContent.trim().toLowerCase().includes("active") && !cells[4]?.textContent.trim().toLowerCase().includes("inactive"),
-      created_at: cells[5]?.textContent.trim() || "",
-      last_login: "",
-      edit_href: cells[6]?.querySelector("a[href*='/admin/users/']")?.getAttribute("href") || (id ? `/admin/users/${id}/edit` : "/admin/users"),
-      actionText
-    };
-  }).filter(user => user.id);
-}
-
 function parseCsv(text) {
   const lines = text.split(/\r?\n/).filter(Boolean);
   if (lines.length === 0) return [];
@@ -71,12 +43,18 @@ export default function AdminUserManagement() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
+  const [editForm, setEditForm] = useState({ name: "", email: "", roll_number: "" });
+  const [editAdminPassword, setEditAdminPassword] = useState("");
   const [sessionUser, setSessionUser] = useState(null);
+  const [sessionRows, setSessionRows] = useState([]);
+  const [sessionLoading, setSessionLoading] = useState(false);
+  const [resetTarget, setResetTarget] = useState(null);
+  const [resetPassword, setResetPassword] = useState("");
+  const [resetAdminPassword, setResetAdminPassword] = useState("");
   const [actionTarget, setActionTarget] = useState(null);
   const [bulkAction, setBulkAction] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
   const [selectedIds, setSelectedIds] = useState([]);
-  const [apiAvailable, setApiAvailable] = useState(true);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => setDebouncedSearch(searchTerm), 300);
@@ -88,16 +66,9 @@ export default function AdminUserManagement() {
     try {
       const { data } = await api.get("/admin/users");
       setUsers(data.users || []);
-      setApiAvailable(true);
-    } catch {
-      setApiAvailable(false);
-      try {
-        const response = await window.fetch("/admin/users", { credentials: "same-origin" });
-        const html = await response.text();
-        setUsers(parseClassicUsers(html));
-      } catch {
-        setUsers([]);
-      }
+    } catch (error) {
+      notify.error(error.message || "Could not load users.");
+      setUsers([]);
     } finally {
       setLoading(false);
     }
@@ -199,6 +170,65 @@ export default function AdminUserManagement() {
     }
   };
 
+  const openEdit = user => {
+    setSelectedUser(user);
+    setEditForm({
+      name: user.name || "",
+      email: user.email || "",
+      roll_number: user.roll_number || ""
+    });
+    setEditAdminPassword("");
+  };
+
+  const saveUserEdit = async event => {
+    event.preventDefault();
+    if (!selectedUser?.id) return;
+    try {
+      const { data } = await api.patch(`/admin/users/${selectedUser.id}`, {
+        ...editForm,
+        admin_password: editAdminPassword
+      });
+      const updated = data.user;
+      setUsers(current => current.map(user => String(user.id) === String(updated.id) ? updated : user));
+      notify.success("User updated");
+      setSelectedUser(null);
+      setEditAdminPassword("");
+    } catch (error) {
+      notify.error(error.response?.data?.message || error.message || "Could not update user");
+    }
+  };
+
+  const openSessions = async user => {
+    setSessionUser(user);
+    setSessionRows([]);
+    setSessionLoading(true);
+    try {
+      const { data } = await api.get(`/admin/users/${user.id}/sessions`);
+      setSessionRows(data.sessions || []);
+    } catch (error) {
+      notify.error(error.message || "Could not load sessions");
+    } finally {
+      setSessionLoading(false);
+    }
+  };
+
+  const resetUserPassword = async event => {
+    event.preventDefault();
+    if (!resetTarget?.id) return;
+    try {
+      await api.post(`/admin/users/${resetTarget.id}/reset-password`, {
+        new_password: resetPassword,
+        admin_password: resetAdminPassword
+      });
+      notify.success("Password reset");
+      setResetTarget(null);
+      setResetPassword("");
+      setResetAdminPassword("");
+    } catch (error) {
+      notify.error(error.response?.data?.message || error.message || "Could not reset password");
+    }
+  };
+
   const columns = [
     {
       key: "select",
@@ -257,9 +287,6 @@ export default function AdminUserManagement() {
           <Button variant="secondary" size="sm" onClick={() => setShowImportModal(true)}>
             <Upload size={16} /> Import Students
           </Button>
-          <Button as="a" href="/admin/users" variant="ghost" size="sm">
-            Classic Users
-          </Button>
         </div>
       </div>
 
@@ -298,18 +325,6 @@ export default function AdminUserManagement() {
         </div>
       </Card>
 
-      {!apiAvailable && (
-        <Card className="border-info/30 bg-info/5 p-5">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-text-primary">Using classic Flask user data</h2>
-              <p className="mt-1 text-sm text-text-secondary">The JSON users API is not present yet, so this page reads the existing admin user table and posts to current Flask actions.</p>
-            </div>
-            <Badge variant="info">Bridge mode</Badge>
-          </div>
-        </Card>
-      )}
-
       {selectedIds.length > 0 && (
         <Card className="sticky top-20 z-20 border-brand-primary/30 bg-brand-primary/5 p-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -336,13 +351,13 @@ export default function AdminUserManagement() {
         emptyMessage="No users found"
         renderRowActions={row => (
           <>
-            <Button variant="ghost" size="sm" onClick={() => setSelectedUser(row)} title="Edit">
+            <Button variant="ghost" size="sm" onClick={() => openEdit(row)} title="Edit">
               <Edit2 size={16} /> Edit
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => setSessionUser(row)} title="View sessions">
+            <Button variant="ghost" size="sm" onClick={() => openSessions(row)} title="View sessions">
               <Eye size={16} /> Sessions
             </Button>
-            <Button variant="secondary" size="sm" disabled title="Reset password">
+            <Button variant="secondary" size="sm" onClick={() => setResetTarget(row)} title="Reset password">
               <RotateCcw size={16} /> Reset
             </Button>
             <Button
@@ -365,9 +380,17 @@ export default function AdminUserManagement() {
         <ImportStudentsForm />
       </Modal>
 
-      <Modal open={!!selectedUser} onClose={() => setSelectedUser(null)} title={selectedUser ? `Edit ${selectedUser.name}` : "User Details"} className="max-w-2xl">
+      <Modal
+        open={!!selectedUser}
+        onClose={() => {
+          setSelectedUser(null);
+          setEditAdminPassword("");
+        }}
+        title={selectedUser ? `Edit ${selectedUser.name}` : "User Details"}
+        className="max-w-2xl"
+      >
         {selectedUser && (
-          <div className="space-y-4">
+          <form className="space-y-4" onSubmit={saveUserEdit}>
             <div className="flex items-center gap-3 rounded-lg border border-border bg-background-elevated/40 p-4">
               <Avatar name={selectedUser.name} size="lg" />
               <div>
@@ -376,30 +399,105 @@ export default function AdminUserManagement() {
               </div>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Input label="Full Name" value={selectedUser.name || ""} disabled />
+              <Input label="Full Name" value={editForm.name} onChange={event => setEditForm({ ...editForm, name: event.target.value })} />
               <Input label="Username" value={selectedUser.username || ""} disabled />
-              <Input label="Email" value={selectedUser.email || ""} disabled />
-              <Input label="Roll Number" value={selectedUser.roll_number || ""} disabled />
+              <Input label="Email" value={editForm.email} onChange={event => setEditForm({ ...editForm, email: event.target.value })} />
+              <Input label="Roll Number" value={editForm.roll_number} onChange={event => setEditForm({ ...editForm, roll_number: event.target.value })} disabled={selectedUser.role !== "student"} />
               <Input label="Role" value={selectedUser.role || ""} disabled />
               <Input label="Status" value={statusLabel(selectedUser)} disabled />
             </div>
+            <Input
+              label="Admin Password"
+              type="password"
+              value={editAdminPassword}
+              onChange={event => setEditAdminPassword(event.target.value)}
+              required
+              autoComplete="current-password"
+              helperText="Required before changing account details."
+            />
             <div className="flex flex-col gap-3 sm:flex-row">
-              <Button as="a" href={selectedUser.edit_href || `/admin/users/${selectedUser.id}/edit`} variant="primary">
-                Open Full Edit
-              </Button>
-              <Button variant="secondary" onClick={() => setSelectedUser(null)}>Cancel</Button>
+              <Button type="submit" variant="primary">Save User</Button>
+              <Button type="button" variant="secondary" onClick={() => setSelectedUser(null)}>Cancel</Button>
             </div>
-          </div>
+          </form>
         )}
       </Modal>
 
       <Modal open={!!sessionUser} onClose={() => setSessionUser(null)} title={sessionUser ? `${sessionUser.name} Sessions` : "Sessions"}>
         <div className="space-y-4">
-          <div className="rounded-lg border border-border bg-background-base p-4">
-            <p className="mb-0 text-sm text-text-secondary">A dedicated JSON session-history endpoint is not present yet. Use the classic user and result screens for the authoritative session list.</p>
-          </div>
-          <Button as="a" href="/admin/users" variant="secondary">Open Classic Users</Button>
+          {sessionLoading ? (
+            <Card className="p-5 text-center text-text-muted">Loading sessions...</Card>
+          ) : sessionRows.length > 0 ? (
+            <div className="max-h-96 overflow-auto rounded-lg border border-border">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-background-elevated text-text-secondary">
+                  <tr>
+                    <th className="px-3 py-2">Exam</th>
+                    <th className="px-3 py-2">Started</th>
+                    <th className="px-3 py-2">Status</th>
+                    <th className="px-3 py-2">Score</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {sessionRows.map(row => (
+                    <tr key={row.id}>
+                      <td className="px-3 py-2 text-text-primary">{row.exam_name || "-"}</td>
+                      <td className="px-3 py-2 text-text-secondary">{row.start_time ? new Date(row.start_time).toLocaleString() : "-"}</td>
+                      <td className="px-3 py-2"><Badge variant={row.status === "active" ? "success" : "secondary"}>{row.status}</Badge></td>
+                      <td className="px-3 py-2 text-text-primary">{row.score == null ? "-" : `${row.score}/${row.total_marks}`}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <Card className="p-5 text-center text-text-muted">No session history found.</Card>
+          )}
         </div>
+      </Modal>
+
+      <Modal
+        open={!!resetTarget}
+        onClose={() => {
+          setResetTarget(null);
+          setResetPassword("");
+          setResetAdminPassword("");
+        }}
+        title={resetTarget ? `Reset ${resetTarget.name}'s Password` : "Reset Password"}
+      >
+        <form className="space-y-4" onSubmit={resetUserPassword}>
+          <Input
+            label="New Password"
+            type="password"
+            value={resetPassword}
+            onChange={event => setResetPassword(event.target.value)}
+            minLength={10}
+            required
+            helperText="Use at least 10 characters with uppercase, lowercase, and a number."
+          />
+          <Input
+            label="Admin Password"
+            type="password"
+            value={resetAdminPassword}
+            onChange={event => setResetAdminPassword(event.target.value)}
+            required
+            autoComplete="current-password"
+          />
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <Button type="submit" variant="danger">Reset Password</Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setResetTarget(null);
+                setResetPassword("");
+                setResetAdminPassword("");
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
       </Modal>
 
       <ConfirmationDialog

@@ -1,6 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Bell, CheckCircle2, Info, MailCheck } from "lucide-react";
 import { Badge, Button, Card, EmptyState } from "../components/ui";
+import { api } from "../services/api";
+import { notify } from "../components/ui/Toast";
 
 function notificationIcon(type) {
   if (String(type).includes("warning") || String(type).includes("violation")) return AlertTriangle;
@@ -16,19 +18,68 @@ function timeLabel(value) {
   return date.toLocaleString([], { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
+function notificationHref(item) {
+  if (item.href) return item.href;
+  if (item.related_entity_type === "result") return "/react/student/results";
+  if (item.related_entity_type === "student_session") return "/react/teacher/dashboard";
+  if (String(item.type || "").includes("violation")) return "/react/admin/proctoring";
+  return "/react/notifications";
+}
+
 export default function NotificationsPage({ notifications, auth, onMarkAllRead }) {
   const [filter, setFilter] = useState("all");
-  const items = useMemo(() => notifications?.recent || notifications?.items || [], [notifications]);
+  const [items, setItems] = useState(() => notifications?.recent || notifications?.items || []);
+  const [unreadCount, setUnreadCount] = useState(notifications?.unread_count || 0);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadNotifications() {
+      setLoading(true);
+      try {
+        const { data } = await api.get("/notifications", { params: { filter, per_page: 50 } });
+        if (!cancelled) {
+          setItems(data.items || []);
+          setUnreadCount(data.unread_count || 0);
+        }
+      } catch (error) {
+        notify.warning(error.message || "Could not refresh notifications.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    loadNotifications();
+    return () => {
+      cancelled = true;
+    };
+  }, [filter]);
 
   const filteredItems = useMemo(() => {
     return items.filter(item => {
       if (filter === "all") return true;
-      if (filter === "unread") return item.is_read === false || item.read === false || notifications?.unread_count > 0;
+      if (filter === "unread") return item.is_read === false || item.read === false;
       if (filter === "admin") return String(item.type || "").includes("admin");
       if (filter === "system") return String(item.type || "").includes("system") || !item.type;
       return true;
     });
-  }, [filter, items, notifications?.unread_count]);
+  }, [filter, items]);
+
+  const markNotificationRead = async item => {
+    if (item.is_read === true || !item.id) return;
+    setItems(current => current.map(row => row.id === item.id ? { ...row, is_read: true, read: true } : row));
+    setUnreadCount(current => Math.max(current - 1, 0));
+    try {
+      await api.post(`/notifications/${item.id}/read`);
+    } catch {
+      notify.warning("Could not mark notification as read.");
+    }
+  };
+
+  const markAll = async () => {
+    setItems(current => current.map(item => ({ ...item, is_read: true, read: true })));
+    setUnreadCount(0);
+    await onMarkAllRead?.();
+  };
 
   const tabs = [
     { id: "all", label: "All" },
@@ -45,7 +96,7 @@ export default function NotificationsPage({ notifications, auth, onMarkAllRead }
           <h1 className="text-3xl font-bold text-text-primary">Notifications</h1>
           <p className="mt-1 text-text-secondary">Unread alerts and system notices from the current Flask notification feed.</p>
         </div>
-        <Button variant="secondary" disabled={(notifications?.unread_count || 0) === 0} onClick={onMarkAllRead}>
+        <Button variant="secondary" disabled={unreadCount === 0} onClick={markAll}>
           <MailCheck size={18} /> Mark all as read
         </Button>
       </div>
@@ -60,7 +111,9 @@ export default function NotificationsPage({ notifications, auth, onMarkAllRead }
         </div>
       </Card>
 
-      {filteredItems.length === 0 ? (
+      {loading ? (
+        <Card className="p-8 text-center text-text-muted">Loading notifications...</Card>
+      ) : filteredItems.length === 0 ? (
         <EmptyState icon={Bell} heading="No notifications" description="You are all caught up." />
       ) : (
         <Card className="overflow-hidden">
@@ -69,9 +122,8 @@ export default function NotificationsPage({ notifications, auth, onMarkAllRead }
               const Icon = notificationIcon(item.type);
               const unread = item.is_read === false || item.read === false;
               return (
-                <a
+                <div
                   key={item.id || `${item.message}-${item.created_at}`}
-                  href={item.href || "/react/notifications"}
                   className="group flex min-h-20 items-start gap-4 bg-background-surface px-5 py-4 transition hover:bg-background-elevated"
                 >
                   <span className="mt-1 h-2 w-2 rounded-full bg-brand-primary opacity-0 group-hover:opacity-100 data-[unread=true]:opacity-100" data-unread={unread || undefined} />
@@ -87,16 +139,31 @@ export default function NotificationsPage({ notifications, auth, onMarkAllRead }
                     {item.message && item.title && <span className="block text-sm text-text-secondary">{item.message}</span>}
                     <span className="mt-2 block text-xs text-text-muted">{timeLabel(item.created_at)}</span>
                   </span>
-                  <span className="inline-flex min-h-11 items-center rounded-md px-3 text-sm font-semibold text-brand-primary opacity-100 md:opacity-0 md:group-hover:opacity-100">
-                    Open
+                  <span className="flex shrink-0 flex-col gap-2 sm:flex-row">
+                    {!unread ? null : (
+                      <button
+                        type="button"
+                        className="inline-flex min-h-11 items-center rounded-md px-3 text-sm font-semibold text-brand-primary opacity-100 transition md:opacity-0 md:group-hover:opacity-100"
+                        onClick={() => markNotificationRead(item)}
+                      >
+                        Mark read
+                      </button>
+                    )}
+                    <a
+                      href={notificationHref(item)}
+                      className="inline-flex min-h-11 items-center rounded-md px-3 text-sm font-semibold text-brand-primary"
+                      onClick={() => markNotificationRead(item)}
+                    >
+                      Open
+                    </a>
                   </span>
-                </a>
+                </div>
               );
             })}
           </div>
           {filteredItems.length > 20 && (
             <div className="border-t border-border px-5 py-3 text-sm text-text-muted">
-              Showing the latest 20 notifications from bootstrap.
+              Showing the latest 20 notifications.
             </div>
           )}
         </Card>

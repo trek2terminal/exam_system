@@ -1,21 +1,25 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Download, FileBarChart, FileText, ShieldAlert } from "lucide-react";
-import { Badge, Button, Card, EmptyState, Input, Select } from "../components/ui";
+import { Badge, Button, Card, EmptyState, Input, Select, Table } from "../components/ui";
 import { api } from "../services/api";
 import { notify } from "../components/ui/Toast";
 
-function parseClassicExamOptions(html) {
-  const doc = new window.DOMParser().parseFromString(html, "text/html");
-  return Array.from(doc.querySelectorAll(".exam-card")).map(node => {
-    const href = node.querySelector("a[href*='/admin/exams/']")?.getAttribute("href") || "";
-    const id = href.match(/admin\/exams\/(\d+)/)?.[1];
-    return id ? { value: id, label: node.querySelector("h3")?.textContent.trim() || `Exam ${id}` } : null;
-  }).filter(Boolean);
+function exportAuditRows(rows) {
+  const header = ["timestamp", "admin_user", "action_type", "resource_type", "resource_id", "ip_address", "status"];
+  const body = rows.map(row => header.map(key => `"${String(row[key] ?? "").replaceAll('"', '""')}"`).join(","));
+  const blob = new window.Blob([[header.join(","), ...body].join("\n")], { type: "text/csv;charset=utf-8" });
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "audit-log.csv";
+  link.click();
+  window.URL.revokeObjectURL(url);
 }
 
 export default function AdminReports() {
   const [dashboard, setDashboard] = useState(null);
   const [examOptions, setExamOptions] = useState([]);
+  const [auditRows, setAuditRows] = useState([]);
   const [selectedExamId, setSelectedExamId] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
@@ -24,16 +28,17 @@ export default function AdminReports() {
     let cancelled = false;
     async function load() {
       try {
-        const [{ data }, examsResponse] = await Promise.all([
+        const [{ data }, examsResponse, auditResponse] = await Promise.all([
           api.get("/admin/dashboard"),
-          window.fetch("/admin/exams", { credentials: "same-origin" })
+          api.get("/admin/exams", { params: { per_page: 100 } }),
+          api.get("/admin/audit-log", { params: { per_page: 50 } })
         ]);
-        const html = await examsResponse.text();
-        const options = parseClassicExamOptions(html);
+        const options = (examsResponse.data.exams || []).map(exam => ({ value: String(exam.id), label: exam.exam_name }));
         if (!cancelled) {
           setDashboard(data);
           setExamOptions(options);
           setSelectedExamId(options[0]?.value || "");
+          setAuditRows(auditResponse.data.items || []);
         }
       } catch {
         notify.warning("Some report selectors could not be loaded.");
@@ -55,6 +60,14 @@ export default function AdminReports() {
 
   const suspicious = dashboard?.suspicious_students || [];
   const stats = dashboard?.stats || {};
+  const auditColumns = [
+    { key: "timestamp", header: "Timestamp", sortable: true, render: row => row.timestamp ? new Date(row.timestamp).toLocaleString() : "-" },
+    { key: "admin_user", header: "Admin", sortable: true },
+    { key: "action_type", header: "Action", sortable: true },
+    { key: "resource_type", header: "Target", sortable: true, render: row => [row.resource_type, row.resource_id].filter(Boolean).join(" #") || "-" },
+    { key: "ip_address", header: "IP Address", sortable: true, render: row => row.ip_address || "-" },
+    { key: "status", header: "Status", sortable: true, render: row => <Badge variant={row.status === "success" ? "success" : row.status === "warning" ? "warning" : "secondary"}>{row.status || "logged"}</Badge> }
+  ];
 
   return (
     <div className="space-y-6">
@@ -64,9 +77,6 @@ export default function AdminReports() {
           <h1 className="text-3xl font-bold text-text-primary">Reports</h1>
           <p className="mt-1 text-text-secondary">Violation exports, exam PDFs, audit logs, and suspicious activity review.</p>
         </div>
-        <Button as="a" href="/admin/analytics" variant="secondary">
-          <FileBarChart size={18} /> Classic Analytics
-        </Button>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
@@ -117,13 +127,13 @@ export default function AdminReports() {
           <div className="mb-4 flex items-center justify-between gap-4">
             <div>
               <h2 className="text-xl font-semibold text-text-primary">Audit Log Viewer</h2>
-              <p className="text-sm text-text-secondary">The current audit log is server-rendered; the link keeps the protected Flask workflow intact.</p>
+              <p className="text-sm text-text-secondary">Recent admin and system audit events from the JSON audit endpoint.</p>
             </div>
-            <Button as="a" href="/admin/audit-logs" variant="secondary">
-              Open Audit Logs
+            <Button variant="secondary" onClick={() => exportAuditRows(auditRows)} disabled={auditRows.length === 0}>
+              <Download size={18} /> Export CSV
             </Button>
           </div>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="mb-4 grid gap-3 sm:grid-cols-3">
             <div className="rounded-lg border border-border bg-background-base p-4">
               <span className="text-xs font-semibold uppercase text-text-muted">Users</span>
               <strong className="mt-1 block text-2xl text-text-primary">{stats.total_users || 0}</strong>
@@ -137,6 +147,11 @@ export default function AdminReports() {
               <strong className="mt-1 block text-2xl text-danger">{stats.violations_today || 0}</strong>
             </div>
           </div>
+          {auditRows.length > 0 ? (
+            <Table columns={auditColumns} data={auditRows} rowsPerPageOptions={[10, 20, 50]} className="shadow-none" />
+          ) : (
+            <EmptyState icon={FileBarChart} heading="No audit entries" description="Recent audit activity will appear here." compact />
+          )}
         </Card>
 
         <Card className="p-5">
@@ -159,8 +174,8 @@ export default function AdminReports() {
           ) : (
             <p className="text-sm text-text-muted">No cross-exam suspicious activity returned by the current dashboard API.</p>
           )}
-          <Button as="a" href="/admin/suspicious-activity" variant="secondary" className="mt-4 w-full">
-            Open Classic Report
+          <Button as="a" href="/react/admin/users" variant="secondary" className="mt-4 w-full">
+            Review Users
           </Button>
         </Card>
       </div>

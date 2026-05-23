@@ -1,10 +1,13 @@
 from datetime import datetime, timedelta
 
 from flask import Blueprint, current_app, jsonify, request, session, url_for
+from sqlalchemy import or_
 
 from app.models.audit_model import AuditLog, ViolationLog
 from app.models.database import db
-from app.models.exam_model import ExamEnrollment, ExamSet, Question
+from app.models.exam_model import ExamEnrollment, ExamSet, Question, QuestionBankItem
+from app.models.group_model import StudentGroup, StudentGroupMember
+from app.models.notification_model import Notification
 from app.models.result_model import QuestionMark, Result
 from app.models.submission_model import Answer, StudentSession
 from app.models.user_model import User
@@ -17,7 +20,8 @@ from app.services.result_service import ResultService
 from app.services.security_service import SecurityService
 from app.services.settings_service import SettingsService
 from app.socketio.realtime_events import emit_to_proctors, emit_to_session
-from app.utils.helpers import current_session_matches_user
+from app.routes.teacher_routes import _save_question_images
+from app.utils.helpers import current_session_matches_user, parse_options
 from app.utils.network import get_client_ip
 from app.utils.rate_limiter import rate_limit
 
@@ -129,6 +133,155 @@ def _parse_int_field(payload, field_name):
 
 def _iso_datetime(value):
     return value.isoformat() if value else None
+
+
+def _strong_password(password):
+    password = password or ""
+    return (
+        len(password) >= 10
+        and any(char.isupper() for char in password)
+        and any(char.islower() for char in password)
+        and any(char.isdigit() for char in password)
+    )
+
+
+def _user_payload(user):
+    return {
+        "id": user.id,
+        "name": user.name,
+        "username": user.username,
+        "email": user.email,
+        "role": user.role,
+        "roll_number": user.roll_number,
+        "is_active": bool(user.is_active),
+        "is_verified": bool(user.is_verified),
+        "department": user.department,
+        "designation": user.designation,
+        "profile_picture": url_for("static", filename=user.profile_picture) if user.profile_picture else None,
+        "last_login": _iso_datetime(user.last_login),
+        "created_at": _iso_datetime(user.created_at),
+        "updated_at": _iso_datetime(user.updated_at),
+        "edit_href": url_for("admin.edit_user", user_id=user.id),
+    }
+
+
+def _admin_exam_payload(exam):
+    submitted_statuses = ["submitted", "evaluated", "terminated", "auto_submitted"]
+    session_query = StudentSession.query.filter_by(exam_set_id=exam.id)
+    submitted_count = session_query.filter(StudentSession.status.in_(submitted_statuses)).count()
+    pending_review_count = (
+        session_query.filter(StudentSession.status.in_(submitted_statuses))
+        .outerjoin(Result, Result.session_id == StudentSession.id)
+        .filter(Result.id.is_(None))
+        .count()
+    )
+    return {
+        "id": exam.id,
+        "exam_name": exam.exam_name,
+        "subject": exam.subject,
+        "set_code": exam.set_code,
+        "status": exam.status,
+        "duration_minutes": exam.duration_minutes,
+        "total_marks": exam.total_marks,
+        "question_count": Question.query.filter_by(exam_set_id=exam.id).count(),
+        "enrolled_count": ExamEnrollment.query.filter_by(exam_set_id=exam.id).count(),
+        "submitted_count": submitted_count,
+        "pending_review_count": pending_review_count,
+        "teacher_id": exam.created_by,
+        "teacher_name": exam.creator.name if exam.creator else None,
+        "created_at": _iso_datetime(exam.created_at),
+        "updated_at": _iso_datetime(exam.updated_at),
+        "start_time": _iso_datetime(exam.start_time),
+        "end_time": _iso_datetime(exam.end_time),
+        "links": {
+            "classic": url_for("admin.view_exam", exam_id=exam.id),
+            "report_pdf": url_for("admin.export_exam_report_pdf", exam_id=exam.id),
+        },
+    }
+
+
+def _question_bank_payload(item):
+    return {
+        "id": item.id,
+        "question_text": item.question_text,
+        "question_type": item.question_type,
+        "marks": item.marks,
+        "options": item.options_as_list(),
+        "correct_answer": item.correct_answer,
+        "explanation": item.explanation,
+        "model_answer": item.model_answer,
+        "image_urls": [url_for("static", filename=path) for path in item.image_paths_as_list()],
+        "code_snippet": item.code_snippet,
+        "code_language": item.code_language or "python",
+        "time_limit_seconds": item.time_limit_seconds,
+        "created_at": _iso_datetime(item.created_at),
+        "updated_at": _iso_datetime(item.updated_at),
+    }
+
+
+def _group_payload(group):
+    return {
+        "id": group.id,
+        "name": group.name,
+        "description": group.description,
+        "created_at": _iso_datetime(group.created_at),
+        "updated_at": _iso_datetime(group.updated_at),
+        "student_count": len(group.members),
+        "members": [
+            {
+                "id": member.id,
+                "student_id": member.student.id,
+                "name": member.student.name,
+                "username": member.student.username,
+                "email": member.student.email,
+                "roll_number": member.student.roll_number,
+            }
+            for member in group.members
+        ],
+    }
+
+
+def _find_student_by_identifier(identifier):
+    value = (identifier or "").strip()
+    if not value:
+        return None
+    normalized = value.upper()
+    return (
+        User.query.filter_by(role="student")
+        .filter(
+            or_(
+                db.func.upper(User.roll_number) == normalized,
+                db.func.upper(User.username) == normalized,
+                db.func.lower(User.email) == value.lower(),
+            )
+        )
+        .first()
+    )
+
+
+def _result_question_payload(question, answer, question_mark, result):
+    answer_text = answer.answer_text if answer else ""
+    return {
+        "id": question.id,
+        "question_number": question.question_number,
+        "question_text": question.question_text,
+        "question_type": question.question_type,
+        "type": question.question_type,
+        "marks_obtained": question_mark.marks_awarded if question_mark else 0,
+        "max_marks": question.marks,
+        "student_answer": answer_text,
+        "code_output": answer.code_output if answer else None,
+        "execution_output": answer.code_output if answer else None,
+        "execution_status": answer.execution_status if answer else None,
+        "correct_answer": question.correct_answer if result and result.published else None,
+        "model_answer": question.model_answer if result and result.published else None,
+        "teacher_remark": question_mark.teacher_remark if question_mark else None,
+        "explanation": question.explanation,
+        "options": question.options_as_list(),
+        "image_urls": [url_for("static", filename=path) for path in question.image_paths_as_list()],
+        "code_snippet": question.code_snippet,
+        "code_language": question.code_language or "python",
+    }
 
 
 def _student_exam_window_payload(exam, student_session=None, now=None):
@@ -852,6 +1005,64 @@ def admin_dashboard_api():
     if error_response:
         return error_response
 
+    now = datetime.utcnow()
+    last_7_days = [(now - timedelta(days=offset)).date() for offset in range(6, -1, -1)]
+    recent_sessions = StudentSession.query.filter(
+        StudentSession.created_at >= datetime.combine(last_7_days[0], datetime.min.time())
+    ).all()
+    participation_trend = [
+        {
+            "day": day.strftime("%a"),
+            "date": day.isoformat(),
+            "participants": sum(1 for item in recent_sessions if item.created_at and item.created_at.date() == day),
+        }
+        for day in last_7_days
+    ]
+
+    submitted_statuses = ["submitted", "evaluated", "terminated", "auto_submitted"]
+    pending_reviews = (
+        StudentSession.query.filter(StudentSession.status.in_(submitted_statuses))
+        .outerjoin(Result, Result.session_id == StudentSession.id)
+        .filter(Result.id.is_(None))
+        .count()
+    )
+    violations_today = ViolationLog.query.filter(
+        ViolationLog.occurred_at >= datetime.combine(now.date(), datetime.min.time())
+    ).count()
+    recent_activity = (
+        AuditLog.query.order_by(AuditLog.created_at.desc())
+        .limit(10)
+        .all()
+    )
+    violation_sessions = StudentSession.query.filter(StudentSession.focus_violations > 0).all()
+    suspicious_by_roll = {}
+    for student_session in violation_sessions:
+        key = (student_session.roll_no or student_session.student_name or str(student_session.id)).upper()
+        entry = suspicious_by_roll.setdefault(
+            key,
+            {
+                "id": key,
+                "name": student_session.student_name,
+                "roll_no": student_session.roll_no,
+                "exam_ids": set(),
+                "total_violations": 0,
+            },
+        )
+        entry["exam_ids"].add(student_session.exam_set_id)
+        entry["total_violations"] += int(student_session.focus_violations or 0)
+    suspicious_students = [
+        {
+            "id": entry["id"],
+            "name": entry["name"],
+            "roll_no": entry["roll_no"],
+            "exam_count": len(entry["exam_ids"]),
+            "total_violations": entry["total_violations"],
+        }
+        for entry in suspicious_by_roll.values()
+        if len(entry["exam_ids"]) > 1 or entry["total_violations"] >= 3
+    ]
+    suspicious_students.sort(key=lambda item: (item["exam_count"], item["total_violations"]), reverse=True)
+
     return jsonify(
         {
             "ok": True,
@@ -865,9 +1076,579 @@ def admin_dashboard_api():
                     StudentSession.status.in_(["submitted", "evaluated", "terminated", "auto_submitted"])
                 ).count(),
                 "published_results": Result.query.filter_by(published=True).count(),
+                "violations_today": violations_today,
+                "pending_reviews": pending_reviews,
+            },
+            "participation_trend": participation_trend,
+            "status_distribution": {
+                "draft": ExamSet.query.filter_by(status="draft").count(),
+                "published": ExamSet.query.filter_by(status="active").count(),
+                "closed": ExamSet.query.filter_by(status="closed").count(),
+                "archived": ExamSet.query.filter_by(status="archived").count(),
+            },
+            "recent_activity": [
+                {
+                    "id": item.id,
+                    "action": item.action,
+                    "description": item.changes or item.action,
+                    "resource_type": item.resource_type,
+                    "resource_id": item.resource_id,
+                    "status": item.status,
+                    "user": item.user.name if item.user else "System",
+                    "timestamp": _iso_datetime(item.created_at),
+                }
+                for item in recent_activity
+            ],
+            "suspicious_students": suspicious_students[:10],
+        }
+    )
+
+
+@api_bp.route("/admin/users")
+def admin_users_api():
+    admin, error_response = _require_admin_api()
+    if error_response:
+        return error_response
+
+    page = max(request.args.get("page", 1, type=int), 1)
+    per_page = min(max(request.args.get("per_page", 20, type=int), 1), 100)
+    role_filter = (request.args.get("role") or "all").strip().lower()
+    status_filter = (request.args.get("status") or "all").strip().lower()
+    search = (request.args.get("search") or "").strip()
+
+    query = User.query
+    if role_filter in {"admin", "teacher", "student"}:
+        query = query.filter_by(role=role_filter)
+    if status_filter == "active":
+        query = query.filter_by(is_active=True)
+    elif status_filter == "inactive":
+        query = query.filter_by(is_active=False)
+    if search:
+        pattern = f"%{search.lower()}%"
+        query = query.filter(
+            or_(
+                db.func.lower(User.name).like(pattern),
+                db.func.lower(User.username).like(pattern),
+                db.func.lower(User.email).like(pattern),
+                db.func.lower(User.roll_number).like(pattern),
+            )
+        )
+
+    pagination = query.order_by(User.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
+    return jsonify(
+        {
+            "ok": True,
+            "users": [_user_payload(user) for user in pagination.items],
+            "pagination": {
+                "page": pagination.page,
+                "per_page": pagination.per_page,
+                "pages": pagination.pages,
+                "total": pagination.total,
+                "has_next": pagination.has_next,
+                "has_prev": pagination.has_prev,
             },
         }
     )
+
+
+@api_bp.route("/admin/users/<int:user_id>", methods=["PATCH"])
+@rate_limit("admin_action")
+def admin_update_user_api(user_id):
+    admin, error_response = _require_admin_api()
+    if error_response:
+        return error_response
+    payload = _get_json_payload()
+    if not _admin_password_matches(payload):
+        return jsonify({"ok": False, "message": "Admin password confirmation failed."}), 403
+
+    user = User.query.get_or_404(user_id)
+    name = (payload.get("name") or user.name).strip()
+    username = (payload.get("username") or user.username).strip()
+    email = (payload.get("email") or "").strip() or None
+    roll_number = (payload.get("roll_number") or "").strip().upper() or None
+    is_active = payload.get("is_active")
+
+    if not name or not username:
+        return jsonify({"ok": False, "message": "Name and username are required."}), 400
+    duplicate_username = User.query.filter(User.username == username, User.id != user.id).first()
+    if duplicate_username:
+        return jsonify({"ok": False, "message": "Username already exists."}), 400
+    if email and User.query.filter(User.email == email, User.id != user.id).first():
+        return jsonify({"ok": False, "message": "Email already exists."}), 400
+    if user.id == admin.id and is_active is False:
+        return jsonify({"ok": False, "message": "You cannot disable your own account."}), 400
+
+    user.name = name
+    user.username = username
+    user.email = email
+    user.roll_number = roll_number
+    if isinstance(is_active, bool):
+        user.is_active = is_active
+        if not is_active:
+            user.clear_active_session_token()
+    db.session.commit()
+    AuditLog(
+        user_id=admin.id,
+        action="edit_user_api",
+        resource_type="user",
+        resource_id=user.id,
+        changes=f"Edited user: {user.username}",
+        status="success",
+        ip_address=get_client_ip(),
+    ).save()
+    return jsonify({"ok": True, "user": _user_payload(user)})
+
+
+@api_bp.route("/admin/users/<int:user_id>/reset-password", methods=["POST"])
+@rate_limit("admin_action")
+def admin_reset_user_password_api(user_id):
+    admin, error_response = _require_admin_api()
+    if error_response:
+        return error_response
+    payload = _get_json_payload()
+    if not _admin_password_matches(payload):
+        return jsonify({"ok": False, "message": "Admin password confirmation failed."}), 403
+    new_password = (payload.get("new_password") or "").strip()
+    if not _strong_password(new_password):
+        return jsonify({"ok": False, "message": "Password must be at least 10 characters and include uppercase, lowercase, and a number."}), 400
+    user = User.query.get_or_404(user_id)
+    user.set_password(new_password)
+    user.failed_login_attempts = 0
+    user.locked_until = None
+    user.must_change_password = user.role == "teacher"
+    user.clear_active_session_token()
+    db.session.commit()
+    AuditLog(
+        user_id=admin.id,
+        action="reset_user_password",
+        resource_type="user",
+        resource_id=user.id,
+        changes=f"Reset password for {user.username}",
+        status="success",
+        ip_address=get_client_ip(),
+    ).save()
+    return jsonify({"ok": True, "message": "Password reset successfully."})
+
+
+@api_bp.route("/admin/users/<int:user_id>/sessions")
+def admin_user_sessions_api(user_id):
+    admin, error_response = _require_admin_api()
+    if error_response:
+        return error_response
+    user = User.query.get_or_404(user_id)
+    sessions_query = StudentSession.query
+    if user.role == "student":
+        identifiers = [value for value in {user.roll_number, user.username} if value]
+        sessions_query = sessions_query.filter(db.func.upper(StudentSession.roll_no).in_([value.upper() for value in identifiers])) if identifiers else sessions_query.filter(False)
+    elif user.role == "teacher":
+        exam_ids = [exam.id for exam in ExamSet.query.filter_by(created_by=user.id).all()]
+        sessions_query = sessions_query.filter(StudentSession.exam_set_id.in_(exam_ids)) if exam_ids else sessions_query.filter(False)
+    else:
+        sessions_query = sessions_query.filter(False)
+
+    sessions = sessions_query.order_by(StudentSession.created_at.desc()).limit(100).all()
+    return jsonify(
+        {
+            "ok": True,
+            "user": _user_payload(user),
+            "sessions": [
+                {
+                    "id": item.id,
+                    "exam_name": item.exam_set.exam_name if item.exam_set else None,
+                    "session_code": item.session_code,
+                    "start_time": _iso_datetime(item.start_time),
+                    "end_time": _iso_datetime(item.end_time),
+                    "submitted_at": _iso_datetime(item.submitted_at),
+                    "status": item.status,
+                    "score": item.result.total_marks_obtained if item.result else None,
+                    "total_marks": item.result.total_marks if item.result else None,
+                    "percentage": item.result.percentage if item.result else None,
+                }
+                for item in sessions
+            ],
+        }
+    )
+
+
+@api_bp.route("/admin/exams")
+def admin_exams_api():
+    admin, error_response = _require_admin_api()
+    if error_response:
+        return error_response
+    page = max(request.args.get("page", 1, type=int), 1)
+    per_page = min(max(request.args.get("per_page", 20, type=int), 1), 100)
+    status_filter = (request.args.get("status") or "all").strip().lower()
+    teacher_id = request.args.get("teacher_id", type=int)
+    search = (request.args.get("search") or "").strip()
+
+    query = ExamSet.query
+    if status_filter != "all":
+        query = query.filter_by(status=status_filter)
+    if teacher_id:
+        query = query.filter_by(created_by=teacher_id)
+    if search:
+        pattern = f"%{search.lower()}%"
+        query = query.filter(or_(db.func.lower(ExamSet.exam_name).like(pattern), db.func.lower(ExamSet.subject).like(pattern)))
+
+    pagination = query.order_by(ExamSet.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
+    all_query = ExamSet.query
+    return jsonify(
+        {
+            "ok": True,
+            "exams": [_admin_exam_payload(exam) for exam in pagination.items],
+            "stats": {
+                "total": all_query.count(),
+                "draft": all_query.filter_by(status="draft").count(),
+                "published": all_query.filter_by(status="active").count(),
+                "closed": all_query.filter_by(status="closed").count(),
+                "archived": all_query.filter_by(status="archived").count(),
+            },
+            "teachers": [_user_payload(user) for user in User.query.filter_by(role="teacher").order_by(User.name.asc()).all()],
+            "pagination": {
+                "page": pagination.page,
+                "per_page": pagination.per_page,
+                "pages": pagination.pages,
+                "total": pagination.total,
+            },
+        }
+    )
+
+
+@api_bp.route("/admin/audit-log")
+def admin_audit_log_api():
+    admin, error_response = _require_admin_api()
+    if error_response:
+        return error_response
+    page = max(request.args.get("page", 1, type=int), 1)
+    per_page = min(max(request.args.get("per_page", 20, type=int), 1), 100)
+    action_type = (request.args.get("action_type") or "").strip()
+    query = AuditLog.query
+    if action_type:
+        query = query.filter(AuditLog.action == action_type)
+    pagination = query.order_by(AuditLog.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
+    return jsonify(
+        {
+            "ok": True,
+            "items": [
+                {
+                    "id": item.id,
+                    "timestamp": _iso_datetime(item.created_at),
+                    "admin_user": item.user.name if item.user else "System",
+                    "action_type": item.action,
+                    "target_user": item.resource_id if item.resource_type == "user" else None,
+                    "resource_type": item.resource_type,
+                    "resource_id": item.resource_id,
+                    "ip_address": item.ip_address,
+                    "status": item.status,
+                    "changes": item.changes,
+                }
+                for item in pagination.items
+            ],
+            "pagination": {
+                "page": pagination.page,
+                "per_page": pagination.per_page,
+                "pages": pagination.pages,
+                "total": pagination.total,
+            },
+        }
+    )
+
+
+@api_bp.route("/admin/students/search")
+def admin_students_search_api():
+    admin, error_response = _require_admin_api()
+    if error_response:
+        return error_response
+    query_text = (request.args.get("q") or "").strip().lower()
+    query = User.query.filter_by(role="student", is_active=True)
+    if query_text:
+        pattern = f"%{query_text}%"
+        query = query.filter(
+            or_(
+                db.func.lower(User.name).like(pattern),
+                db.func.lower(User.username).like(pattern),
+                db.func.lower(User.email).like(pattern),
+                db.func.lower(User.roll_number).like(pattern),
+            )
+        )
+    students = query.order_by(User.name.asc()).limit(20).all()
+    return jsonify({"ok": True, "students": [_user_payload(student) for student in students]})
+
+
+@api_bp.route("/admin/groups", methods=["GET", "POST"])
+@rate_limit("admin_action")
+def admin_groups_api():
+    admin, error_response = _require_admin_api()
+    if error_response:
+        return error_response
+    if request.method == "POST":
+        payload = _get_json_payload()
+        name = (payload.get("name") or "").strip()
+        description = (payload.get("description") or "").strip() or None
+        if not name:
+            return jsonify({"ok": False, "message": "Group name is required."}), 400
+        if StudentGroup.query.filter(db.func.lower(StudentGroup.name) == name.lower()).first():
+            return jsonify({"ok": False, "message": "A group with this name already exists."}), 400
+        group = StudentGroup(name=name, description=description, created_by=admin.id)
+        db.session.add(group)
+        db.session.commit()
+        return jsonify({"ok": True, "group": _group_payload(group)}), 201
+    groups = StudentGroup.query.order_by(StudentGroup.name.asc()).all()
+    return jsonify({"ok": True, "groups": [_group_payload(group) for group in groups]})
+
+
+@api_bp.route("/admin/groups/<int:group_id>/members", methods=["POST"])
+@rate_limit("admin_action")
+def admin_group_members_api(group_id):
+    admin, error_response = _require_admin_api()
+    if error_response:
+        return error_response
+    group = StudentGroup.query.get_or_404(group_id)
+    payload = _get_json_payload()
+    raw_members = payload.get("members") or []
+    if isinstance(raw_members, str):
+        identifiers = [line.strip() for line in raw_members.splitlines() if line.strip()]
+    elif isinstance(raw_members, list):
+        identifiers = [str(item).strip() for item in raw_members if str(item).strip()]
+    else:
+        identifiers = []
+    if payload.get("student_id"):
+        student = User.query.filter_by(id=payload.get("student_id"), role="student").first()
+        identifiers.append(student.username if student else "")
+
+    existing_student_ids = {member.student_id for member in group.members}
+    added = 0
+    skipped = 0
+    for identifier in identifiers:
+        student = _find_student_by_identifier(identifier)
+        if not student or student.id in existing_student_ids:
+            skipped += 1
+            continue
+        db.session.add(StudentGroupMember(group_id=group.id, student_id=student.id))
+        existing_student_ids.add(student.id)
+        added += 1
+    db.session.commit()
+    return jsonify({"ok": True, "added": added, "skipped": skipped, "group": _group_payload(group)})
+
+
+@api_bp.route("/admin/groups/<int:group_id>/members/<int:member_id>", methods=["DELETE"])
+@rate_limit("admin_action")
+def admin_group_member_delete_api(group_id, member_id):
+    admin, error_response = _require_admin_api()
+    if error_response:
+        return error_response
+    member = StudentGroupMember.query.filter_by(group_id=group_id, id=member_id).first_or_404()
+    db.session.delete(member)
+    db.session.commit()
+    group = StudentGroup.query.get_or_404(group_id)
+    return jsonify({"ok": True, "group": _group_payload(group)})
+
+
+@api_bp.route("/admin/groups/<int:group_id>", methods=["DELETE"])
+@rate_limit("admin_action")
+def admin_group_delete_api(group_id):
+    admin, error_response = _require_admin_api()
+    if error_response:
+        return error_response
+    payload = _get_json_payload()
+    if not _admin_password_matches(payload):
+        return jsonify({"ok": False, "message": "Admin password confirmation failed."}), 403
+    group = StudentGroup.query.get_or_404(group_id)
+    db.session.delete(group)
+    db.session.commit()
+    return jsonify({"ok": True, "message": "Group deleted."})
+
+
+@api_bp.route("/teacher/question-bank", methods=["GET", "POST"])
+@rate_limit("admin_action")
+def teacher_question_bank_api():
+    teacher, error_response = _require_teacher_api()
+    if error_response:
+        return error_response
+    if request.method == "POST":
+        is_multipart = request.content_type and request.content_type.startswith("multipart/form-data")
+        payload = request.form if is_multipart else _get_json_payload()
+        question_text = (payload.get("question_text") or "").strip()
+        question_type = (payload.get("question_type") or "short").strip().lower()
+        marks = _parse_int_field(payload, "marks") or 1
+        options = parse_options(payload.get("options") or [])
+        image_paths = _save_question_images(request.files.getlist("question_images")) if is_multipart else payload.get("image_paths") or []
+        if not question_text:
+            return jsonify({"ok": False, "message": "Question text is required."}), 400
+        if question_type == "mcq" and len(options) < 2:
+            return jsonify({"ok": False, "message": "MCQ questions need at least two options."}), 400
+        item = QuestionBankItem(
+            teacher_id=teacher.id,
+            question_text=question_text,
+            question_type=question_type,
+            marks=max(marks, 1),
+            correct_answer=(payload.get("correct_answer") or "").strip(),
+            model_answer=(payload.get("model_answer") or "").strip(),
+            explanation=(payload.get("explanation") or "").strip(),
+            code_snippet=(payload.get("code_snippet") or "").strip(),
+            code_language=(payload.get("code_language") or "").strip() or None,
+            time_limit_seconds=max(_parse_int_field(payload, "time_limit_seconds") or 0, 0),
+        )
+        item.set_options(options)
+        item.set_image_paths(image_paths)
+        db.session.add(item)
+        db.session.commit()
+        return jsonify({"ok": True, "item": _question_bank_payload(item)}), 201
+    items = (
+        QuestionBankItem.query.filter_by(teacher_id=teacher.id)
+        .order_by(QuestionBankItem.created_at.desc())
+        .all()
+    )
+    return jsonify({"ok": True, "items": [_question_bank_payload(item) for item in items]})
+
+
+@api_bp.route("/teacher/question-bank/<int:item_id>", methods=["PATCH", "DELETE"])
+@rate_limit("admin_action")
+def teacher_question_bank_item_api(item_id):
+    teacher, error_response = _require_teacher_api()
+    if error_response:
+        return error_response
+    item = QuestionBankItem.query.filter_by(id=item_id, teacher_id=teacher.id).first_or_404()
+    if request.method == "DELETE":
+        db.session.delete(item)
+        db.session.commit()
+        return jsonify({"ok": True, "message": "Question removed from bank."})
+    payload = _get_json_payload()
+    if "question_text" in payload:
+        item.question_text = (payload.get("question_text") or "").strip()
+    if "question_type" in payload:
+        item.question_type = (payload.get("question_type") or "short").strip().lower()
+    if "marks" in payload:
+        item.marks = max(_parse_int_field(payload, "marks") or 1, 1)
+    if "options" in payload:
+        item.set_options(parse_options(payload.get("options") or []))
+    for field in ["correct_answer", "model_answer", "explanation", "code_snippet", "code_language"]:
+        if field in payload:
+            setattr(item, field, (payload.get(field) or "").strip() or None)
+    if "time_limit_seconds" in payload:
+        item.time_limit_seconds = max(_parse_int_field(payload, "time_limit_seconds") or 0, 0)
+    db.session.commit()
+    return jsonify({"ok": True, "item": _question_bank_payload(item)})
+
+
+@api_bp.route("/student/results")
+def student_results_api():
+    if session.get("role") != "student" or not session.get("roll_no"):
+        return jsonify({"ok": False, "message": "Student login required"}), 401
+    student_user_id = session.get("student_user_id")
+    if student_user_id:
+        student_user = User.query.get(student_user_id)
+        if (
+            not student_user
+            or student_user.role != "student"
+            or not student_user.is_active
+            or not current_session_matches_user(student_user)
+        ):
+            session.clear()
+            return jsonify({"ok": False, "message": "This student account is active in another browser. Please log in again here."}), 401
+
+    roll_no = (session.get("roll_no") or "").strip().upper()
+    published_results = (
+        Result.query.join(StudentSession, Result.session_id == StudentSession.id)
+        .filter(db.func.upper(StudentSession.roll_no) == roll_no, Result.published.is_(True))
+        .order_by(Result.published_at.desc(), Result.updated_at.desc())
+        .all()
+    )
+
+    payload = []
+    for result in published_results:
+        student_session = result.session
+        exam = student_session.exam_set
+        answers_by_question = {answer.question_id: answer for answer in student_session.answers}
+        marks_by_question = {mark.question_id: mark for mark in result.question_marks}
+        questions = Question.query.filter_by(exam_set_id=exam.id).order_by(Question.question_number.asc()).all()
+        payload.append(
+            {
+                "id": result.id,
+                "session_id": student_session.id,
+                "session_code": student_session.session_code,
+                "exam_id": exam.id,
+                "exam_name": exam.exam_name,
+                "subject": exam.subject,
+                "teacher_name": exam.creator.name if exam.creator else None,
+                "submitted_at": _iso_datetime(student_session.submitted_at),
+                "published_at": _iso_datetime(result.published_at),
+                "total_marks_obtained": result.total_marks_obtained,
+                "total_marks": result.total_marks,
+                "percentage": result.percentage,
+                "teacher_remarks": result.teacher_remarks,
+                "status": "passed" if result.percentage >= 40 else "failed",
+                "pdf_url": url_for("student.result_pdf", session_code=student_session.session_code),
+                "questions": [
+                    _result_question_payload(
+                        question,
+                        answers_by_question.get(question.id),
+                        marks_by_question.get(question.id),
+                        result,
+                    )
+                    for question in questions
+                ],
+            }
+        )
+    return jsonify({"ok": True, "results": payload})
+
+
+@api_bp.route("/notifications")
+def notifications_api():
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"ok": False, "message": "Not logged in"}), 401
+    user = User.query.get(user_id)
+    if not user or not user.is_active or not current_session_matches_user(user):
+        session.clear()
+        return jsonify({"ok": False, "message": "This account is active in another browser. Please log in again here."}), 401
+    filter_name = (request.args.get("filter") or "all").strip().lower()
+    page = max(request.args.get("page", 1, type=int), 1)
+    per_page = min(max(request.args.get("per_page", 20, type=int), 1), 100)
+    query = Notification.query.filter_by(recipient_user_id=user_id)
+    if filter_name == "unread":
+        query = query.filter_by(is_read=False)
+    elif filter_name == "system":
+        query = query.filter(Notification.notification_type.in_(["system", "info"]))
+    elif filter_name == "admin":
+        query = query.filter(Notification.notification_type.like("%admin%"))
+    pagination = query.order_by(Notification.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
+    items = [
+        {
+            "id": item.id,
+            "type": item.notification_type,
+            "message": item.message,
+            "is_read": item.is_read,
+            "created_at": _iso_datetime(item.created_at),
+            "related_entity_type": item.related_entity_type,
+            "related_entity_id": item.related_entity_id,
+        }
+        for item in pagination.items
+    ]
+    return jsonify(
+        {
+            "ok": True,
+            "items": items,
+            "unread_count": NotificationService.unread_count_for_user(user_id),
+            "pagination": {
+                "page": pagination.page,
+                "per_page": pagination.per_page,
+                "pages": pagination.pages,
+                "total": pagination.total,
+            },
+        }
+    )
+
+
+@api_bp.route("/notifications/<int:notification_id>/read", methods=["POST"])
+def notification_mark_read_api(notification_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"ok": False, "message": "Not logged in"}), 401
+    notification = Notification.query.filter_by(id=notification_id, recipient_user_id=user_id).first_or_404()
+    notification.mark_read()
+    db.session.commit()
+    return jsonify({"ok": True})
 
 
 @api_bp.route("/admin/proctoring/status")

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { BookOpenCheck, FilePlus2, Pencil, Search, Trash2, Upload } from "lucide-react";
-import { Badge, Button, Card, ConfirmationDialog, EmptyState, Input, Select, Textarea } from "../components/ui";
+import { FilePlus2, Pencil, Search, Trash2, Upload } from "lucide-react";
+import { Badge, Button, Card, ConfirmationDialog, EmptyState, Input, Modal, Select, Textarea } from "../components/ui";
 import { notify } from "../components/ui/Toast";
+import { api } from "../services/api";
 
 const typeOptions = [
   { value: "all", label: "All Types" },
@@ -13,75 +14,148 @@ const typeOptions = [
 
 const questionTypeOptions = typeOptions.filter(option => option.value !== "all");
 
-function parseClassicBank(html) {
-  const doc = new window.DOMParser().parseFromString(html, "text/html");
-  return Array.from(doc.querySelectorAll(".question-bank-item")).map((node, index) => {
-    const form = node.querySelector("form[action*='/question-bank/']");
-    const action = form?.getAttribute("action") || "";
-    const id = action.match(/question-bank\/(\d+)\/delete/)?.[1] || `classic-${index}`;
-    const meta = Array.from(node.querySelectorAll("p.muted")).map(item => item.textContent.trim()).filter(Boolean);
-    return {
-      id,
-      deleteAction: action,
-      type: node.querySelector(".badge")?.textContent.trim().toLowerCase() || "short",
-      text: node.querySelector("h3")?.textContent.trim() || "Untitled question",
-      meta,
-      codeSnippet: node.querySelector("pre")?.textContent.trim() || ""
-    };
-  });
+const emptyForm = {
+  question_text: "",
+  question_type: "short",
+  marks: "1",
+  correct_answer: "",
+  model_answer: "",
+  explanation: "",
+  code_snippet: "",
+  code_language: "python",
+  time_limit_seconds: "0"
+};
+
+function normalizeItem(item) {
+  return {
+    id: item.id,
+    type: item.question_type || item.type || "short",
+    text: item.question_text || item.text || "Untitled question",
+    marks: Number(item.marks || 0),
+    options: item.options || [],
+    correct_answer: item.correct_answer || "",
+    model_answer: item.model_answer || "",
+    explanation: item.explanation || "",
+    codeSnippet: item.code_snippet || "",
+    code_language: item.code_language || "python",
+    time_limit_seconds: item.time_limit_seconds || 0,
+    image_urls: item.image_urls || []
+  };
+}
+
+function formFromItem(item) {
+  return {
+    question_text: item.text || "",
+    question_type: item.type || "short",
+    marks: String(item.marks || 1),
+    correct_answer: item.correct_answer || "",
+    model_answer: item.model_answer || "",
+    explanation: item.explanation || "",
+    code_snippet: item.codeSnippet || "",
+    code_language: item.code_language || "python",
+    time_limit_seconds: String(item.time_limit_seconds || 0)
+  };
 }
 
 export default function TeacherQuestionBank() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
-  const [questionType, setQuestionType] = useState("short");
+  const [formData, setFormData] = useState(emptyForm);
   const [options, setOptions] = useState(["", "", "", ""]);
   const [examId, setExamId] = useState("");
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [editTarget, setEditTarget] = useState(null);
+  const [editForm, setEditForm] = useState(emptyForm);
+  const [editOptions, setEditOptions] = useState(["", "", "", ""]);
+
+  const loadBank = async () => {
+    setLoading(true);
+    try {
+      const { data } = await api.get("/teacher/question-bank");
+      setItems((data.items || []).map(normalizeItem));
+    } catch (error) {
+      notify.error(error.message || "Could not load the question bank.");
+      setItems([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    let cancelled = false;
-    async function loadBank() {
-      try {
-        const response = await window.fetch("/teacher/question-bank", { credentials: "same-origin" });
-        const html = await response.text();
-        if (!cancelled) setItems(parseClassicBank(html));
-      } catch {
-        notify.warning("Question bank list is available in the classic teacher page.");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
     loadBank();
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   const filteredItems = useMemo(() => {
     const query = search.trim().toLowerCase();
     return items.filter(item => {
-      const matchesType = typeFilter === "all" || item.type.includes(typeFilter);
+      const matchesType = typeFilter === "all" || item.type === typeFilter;
       const matchesSearch = !query || item.text.toLowerCase().includes(query);
       return matchesType && matchesSearch;
     });
   }, [items, search, typeFilter]);
 
-  const confirmDelete = async () => {
-    if (!deleteTarget?.deleteAction) return;
+  const saveQuestion = async (event, imageFiles = []) => {
+    event.preventDefault();
+    setSaving(true);
     try {
-      const response = await window.fetch(deleteTarget.deleteAction, {
-        method: "POST",
-        credentials: "same-origin"
+      const payload = new window.FormData();
+      Object.entries(formData).forEach(([key, value]) => payload.append(key, value ?? ""));
+      payload.set("options", formData.question_type === "mcq" ? options.filter(Boolean).join("|") : "");
+      imageFiles.forEach(file => payload.append("question_images", file));
+      const { data } = await api.post("/teacher/question-bank", payload, {
+        headers: { "Content-Type": "multipart/form-data" }
       });
-      if (!response.ok) throw new Error("Delete failed");
+      setItems(current => [normalizeItem(data.item), ...current]);
+      setFormData(emptyForm);
+      setOptions(["", "", "", ""]);
+      notify.success("Question saved to bank");
+    } catch (error) {
+      notify.error(error.response?.data?.message || error.message || "Could not save question");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openEdit = item => {
+    setEditTarget(item);
+    setEditForm(formFromItem(item));
+    setEditOptions([...item.options, "", "", "", ""].slice(0, Math.max(4, item.options.length)));
+  };
+
+  const saveEdit = async event => {
+    event.preventDefault();
+    if (!editTarget) return;
+    setSaving(true);
+    try {
+      const payload = {
+        ...editForm,
+        marks: Number(editForm.marks || 1),
+        time_limit_seconds: Number(editForm.time_limit_seconds || 0),
+        options: editForm.question_type === "mcq" ? editOptions.filter(Boolean) : []
+      };
+      const { data } = await api.patch(`/teacher/question-bank/${editTarget.id}`, payload);
+      setItems(current => current.map(item => item.id === editTarget.id ? normalizeItem(data.item) : item));
+      setEditTarget(null);
+      notify.success("Question updated");
+    } catch (error) {
+      notify.error(error.response?.data?.message || error.message || "Could not update question");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget?.id) return;
+    try {
+      await api.delete(`/teacher/question-bank/${deleteTarget.id}`);
       setItems(current => current.filter(item => item.id !== deleteTarget.id));
       notify.success("Question removed from bank");
       setDeleteTarget(null);
-    } catch {
-      notify.error("Could not delete the bank question");
+    } catch (error) {
+      notify.error(error.response?.data?.message || error.message || "Could not delete the bank question");
     }
   };
 
@@ -91,11 +165,8 @@ export default function TeacherQuestionBank() {
         <div>
           <p className="text-sm font-semibold uppercase text-text-muted">Teacher workspace</p>
           <h1 className="text-3xl font-bold text-text-primary">Question Bank</h1>
-          <p className="mt-1 text-text-secondary">Create reusable questions, import them into exams, and keep the classic bank data in sync.</p>
+          <p className="mt-1 text-text-secondary">Create reusable questions, import them into exams, and keep everything synced through the JSON API.</p>
         </div>
-        <Button as="a" href="/teacher/question-bank" variant="secondary">
-          <BookOpenCheck size={18} /> Classic Bank
-        </Button>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
@@ -106,45 +177,20 @@ export default function TeacherQuestionBank() {
             </span>
             <div>
               <h2 className="text-xl font-semibold text-text-primary">Add Question</h2>
-              <p className="text-sm text-text-secondary">Saves through the existing Flask question-bank route.</p>
+              <p className="text-sm text-text-secondary">Reusable items can be edited and imported later.</p>
             </div>
           </div>
 
-          <form method="post" action="/teacher/question-bank" encType="multipart/form-data" className="space-y-4">
-            <Select label="Question Type" value={questionType} onChange={setQuestionType} options={questionTypeOptions} />
-            <Textarea label="Question Text" name="question_text" rows={5} required placeholder="Write the reusable question text." />
-            <Input label="Marks" name="marks" type="number" min="1" defaultValue="1" required />
-
-            {questionType === "mcq" && (
-              <div className="space-y-3">
-                <span className="block text-sm font-semibold text-text-secondary">MCQ Options</span>
-                {options.map((option, index) => (
-                  <Input
-                    key={index}
-                    value={option}
-                    onChange={event => {
-                      const next = [...options];
-                      next[index] = event.target.value;
-                      setOptions(next);
-                    }}
-                    placeholder={`Option ${index + 1}`}
-                  />
-                ))}
-                <input type="hidden" name="options" value={options.filter(Boolean).join("|")} />
-              </div>
-            )}
-
-            <input type="hidden" name="question_type" value={questionType} />
-            <Input label="Correct Answer / Key" name="correct_answer" placeholder="Optional for written questions" />
-            <Textarea label="Model Answer" name="model_answer" rows={3} placeholder="Reference answer shown during review/results when revealed." />
-            <Input label="Question Images" name="question_images" type="file" accept=".png,.jpg,.jpeg,.gif,.webp" multiple />
-            <Textarea label="Read-only Code Snippet" name="code_snippet" rows={4} className="font-mono text-sm" />
-            <Input label="Snippet Language" name="code_language" placeholder="python" />
-            <Input label="Per-question Time Limit" name="time_limit_seconds" type="number" min="0" defaultValue="0" helperText="Seconds. 0 means no limit." />
-            <Button type="submit" variant="primary" className="w-full">
-              <Upload size={18} /> Save to Bank
-            </Button>
-          </form>
+          <QuestionForm
+            formData={formData}
+            setFormData={setFormData}
+            options={options}
+            setOptions={setOptions}
+            onSubmit={saveQuestion}
+            saving={saving}
+            submitLabel="Save to Bank"
+            allowImages
+          />
         </Card>
 
         <div className="space-y-4">
@@ -167,8 +213,7 @@ export default function TeacherQuestionBank() {
             <EmptyState
               icon={Search}
               heading="No saved questions found"
-              description="Add a question on the left, or open the classic bank if the HTML list could not be read."
-              action={{ label: "Open Classic Bank", href: "/teacher/question-bank" }}
+              description="Add a reusable question, then import it into any exam."
             />
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
@@ -177,23 +222,33 @@ export default function TeacherQuestionBank() {
                   <div className="h-1.5 bg-brand-primary" />
                   <div className="space-y-4 p-5">
                     <div className="flex items-start justify-between gap-3">
-                      <Badge variant={item.type.includes("mcq") ? "info" : item.type.includes("coding") ? "purple" : "secondary"}>
-                        {item.type}
-                      </Badge>
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant={item.type === "mcq" ? "info" : item.type === "coding" ? "purple" : "secondary"}>
+                          {item.type}
+                        </Badge>
+                        <Badge variant="secondary">{item.marks} marks</Badge>
+                      </div>
                       <Button variant="ghost" size="sm" className="h-11 w-11 px-0" onClick={() => setDeleteTarget(item)} aria-label="Delete bank question">
                         <Trash2 size={17} />
                       </Button>
                     </div>
                     <p className="line-clamp-2 font-semibold text-text-primary">{item.text}</p>
-                    <div className="flex flex-wrap gap-2">
-                      {item.meta.map(meta => <Badge key={meta} variant="secondary">{meta}</Badge>)}
-                    </div>
+                    {item.options.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {item.options.map(option => <Badge key={option} variant={option === item.correct_answer ? "success" : "secondary"}>{option}</Badge>)}
+                      </div>
+                    )}
+                    {item.image_urls.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {item.image_urls.map(url => <img key={url} src={url} alt="" className="h-16 w-20 rounded-md border border-border object-cover" />)}
+                      </div>
+                    )}
                     {item.codeSnippet && (
                       <pre className="max-h-28 overflow-auto rounded-md bg-slate-950 p-3 font-mono text-xs text-slate-100">{item.codeSnippet}</pre>
                     )}
                     <div className="flex flex-wrap gap-2 border-t border-border pt-4">
-                      <Button as="a" href={`/teacher/question-bank`} variant="secondary" size="sm">
-                        <Pencil size={16} /> Edit Classic
+                      <Button variant="secondary" size="sm" onClick={() => openEdit(item)}>
+                        <Pencil size={16} /> Edit
                       </Button>
                       <form method="post" action={examId ? `/teacher/exam/${examId}/question-bank/import` : "/teacher/question-bank"} className="contents">
                         <input type="hidden" name="bank_item_id" value={item.id} />
@@ -210,10 +265,22 @@ export default function TeacherQuestionBank() {
         </div>
       </div>
 
+      <Modal open={!!editTarget} onClose={() => setEditTarget(null)} title="Edit Bank Question" className="max-w-2xl">
+        <QuestionForm
+          formData={editForm}
+          setFormData={setEditForm}
+          options={editOptions}
+          setOptions={setEditOptions}
+          onSubmit={saveEdit}
+          saving={saving}
+        submitLabel="Save Changes"
+      />
+      </Modal>
+
       <ConfirmationDialog
         open={!!deleteTarget}
         title="Delete Bank Question?"
-        description="This removes the saved reusable question from your bank. Existing exams keep their own copied questions."
+        description="This removes the saved reusable question from your bank. Existing exams keep their copied questions."
         confirmLabel="Delete"
         confirmWord="DELETE"
         variant="danger"
@@ -221,5 +288,59 @@ export default function TeacherQuestionBank() {
         onClose={() => setDeleteTarget(null)}
       />
     </div>
+  );
+}
+
+function QuestionForm({ formData, setFormData, options, setOptions, onSubmit, saving, submitLabel, allowImages = false }) {
+  const [imageFiles, setImageFiles] = useState([]);
+  const update = patch => setFormData(current => ({ ...current, ...patch }));
+
+  return (
+    <form className="space-y-4" onSubmit={event => onSubmit(event, imageFiles)}>
+      <Select label="Question Type" value={formData.question_type} onChange={value => update({ question_type: value })} options={questionTypeOptions} />
+      <Textarea label="Question Text" rows={5} required value={formData.question_text} onChange={event => update({ question_text: event.target.value })} placeholder="Write the reusable question text." />
+      <Input label="Marks" type="number" min="1" required value={formData.marks} onChange={event => update({ marks: event.target.value })} />
+
+      {formData.question_type === "mcq" && (
+        <div className="space-y-3">
+          <span className="block text-sm font-semibold text-text-secondary">MCQ Options</span>
+          {options.map((option, index) => (
+            <Input
+              key={index}
+              value={option}
+              onChange={event => {
+                const next = [...options];
+                next[index] = event.target.value;
+                setOptions(next);
+              }}
+              placeholder={`Option ${index + 1}`}
+            />
+          ))}
+          <Button type="button" variant="ghost" size="sm" onClick={() => setOptions(current => [...current, ""])}>
+            Add Option
+          </Button>
+        </div>
+      )}
+
+      <Input label="Correct Answer / Key" value={formData.correct_answer} onChange={event => update({ correct_answer: event.target.value })} placeholder="Optional for written questions" />
+      <Textarea label="Model Answer" rows={3} value={formData.model_answer} onChange={event => update({ model_answer: event.target.value })} placeholder="Reference answer shown during review/results when revealed." />
+      <Textarea label="Explanation" rows={3} value={formData.explanation} onChange={event => update({ explanation: event.target.value })} placeholder="Optional explanation for results." />
+      {allowImages && (
+        <Input
+          label="Question Images"
+          type="file"
+          accept=".png,.jpg,.jpeg,.gif,.webp"
+          multiple
+          onChange={event => setImageFiles(Array.from(event.target.files || []))}
+          helperText={imageFiles.length ? `${imageFiles.length} image(s) selected` : "Optional image attachments."}
+        />
+      )}
+      <Textarea label="Read-only Code Snippet" rows={4} value={formData.code_snippet} onChange={event => update({ code_snippet: event.target.value })} className="font-mono text-sm" />
+      <Input label="Snippet Language" value={formData.code_language} onChange={event => update({ code_language: event.target.value })} placeholder="python" />
+      <Input label="Per-question Time Limit" type="number" min="0" value={formData.time_limit_seconds} onChange={event => update({ time_limit_seconds: event.target.value })} helperText="Seconds. 0 means no limit." />
+      <Button type="submit" variant="primary" className="w-full" loading={saving} loadingLabel="Saving...">
+        <Upload size={18} /> {submitLabel}
+      </Button>
+    </form>
   );
 }

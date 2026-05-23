@@ -1,74 +1,81 @@
 import { useEffect, useState } from "react";
-import { Plus, Search, Trash2, Users } from "lucide-react";
+import { Plus, Search, Trash2, X } from "lucide-react";
 import { Badge, Button, Card, ConfirmationDialog, EmptyState, Input, Textarea } from "../components/ui";
+import { api } from "../services/api";
 import { notify } from "../components/ui/Toast";
-
-function parseGroups(html) {
-  const doc = new window.DOMParser().parseFromString(html, "text/html");
-  return Array.from(doc.querySelectorAll(".question-bank-item")).map((node, index) => {
-    const addAction = node.querySelector("form[action*='/members']")?.getAttribute("action") || "";
-    const deleteAction = node.querySelector("form[action*='/delete']")?.getAttribute("action") || "";
-    const id = (addAction || deleteAction).match(/groups\/(\d+)/)?.[1] || `group-${index}`;
-    return {
-      id,
-      name: node.querySelector("h3")?.textContent.trim() || "Student Group",
-      description: node.querySelector("p.muted")?.textContent.trim() || "No description",
-      count: node.querySelector(".badge")?.textContent.trim() || "0 students",
-      addAction,
-      deleteAction,
-      members: Array.from(node.querySelectorAll("tbody tr")).map(row => {
-        const cells = Array.from(row.querySelectorAll("td")).map(cell => cell.textContent.trim());
-        return { name: cells[0], roll: cells[1], email: cells[2] };
-      })
-    };
-  });
-}
 
 export default function AdminGroups() {
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [newGroup, setNewGroup] = useState({ name: "", description: "" });
+  const [memberDrafts, setMemberDrafts] = useState({});
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [adminPassword, setAdminPassword] = useState("");
 
-  useEffect(() => {
-    let cancelled = false;
-    async function loadGroups() {
-      try {
-        const response = await window.fetch("/admin/groups", { credentials: "same-origin" });
-        const html = await response.text();
-        if (!cancelled) setGroups(parseGroups(html));
-      } catch {
-        notify.warning("Open the classic groups page for the live group list.");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+  const loadGroups = async () => {
+    setLoading(true);
+    try {
+      const { data } = await api.get("/admin/groups");
+      setGroups(data.groups || []);
+    } catch {
+      notify.error("Could not load groups");
+    } finally {
+      setLoading(false);
     }
+  };
+
+  useEffect(() => {
     loadGroups();
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   const filteredGroups = groups.filter(group => group.name.toLowerCase().includes(search.toLowerCase()));
 
-  const confirmDelete = async () => {
-    if (!deleteTarget?.deleteAction || !adminPassword) return;
-    const formData = new window.FormData();
-    formData.append("admin_password", adminPassword);
+  const createGroup = async event => {
+    event.preventDefault();
     try {
-      const response = await window.fetch(deleteTarget.deleteAction, {
-        method: "POST",
-        credentials: "same-origin",
-        body: formData
-      });
-      if (!response.ok) throw new Error("Delete failed");
+      const { data } = await api.post("/admin/groups", newGroup);
+      setGroups(current => [...current, data.group].sort((left, right) => left.name.localeCompare(right.name)));
+      setNewGroup({ name: "", description: "" });
+      notify.success("Group created");
+    } catch (error) {
+      notify.error(error.response?.data?.message || "Could not create group");
+    }
+  };
+
+  const addMembers = async group => {
+    const members = memberDrafts[group.id] || "";
+    if (!members.trim()) return;
+    try {
+      const { data } = await api.post(`/admin/groups/${group.id}/members`, { members });
+      setGroups(current => current.map(item => item.id === group.id ? data.group : item));
+      setMemberDrafts(current => ({ ...current, [group.id]: "" }));
+      notify.success(`Added ${data.added} student(s), skipped ${data.skipped}`);
+    } catch (error) {
+      notify.error(error.response?.data?.message || "Could not add members");
+    }
+  };
+
+  const removeMember = async (group, member) => {
+    try {
+      const { data } = await api.delete(`/admin/groups/${group.id}/members/${member.id}`);
+      setGroups(current => current.map(item => item.id === group.id ? data.group : item));
+      notify.success("Member removed");
+    } catch {
+      notify.error("Could not remove member");
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget || !adminPassword.trim()) return;
+    try {
+      await api.delete(`/admin/groups/${deleteTarget.id}`, { data: { admin_password: adminPassword } });
       setGroups(current => current.filter(group => group.id !== deleteTarget.id));
       notify.success("Group deleted");
       setDeleteTarget(null);
       setAdminPassword("");
-    } catch {
-      notify.error("Could not delete group. Check the admin password.");
+    } catch (error) {
+      notify.error(error.response?.data?.message || "Could not delete group");
     }
   };
 
@@ -78,11 +85,8 @@ export default function AdminGroups() {
         <div>
           <p className="text-sm font-semibold uppercase text-text-muted">Admin workspace</p>
           <h1 className="text-3xl font-bold text-text-primary">Groups</h1>
-          <p className="mt-1 text-text-secondary">Create student batches and manage roster membership with the existing group endpoints.</p>
+          <p className="mt-1 text-text-secondary">Create batches, add students, remove members, and delete groups through JSON APIs.</p>
         </div>
-        <Button as="a" href="/admin/groups" variant="secondary">
-          <Users size={18} /> Classic Groups
-        </Button>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[380px_minmax(0,1fr)]">
@@ -93,12 +97,12 @@ export default function AdminGroups() {
             </span>
             <div>
               <h2 className="text-xl font-semibold text-text-primary">Create Group</h2>
-              <p className="text-sm text-text-secondary">New groups are saved directly to Flask.</p>
+              <p className="text-sm text-text-secondary">Saved directly through `/api/admin/groups`.</p>
             </div>
           </div>
-          <form method="post" action="/admin/groups" className="space-y-4">
-            <Input label="Group Name" name="name" placeholder="Batch A 2026" required />
-            <Textarea label="Description" name="description" rows={3} placeholder="Optional note" />
+          <form onSubmit={createGroup} className="space-y-4">
+            <Input label="Group Name" value={newGroup.name} onChange={event => setNewGroup(current => ({ ...current, name: event.target.value }))} placeholder="Batch A 2026" required />
+            <Textarea label="Description" value={newGroup.description} onChange={event => setNewGroup(current => ({ ...current, description: event.target.value }))} rows={3} placeholder="Optional note" />
             <Button type="submit" variant="primary" className="w-full">
               <Plus size={18} /> Create Group
             </Button>
@@ -121,34 +125,46 @@ export default function AdminGroups() {
                   <div className="mb-4 flex items-start justify-between gap-3">
                     <div>
                       <h2 className="text-lg font-semibold text-text-primary">{group.name}</h2>
-                      <p className="text-sm text-text-secondary">{group.description}</p>
+                      <p className="text-sm text-text-secondary">{group.description || "No description"}</p>
                     </div>
-                    <Badge variant="info">{group.count}</Badge>
+                    <Badge variant="info">{group.student_count} students</Badge>
                   </div>
 
-                  <form method="post" action={group.addAction} className="space-y-3 rounded-lg border border-border bg-background-base p-3">
-                    <Textarea label="Add Members" name="members" rows={4} placeholder="Paste roll number, username, or email, one per line" />
-                    <Button type="submit" variant="secondary" size="sm">
+                  <div className="space-y-3 rounded-lg border border-border bg-background-base p-3">
+                    <Textarea
+                      label="Add Members"
+                      value={memberDrafts[group.id] || ""}
+                      onChange={event => setMemberDrafts(current => ({ ...current, [group.id]: event.target.value }))}
+                      rows={4}
+                      placeholder="Paste roll number, username, or email, one per line"
+                    />
+                    <Button type="button" variant="secondary" size="sm" onClick={() => addMembers(group)}>
                       <Plus size={16} /> Add Students
                     </Button>
-                  </form>
+                  </div>
 
                   {group.members.length > 0 && (
-                    <div className="mt-4 max-h-48 overflow-auto rounded-lg border border-border">
+                    <div className="mt-4 max-h-56 overflow-auto rounded-lg border border-border">
                       <table className="w-full text-left text-sm">
                         <thead className="bg-background-elevated text-text-secondary">
                           <tr>
                             <th className="px-3 py-2">Name</th>
                             <th className="px-3 py-2">Roll</th>
                             <th className="px-3 py-2">Email</th>
+                            <th className="px-3 py-2 text-right">Remove</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-border">
                           {group.members.map(member => (
-                            <tr key={`${member.roll}-${member.email}`}>
+                            <tr key={member.id}>
                               <td className="px-3 py-2 text-text-primary">{member.name}</td>
-                              <td className="px-3 py-2 text-text-secondary">{member.roll}</td>
-                              <td className="px-3 py-2 text-text-secondary">{member.email}</td>
+                              <td className="px-3 py-2 text-text-secondary">{member.roll_number || "-"}</td>
+                              <td className="px-3 py-2 text-text-secondary">{member.email || "-"}</td>
+                              <td className="px-3 py-2 text-right">
+                                <Button variant="ghost" size="sm" className="h-10 w-10 px-0" onClick={() => removeMember(group, member)} aria-label="Remove member">
+                                  <X size={16} />
+                                </Button>
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -174,13 +190,7 @@ export default function AdminGroups() {
         description={(
           <div className="space-y-3">
             <p>Student accounts remain, but the group and its membership list will be removed.</p>
-            <Input
-              label="Admin Password"
-              type="password"
-              value={adminPassword}
-              onChange={event => setAdminPassword(event.target.value)}
-              placeholder="Required by Flask"
-            />
+            <Input label="Admin Password" type="password" value={adminPassword} onChange={event => setAdminPassword(event.target.value)} />
           </div>
         )}
         confirmLabel="Delete"

@@ -459,3 +459,21 @@ Still intentionally left for later phases:
 - Browser-test the full React UI with real admin, teacher, and student sessions at 375px, 768px, and 1280px.
 - Browser-test realtime push behavior with two real browser sessions on the running LAN app.
 - Add production-grade JSON APIs for admin user management and teacher exam CRUD when the Python API migration is ready, then replace the current Flask-form bridge paths.
+
+## Latest Implementation Batch 17 - 2026-05-23
+
+Completed in this batch:
+- Added production-grade JSON endpoints for React admin users, admin exams, admin audit log, admin groups, teacher question bank, student published results, and notifications.
+- Extended `/api/admin/dashboard` with participation trend, status distribution, recent activity, suspicious students, violations today, and pending review counts for the Recharts dashboard.
+- Replaced React HTML-scraping bridge logic in admin exams, admin reports, admin groups, admin users, teacher question bank, student results, and notifications with JSON API calls.
+- Added admin user edit, reset password, and session-history modals backed by JSON APIs with admin password confirmation where required.
+- Added question-bank image upload support through the JSON API using the existing Flask question image storage flow.
+- Upgraded student results to load per-question published result data, show animated score rings, MCQ correctness, teacher remarks, image lightbox previews, and read-only Monaco views for code answers.
+- Removed visible "classic" bridge links from the React pages now covered by JSON endpoints.
+- Removed the tracked generated `app/routes/__pycache__/api_routes.cpython-311.pyc` artifact; Python caches are already ignored by `.gitignore`.
+- Verified Flask route syntax via a Python compile check and verified `npm.cmd run lint` plus `npm.cmd run build` complete successfully.
+
+Still intentionally left for later phases:
+- Browser-test the full React UI with real admin, teacher, and student sessions at 375px, 768px, and 1280px.
+- Browser-test realtime push behavior with two real browser sessions on the running LAN app.
+- Complete final hosted deployment hardening and HTTPS validation in the target environment.
