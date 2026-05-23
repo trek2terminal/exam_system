@@ -1,12 +1,102 @@
-import { useCallback, useEffect, useState } from "react";
-import { Users, BookOpenCheck, AlertTriangle, BarChart3, Plus, Upload, Eye } from "lucide-react";
-import { Button, Card, StatCard } from "../components/ui";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { AlertTriangle, BarChart3, BookOpenCheck, DatabaseBackup, Eye, Plus, Upload, Users } from "lucide-react";
+import {
+  CartesianGrid,
+  Cell,
+  Legend,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip as RechartsTooltip,
+  XAxis,
+  YAxis
+} from "recharts";
+import { Badge, Button, Card, StatCard } from "../components/ui";
 import { api } from "../services/api";
 import { notify } from "../components/ui/Toast";
+
+const donutColors = {
+  draft: "rgb(var(--color-warning))",
+  published: "rgb(var(--color-success))",
+  active: "rgb(var(--color-success))",
+  closed: "rgb(var(--color-danger))",
+  archived: "rgb(var(--color-text-muted))"
+};
+
+function useChartTheme() {
+  const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
+
+  useEffect(() => {
+    const observer = new window.MutationObserver(() => {
+      setDark(document.documentElement.classList.contains("dark"));
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, []);
+
+  return dark
+    ? {
+      axis: "#cbd5e1",
+      grid: "#334155",
+      tooltipBg: "#1e293b",
+      tooltipBorder: "#334155",
+      tooltipText: "#f8fafc"
+    }
+    : {
+      axis: "#475569",
+      grid: "#e2e8f0",
+      tooltipBg: "#ffffff",
+      tooltipBorder: "#e2e8f0",
+      tooltipText: "#0f172a"
+    };
+}
+
+function normalizeTrend(rawTrend, stats) {
+  if (Array.isArray(rawTrend) && rawTrend.length > 0) {
+    return rawTrend.map((item, index) => ({
+      day: item.day || item.label || `Day ${index + 1}`,
+      participants: Number(item.participants ?? item.count ?? item.value ?? 0)
+    }));
+  }
+
+  const total = Number(stats.submitted_sessions || stats.active_exams || 0);
+  return Array.from({ length: 7 }, (_, index) => ({
+    day: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][index],
+    participants: Math.max(0, Math.round((total / 7) * (index + 1) * 0.45))
+  }));
+}
+
+function normalizeStatus(rawStatus, stats) {
+  if (Array.isArray(rawStatus) && rawStatus.length > 0) {
+    return rawStatus.map(item => ({
+      name: item.name || item.status || item.label,
+      value: Number(item.value ?? item.count ?? 0)
+    }));
+  }
+  if (rawStatus && typeof rawStatus === "object") {
+    return Object.entries(rawStatus).map(([name, value]) => ({ name, value: Number(value || 0) }));
+  }
+  return [
+    { name: "active", value: Number(stats.active_exams || 0) },
+    { name: "published", value: Number(stats.published_results || 0) },
+    { name: "closed", value: Math.max(Number(stats.total_exams || 0) - Number(stats.active_exams || 0), 0) },
+    { name: "draft", value: 0 }
+  ].filter(item => item.value > 0 || item.name === "draft");
+}
+
+function formatTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString([], { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+}
 
 export default function AdminDashboard() {
   const [dashboard, setDashboard] = useState(null);
   const [loading, setLoading] = useState(true);
+  const chartTheme = useChartTheme();
 
   const loadDashboard = useCallback(async () => {
     try {
@@ -23,159 +113,141 @@ export default function AdminDashboard() {
     loadDashboard();
   }, [loadDashboard]);
 
-  if (loading) return <div className="p-8 text-center">Loading dashboard...</div>;
-  if (!dashboard) return <div className="p-8 text-center">Failed to load data</div>;
+  const stats = useMemo(() => dashboard?.stats || {}, [dashboard?.stats]);
+  const participationTrend = useMemo(() => normalizeTrend(dashboard?.participation_trend, stats), [dashboard?.participation_trend, stats]);
+  const statusDistribution = useMemo(() => normalizeStatus(dashboard?.status_distribution, stats), [dashboard?.status_distribution, stats]);
+  const recentActivity = dashboard?.recent_activity || [];
+  const suspiciousStudents = dashboard?.suspicious_students || [];
 
-  const stats = dashboard.stats || {};
-  const recentActivity = dashboard.recent_activity || [];
-  const suspiciousStudents = dashboard.suspicious_students || [];
+  if (loading) return <Card className="p-8 text-center text-text-muted">Loading dashboard...</Card>;
+  if (!dashboard) return <Card className="p-8 text-center text-danger">Failed to load dashboard data</Card>;
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <p className="text-sm font-semibold text-text-muted">ADMIN OVERVIEW</p>
-        <h1 className="text-3xl font-bold text-text-primary">Platform Health</h1>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p className="text-sm font-semibold uppercase text-text-muted">Admin overview</p>
+          <h1 className="text-3xl font-bold text-text-primary">Platform Health</h1>
+          <p className="mt-1 text-text-secondary">Live role counts, exam activity, alerts, and report shortcuts.</p>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <Button variant="primary" size="sm" as="a" href="/react/admin/users">
+            <Plus size={16} /> Create Teacher
+          </Button>
+          <Button variant="secondary" size="sm" as="a" href="/admin/users?role=student">
+            <Upload size={16} /> Import Students
+          </Button>
+          <Button variant="secondary" size="sm" as="a" href="/admin/violations">
+            <AlertTriangle size={16} /> View Violations
+          </Button>
+          <Button variant="secondary" size="sm" as="a" href="/react/admin/settings">
+            <DatabaseBackup size={16} /> Backup Database
+          </Button>
+        </div>
       </div>
 
-      {/* Quick Actions */}
-      <div className="flex flex-wrap gap-3">
-        <Button variant="primary" size="sm" as="a" href="/admin/users/create">
-          <Plus size={16} /> Create Teacher
-        </Button>
-        <Button variant="secondary" size="sm">
-          <Upload size={16} /> Import Students
-        </Button>
-        <Button variant="secondary" size="sm">
-          <AlertTriangle size={16} /> View Violations
-        </Button>
-        <Button variant="secondary" size="sm">
-          <BarChart3 size={16} /> Backup Database
-        </Button>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6">
+        <StatCard icon={Users} label="Total Users" value={stats.total_users || 0} />
+        <StatCard icon={Users} label="Teachers" value={stats.total_teachers || 0} />
+        <StatCard icon={Users} label="Students" value={stats.total_students || 0} />
+        <StatCard icon={BookOpenCheck} label="Active Exams" value={stats.active_exams || 0} />
+        <StatCard icon={AlertTriangle} label="Violations Today" value={stats.violations_today || 0} variant="danger" />
+        <StatCard icon={BarChart3} label="Pending Reviews" value={stats.pending_reviews || 0} />
       </div>
 
-      {/* Stats Row */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-6">
-        <StatCard
-          icon={Users}
-          label="Total Users"
-          value={stats.total_users || 0}
-          variant="default"
-        />
-        <StatCard
-          icon={Users}
-          label="Teachers"
-          value={stats.total_teachers || 0}
-          variant="default"
-        />
-        <StatCard
-          icon={Users}
-          label="Students"
-          value={stats.total_students || 0}
-          variant="default"
-        />
-        <StatCard
-          icon={BookOpenCheck}
-          label="Active Exams"
-          value={stats.active_exams || 0}
-          variant="default"
-        />
-        <StatCard
-          icon={AlertTriangle}
-          label="Violations Today"
-          value={stats.violations_today || 0}
-          variant="danger"
-        />
-        <StatCard
-          icon={BarChart3}
-          label="Pending Reviews"
-          value={stats.pending_reviews || 0}
-          variant="default"
-        />
-      </div>
-
-      {/* Main Content Grid */}
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Charts Column - 2 cols */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Participation Chart */}
+      <div className="grid gap-6 xl:grid-cols-3">
+        <div className="space-y-6 xl:col-span-2">
           <Card className="p-5">
-            <h3 className="font-semibold text-text-primary mb-4">Exam Participation (Last 7 Days)</h3>
-            <div className="h-64 bg-background-elevated/50 rounded flex items-end justify-around p-4">
-              {[45, 52, 48, 61, 55, 70, 65].map((value, index) => (
-                <div key={index} className="flex flex-col items-center gap-2">
-                  <div
-                    className="w-8 rounded-t bg-gradient-to-t from-brand-primary to-brand-primary/60 transition hover:opacity-80"
-                    style={{ height: `${(value / 70) * 200}px` }}
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-semibold text-text-primary">Exam Participation</h2>
+                <p className="text-sm text-text-secondary">Last 7 days, using API data when available.</p>
+              </div>
+              <Badge variant="info">7 days</Badge>
+            </div>
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={participationTrend} margin={{ top: 12, right: 16, left: -12, bottom: 0 }}>
+                  <CartesianGrid stroke={chartTheme.grid} strokeDasharray="3 3" />
+                  <XAxis dataKey="day" tick={{ fill: chartTheme.axis, fontSize: 12 }} axisLine={{ stroke: chartTheme.grid }} tickLine={false} />
+                  <YAxis tick={{ fill: chartTheme.axis, fontSize: 12 }} axisLine={{ stroke: chartTheme.grid }} tickLine={false} />
+                  <RechartsTooltip
+                    contentStyle={{ background: chartTheme.tooltipBg, border: `1px solid ${chartTheme.tooltipBorder}`, borderRadius: 12, color: chartTheme.tooltipText }}
+                    labelStyle={{ color: chartTheme.tooltipText }}
                   />
-                  <span className="text-xs text-text-muted">Day {index + 1}</span>
-                </div>
-              ))}
+                  <Line type="monotone" dataKey="participants" stroke="rgb(var(--color-brand-primary))" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                </LineChart>
+              </ResponsiveContainer>
             </div>
           </Card>
 
-          {/* Status Distribution */}
           <Card className="p-5">
-            <h3 className="font-semibold text-text-primary mb-4">Exam Status Distribution</h3>
-            <div className="space-y-3">
-              {[
-                { label: "Active", value: 12, color: "bg-success", width: "60%" },
-                { label: "Upcoming", value: 8, color: "bg-info", width: "40%" },
-                { label: "Closed", value: 20, color: "bg-danger", width: "100%" },
-                { label: "Draft", value: 5, color: "bg-text-muted", width: "25%" }
-              ].map((item, index) => (
-                <div key={index}>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-semibold text-text-primary">{item.label}</span>
-                    <span className="text-sm text-text-muted">{item.value} exams</span>
-                  </div>
-                  <div className="h-2 rounded-pill bg-background-elevated overflow-hidden">
-                    <div className={`h-full ${item.color} transition`} style={{ width: item.width }} />
-                  </div>
-                </div>
-              ))}
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-semibold text-text-primary">Exam Status Distribution</h2>
+                <p className="text-sm text-text-secondary">Draft, published/active, closed, and archived mix.</p>
+              </div>
+              <Badge variant="purple">{statusDistribution.reduce((sum, item) => sum + Number(item.value || 0), 0)} exams</Badge>
+            </div>
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={statusDistribution} dataKey="value" nameKey="name" innerRadius={70} outerRadius={100} paddingAngle={3}>
+                    {statusDistribution.map(item => (
+                      <Cell key={item.name} fill={donutColors[item.name] || "rgb(var(--color-brand-primary))"} />
+                    ))}
+                  </Pie>
+                  <RechartsTooltip
+                    contentStyle={{ background: chartTheme.tooltipBg, border: `1px solid ${chartTheme.tooltipBorder}`, borderRadius: 12, color: chartTheme.tooltipText }}
+                    labelStyle={{ color: chartTheme.tooltipText }}
+                  />
+                  <Legend wrapperStyle={{ color: chartTheme.axis }} />
+                </PieChart>
+              </ResponsiveContainer>
             </div>
           </Card>
         </div>
 
-        {/* Activity & Alerts Column */}
-        <div className="lg:col-span-1 space-y-6">
-          {/* Recent Activity */}
-          <Card className="p-5 h-full flex flex-col">
-            <h3 className="font-semibold text-text-primary mb-4">Recent Activity</h3>
-            <div className="space-y-3 flex-1 overflow-y-auto">
-              {recentActivity.length > 0 ? (
-                recentActivity.slice(0, 8).map((activity, index) => (
-                  <div key={index} className="text-sm border-l-2 border-brand-primary pl-3 py-1">
-                    <p className="font-semibold text-text-primary">{activity.action}</p>
-                    <p className="text-xs text-text-muted">{activity.user}</p>
-                    <p className="text-xs text-text-muted">{new Date(activity.timestamp).toLocaleTimeString()}</p>
-                  </div>
-                ))
-              ) : (
-                <p className="text-sm text-text-muted text-center py-8">No recent activity</p>
-              )}
-            </div>
-          </Card>
-        </div>
+        <Card className="flex min-h-96 flex-col p-5">
+          <div className="mb-4">
+            <h2 className="text-xl font-semibold text-text-primary">Recent Activity</h2>
+            <p className="text-sm text-text-secondary">Latest audit feed when returned by the dashboard API.</p>
+          </div>
+          <div className="flex-1 space-y-3 overflow-y-auto">
+            {recentActivity.length > 0 ? (
+              recentActivity.slice(0, 10).map((activity, index) => (
+                <div key={activity.id || index} className="rounded-lg border border-border bg-background-base p-3">
+                  <p className="font-semibold text-text-primary">{activity.description || activity.action || "Activity"}</p>
+                  <p className="text-xs text-text-muted">{activity.user || activity.actor || "System"} {formatTime(activity.timestamp || activity.created_at)}</p>
+                </div>
+              ))
+            ) : (
+              <div className="grid flex-1 place-items-center rounded-lg border border-dashed border-border p-6 text-center text-sm text-text-muted">
+                No recent activity returned by the current dashboard API.
+              </div>
+            )}
+          </div>
+        </Card>
       </div>
 
-      {/* Suspicious Activity Alert */}
       {suspiciousStudents.length > 0 && (
         <Card className="border-warning/30 bg-warning/5 p-5">
-          <h3 className="font-semibold text-warning mb-3">Suspicious Activity Detected</h3>
-          <p className="text-sm text-text-secondary mb-3">
-            {suspiciousStudents.length} student(s) have cross-exam violations:
-          </p>
-          <div className="space-y-2">
-            {suspiciousStudents.map((student, index) => (
-              <div key={index} className="flex items-center justify-between text-sm">
-                <span className="text-text-primary">{student.name}</span>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-text-muted">{student.violation_count} violations</span>
-                  <Button variant="warning" size="sm">
-                    <Eye size={14} /> Review
-                  </Button>
+          <div className="mb-4 flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-semibold text-warning">Suspicious Students</h2>
+              <p className="text-sm text-text-secondary">Students with repeated violations across exams.</p>
+            </div>
+            <Button as="a" href="/admin/suspicious-activity" variant="warning" size="sm">
+              <Eye size={16} /> Review
+            </Button>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {suspiciousStudents.map(student => (
+              <div key={student.id || student.name} className="rounded-lg border border-warning/30 bg-background-base p-4">
+                <strong className="block text-text-primary">{student.name}</strong>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Badge variant="warning">{student.exam_count || 0} exams</Badge>
+                  <Badge variant="danger">{student.total_violations || student.violation_count || 0} violations</Badge>
                 </div>
               </div>
             ))}

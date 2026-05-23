@@ -199,6 +199,42 @@ body {
   transition: background 180ms ease, color 180ms ease;
 }
 
+.font-small {
+  font-size: 14px;
+}
+
+.font-medium {
+  font-size: 16px;
+}
+
+.font-large {
+  font-size: 18px;
+}
+
+.high-contrast {
+  --color-background-base: 255 255 255;
+  --color-background-surface: 255 255 255;
+  --color-background-elevated: 255 255 255;
+  --color-border: 15 23 42;
+  --color-text-primary: 0 0 0;
+  --color-text-secondary: 15 23 42;
+  --color-text-muted: 51 65 85;
+}
+
+.dark.high-contrast {
+  --color-background-base: 0 0 0;
+  --color-background-surface: 0 0 0;
+  --color-background-elevated: 15 23 42;
+  --color-border: 248 250 252;
+  --color-text-primary: 255 255 255;
+  --color-text-secondary: 248 250 252;
+  --color-text-muted: 203 213 225;
+}
+
+.high-contrast * {
+  box-shadow: none !important;
+}
+
 a {
   color: inherit;
   text-decoration: none;

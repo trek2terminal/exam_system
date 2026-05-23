@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Trash2, Upload } from "lucide-react";
-import { Button, ConfirmationDialog, Input, Textarea, StepWizard } from "../components/ui";
+import { Plus, Trash2, Upload } from "lucide-react";
+import { Badge, Button, ConfirmationDialog, Input, Select, Textarea, StepWizard } from "../components/ui";
 
 export default function QuestionImportWizard({ onImport }) {
   const [currentStep, setCurrentStep] = useState(0);
@@ -64,6 +64,34 @@ export default function QuestionImportWizard({ onImport }) {
 
   const updateQuestion = (id, field, value) => {
     setQuestions(prev => prev.map(q => q.id === id ? { ...q, [field]: value } : q));
+  };
+
+  const addQuestion = (seed = {}) => {
+    setQuestions(prev => [
+      ...prev,
+      {
+        id: Date.now() + Math.random(),
+        text: seed.text || "",
+        type: seed.type || "short_answer",
+        options: seed.options || [],
+        correct_answer: seed.correct_answer || "",
+        max_marks: seed.max_marks || 1
+      }
+    ]);
+  };
+
+  const updateOption = (questionId, optionIndex, value) => {
+    setQuestions(prev => prev.map(question => {
+      if (question.id !== questionId) return question;
+      const options = [...(question.options || [])];
+      options[optionIndex] = value;
+      return { ...question, options };
+    }));
+  };
+
+  const convertUnmatchedLine = (line) => {
+    addQuestion({ text: line, type: "short_answer", max_marks: 1 });
+    setUnmatched(current => current.split("\n").filter(item => item !== line).join("\n"));
   };
 
   const deleteQuestion = (id) => {
@@ -169,20 +197,55 @@ export default function QuestionImportWizard({ onImport }) {
                         rows={2}
                         className="mt-2 text-sm"
                       />
-                      <Input
-                        label="Marks"
-                        type="number"
-                        min="1"
-                        value={q.max_marks}
-                        onChange={event => updateQuestion(q.id, "max_marks", Number(event.target.value))}
-                        className="mt-2"
-                      />
-                      {q.options && q.options.length > 0 && (
-                        <div className="mt-2 grid grid-cols-2 gap-2">
-                          {q.options.map((opt, i) => (
-                            <p key={i} className="text-xs text-text-muted">
-                              {String.fromCharCode(65 + i)}. {opt}
-                            </p>
+                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                        <Select
+                          label="Type"
+                          value={q.type}
+                          onChange={value => updateQuestion(q.id, "type", value)}
+                          options={[
+                            { value: "mcq", label: "MCQ" },
+                            { value: "short_answer", label: "Short Answer" },
+                            { value: "long_answer", label: "Long Answer" },
+                            { value: "code", label: "Code" }
+                          ]}
+                        />
+                        <Input
+                          label="Marks"
+                          type="number"
+                          min="0"
+                          value={q.max_marks}
+                          onChange={event => updateQuestion(q.id, "max_marks", Number(event.target.value))}
+                        />
+                      </div>
+                      {q.type === "mcq" && (
+                        <div className="mt-3 space-y-2 rounded-lg border border-border bg-background-base p-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-sm font-semibold text-text-primary">Options</span>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => updateQuestion(q.id, "options", [...(q.options || []), ""])}
+                            >
+                              <Plus size={16} /> Option
+                            </Button>
+                          </div>
+                          {(q.options || []).map((opt, i) => (
+                            <label key={i} className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2">
+                              <input
+                                type="radio"
+                                name={`correct-${q.id}`}
+                                checked={q.correct_answer === opt}
+                                onChange={() => updateQuestion(q.id, "correct_answer", opt)}
+                              />
+                              <Input
+                                value={opt}
+                                onChange={event => {
+                                  updateOption(q.id, i, event.target.value);
+                                  if (q.correct_answer === opt) updateQuestion(q.id, "correct_answer", event.target.value);
+                                }}
+                                placeholder={`Option ${String.fromCharCode(65 + i)}`}
+                              />
+                            </label>
                           ))}
                         </div>
                       )}
@@ -199,6 +262,9 @@ export default function QuestionImportWizard({ onImport }) {
                 </div>
               ))}
             </div>
+            <Button variant="secondary" size="sm" onClick={() => addQuestion()} className="mt-3">
+              <Plus size={16} /> Add Row
+            </Button>
           </div>
 
           {unmatched && (
@@ -206,12 +272,16 @@ export default function QuestionImportWizard({ onImport }) {
               <h3 className="mb-3 font-semibold text-text-primary">Unmatched Content</h3>
               <div className="rounded-lg border border-warning/30 bg-warning/5 p-4">
                 <p className="text-xs text-text-muted mb-2">These lines could not be parsed automatically:</p>
-                <Textarea
-                  value={unmatched}
-                  readOnly
-                  rows={4}
-                  className="text-xs"
-                />
+                <div className="grid gap-2">
+                  {unmatched.split("\n").filter(Boolean).map(line => (
+                    <div key={line} className="flex items-start justify-between gap-3 rounded-md border border-warning/20 bg-background-base p-3">
+                      <p className="mb-0 text-sm text-text-secondary">{line}</p>
+                      <Button variant="secondary" size="sm" onClick={() => convertUnmatchedLine(line)}>
+                        Convert
+                      </Button>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           )}
@@ -223,6 +293,11 @@ export default function QuestionImportWizard({ onImport }) {
           <div className="rounded-lg border border-success/30 bg-success/5 p-4 text-sm text-success">
             Ready to import {questions.length} questions into your exam
           </div>
+          {questions.some(q => !Number(q.max_marks)) && (
+            <div className="rounded-lg border border-warning/30 bg-warning/5 p-4 text-sm text-warning">
+              Some questions have no marks set. They will need review before saving the exam.
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <div>
               <p className="text-xs text-text-muted">TOTAL QUESTIONS</p>
@@ -240,6 +315,13 @@ export default function QuestionImportWizard({ onImport }) {
               <p className="text-xs text-text-muted">CODE</p>
               <p className="text-2xl font-bold text-text-primary">{questions.filter(q => q.type === "code").length}</p>
             </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {questions.map((question, index) => (
+              <Badge key={question.id} variant={question.max_marks ? "success" : "warning"}>
+                Q{index + 1}: {question.max_marks || 0} marks
+              </Badge>
+            ))}
           </div>
         </div>
       )}

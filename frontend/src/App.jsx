@@ -37,6 +37,13 @@ const ExamEditor = lazy(() => import("./pages/ExamEditor.jsx"));
 const AdminDashboardPage = lazy(() => import("./pages/AdminDashboard.jsx"));
 const AdminUserManagement = lazy(() => import("./pages/AdminUserManagement.jsx"));
 const AdminSettings = lazy(() => import("./pages/AdminSettings.jsx"));
+const TeacherQuestionBank = lazy(() => import("./pages/TeacherQuestionBank.jsx"));
+const TeacherReports = lazy(() => import("./pages/TeacherReports.jsx"));
+const AdminGroups = lazy(() => import("./pages/AdminGroups.jsx"));
+const AdminExams = lazy(() => import("./pages/AdminExams.jsx"));
+const AdminReports = lazy(() => import("./pages/AdminReports.jsx"));
+const AccountSettings = lazy(() => import("./pages/AccountSettings.jsx"));
+const NotificationsPage = lazy(() => import("./pages/NotificationsPage.jsx"));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage.jsx"));
 
 const loginLinks = [
@@ -580,60 +587,6 @@ function RoleDashboard({ role, dashboard }) {
   return null;
 }
 
-function NotificationCenter({ notifications, onMarkAllRead }) {
-  const items = notifications?.recent || notifications?.items || [];
-  return (
-    <div className="cardList">
-      <div className="rowBetween">
-        <div>
-          <span className="eyebrow">Notifications</span>
-          <h2>Unread notifications</h2>
-        </div>
-        <Button variant="secondary" size="sm" disabled={(notifications?.unread_count || 0) === 0} onClick={onMarkAllRead}>
-          Mark all as read
-        </Button>
-      </div>
-      <Card className="p-5">
-        {items.length > 0 ? (
-          <div className="grid gap-3">
-            {items.map(item => (
-              <div className="rounded-lg border border-border bg-background-base p-4" key={item.id || item.message}>
-                <Badge variant={item.type === "result_published" ? "success" : "info"} size="sm" dot>
-                  {item.type || "notice"}
-                </Badge>
-                <p className="mt-2 font-semibold text-text-primary">{item.message}</p>
-                {item.created_at && <p className="mb-0 text-sm text-text-muted">{formatDateTime(item.created_at)}</p>}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="emptyState compact">
-            <Bell size={34} />
-            <h3>No unread notifications</h3>
-            <p>You are all caught up.</p>
-          </div>
-        )}
-      </Card>
-    </div>
-  );
-}
-
-function PlaceholderPage({ title, eyebrow, description }) {
-  return (
-    <div className="cardList">
-      <div>
-        <span className="eyebrow">{eyebrow || "Workspace"}</span>
-        <h2>{title}</h2>
-      </div>
-      <Card className="emptyState">
-        <BookOpenCheck size={34} />
-        <h3>{title}</h3>
-        <p>{description || "This React workspace is ready for the next migration pass. Existing Flask pages and API endpoints remain unchanged."}</p>
-      </Card>
-    </div>
-  );
-}
-
 function HomeRoute({ role, settings }) {
   if (role && rolePaths[role]) {
     return <Navigate to={rolePaths[role]} replace />;
@@ -877,7 +830,9 @@ export default function App() {
         <Route
           path="/teacher/question-bank"
           element={role === "teacher" ? (
-            <PlaceholderPage title="Question Bank" eyebrow="Teacher workspace" description="Question bank management is ready to be moved from the classic teacher tools into React." />
+            <PageSuspense label="Loading question bank...">
+              <TeacherQuestionBank />
+            </PageSuspense>
           ) : (
             <LoginPanel settings={bootstrap?.settings} />
           )}
@@ -885,7 +840,9 @@ export default function App() {
         <Route
           path="/teacher/reports"
           element={role === "teacher" ? (
-            <PlaceholderPage title="Reports" eyebrow="Teacher workspace" description="Exam analytics and exports can be connected here without changing existing API routes." />
+            <PageSuspense label="Loading reports...">
+              <TeacherReports />
+            </PageSuspense>
           ) : (
             <LoginPanel settings={bootstrap?.settings} />
           )}
@@ -945,7 +902,9 @@ export default function App() {
         <Route
           path="/admin/groups"
           element={role === "admin" ? (
-            <PlaceholderPage title="Groups" eyebrow="Admin workspace" description="Group assignment and bulk student workflows will live here." />
+            <PageSuspense label="Loading groups...">
+              <AdminGroups />
+            </PageSuspense>
           ) : (
             <LoginPanel settings={bootstrap?.settings} />
           )}
@@ -953,7 +912,9 @@ export default function App() {
         <Route
           path="/admin/exams"
           element={role === "admin" ? (
-            <PlaceholderPage title="Exams" eyebrow="Admin workspace" description="Cross-platform exam administration can be connected here while teacher exam creation remains unchanged." />
+            <PageSuspense label="Loading exams...">
+              <AdminExams />
+            </PageSuspense>
           ) : (
             <LoginPanel settings={bootstrap?.settings} />
           )}
@@ -961,7 +922,9 @@ export default function App() {
         <Route
           path="/admin/reports"
           element={role === "admin" ? (
-            <PlaceholderPage title="Reports" eyebrow="Admin workspace" description="Participation, violations, and review reports can be added here using the existing reporting data." />
+            <PageSuspense label="Loading reports...">
+              <AdminReports />
+            </PageSuspense>
           ) : (
             <LoginPanel settings={bootstrap?.settings} />
           )}
@@ -989,7 +952,9 @@ export default function App() {
         <Route
           path="/notifications"
           element={role ? (
-            <NotificationCenter notifications={bootstrap?.notifications} onMarkAllRead={markAllRead} />
+            <PageSuspense label="Loading notifications...">
+              <NotificationsPage notifications={bootstrap?.notifications} auth={bootstrap?.auth} onMarkAllRead={markAllRead} />
+            </PageSuspense>
           ) : (
             <LoginPanel settings={bootstrap?.settings} />
           )}
@@ -997,7 +962,9 @@ export default function App() {
         <Route
           path="/profile"
           element={role ? (
-            <PlaceholderPage title="Profile" eyebrow="Account" description="Profile management can be connected here while existing login/logout behavior remains in Flask." />
+            <PageSuspense label="Loading profile...">
+              <AccountSettings auth={bootstrap?.auth} />
+            </PageSuspense>
           ) : (
             <LoginPanel settings={bootstrap?.settings} />
           )}
@@ -1005,7 +972,9 @@ export default function App() {
         <Route
           path="/settings"
           element={role ? (
-            <PlaceholderPage title="Settings" eyebrow="Account" description="User preferences and account settings can be migrated here next." />
+            <PageSuspense label="Loading settings...">
+              <AccountSettings auth={bootstrap?.auth} />
+            </PageSuspense>
           ) : (
             <LoginPanel settings={bootstrap?.settings} />
           )}

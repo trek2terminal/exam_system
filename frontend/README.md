@@ -32,6 +32,10 @@ When `frontend/dist` exists, Flask serves the built migration shell at `/react`.
 - Teacher review is available under `/react/teacher/exam/:examId/review` and `/react/teacher/session/:sessionId/review` with marks, remarks, publish controls, answer PDF links, and classic Flask fallback links.
 - Admin and teacher live proctoring are available under `/react/admin/proctoring` and `/react/teacher/proctoring`.
 - Admin React proctoring keeps password-confirmed actions for terminate, second chance, time penalty, pause/resume, and private messages; teacher React proctoring is read-only.
+- Teacher question bank and reports now have React bridge pages at `/react/teacher/question-bank` and `/react/teacher/reports`, using existing Flask save/import/export routes.
+- Admin groups, exams, and reports now have React bridge pages at `/react/admin/groups`, `/react/admin/exams`, and `/react/admin/reports`, with classic Flask routes preserved for live data and protected actions.
+- Shared account settings and notifications are available at `/react/profile`, `/react/settings`, and `/react/notifications`.
+- Admin dashboard charts use Recharts and subscribe to the current light/dark theme.
 - React exam attempts join their private Socket.IO session room, so admin termination, second chance, time changes, pause/resume, and private messages arrive immediately while heartbeat polling remains as fallback.
 - React proctoring joins authorized exam rooms and updates student cards from `proctor:*` events while retaining the 5-second polling refresh as fallback.
 - Load role dashboards from:

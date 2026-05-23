@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { Trash2, Plus, Upload } from "lucide-react";
-import { Button, Input, Select, Textarea, StepWizard, ConfirmationDialog, Modal } from "../components/ui";
+import { Badge, Button, Input, Select, Textarea, StepWizard, ConfirmationDialog, Modal, Toggle } from "../components/ui";
 import { api } from "../services/api";
 import { notify } from "../components/ui/Toast";
 import QuestionImportWizard from "./QuestionImportWizard";
@@ -17,7 +17,15 @@ const createEmptyExam = () => ({
   questions: [],
   shuffle_questions: false,
   shuffle_options: false,
-  attempt_limit: 1
+  randomize_delivery: false,
+  random_question_count: 0,
+  attempt_limit: 1,
+  access_mode: "open",
+  access_code: "",
+  start_time: "",
+  end_time: "",
+  enrollment_lines: "",
+  group_id: ""
 });
 
 export default function ExamEditor() {
@@ -83,10 +91,13 @@ export default function ExamEditor() {
         formData.append("question_text", question.text || "");
         formData.append("options", (question.options || []).join("|"));
         formData.append("model_answer", question.model_answer || "");
-        formData.append("existing_image_paths", "[]");
+        formData.append("existing_image_paths", JSON.stringify(question.image_paths || []));
         formData.append("code_snippet", question.code_snippet || "");
         formData.append("code_language", question.code_language || "python");
         formData.append("time_limit_seconds", String(question.time_limit_seconds || 0));
+        (question.image_files || []).forEach(file => {
+          formData.append(`question_images_${index}`, file);
+        });
       });
 
       const response = await window.fetch(examId ? `/teacher/setup/${examId}` : "/teacher/setup", {
@@ -165,7 +176,7 @@ export default function ExamEditor() {
             onImport={() => setShowImportWizard(true)}
           />
         )}
-        {currentStep === 2 && <EnrollmentStep exam={exam} onUpdate={updateExamField} />}
+        {currentStep === 2 && <EnrollmentStep exam={exam} examId={examId} onUpdate={updateExamField} />}
         {currentStep === 3 && <SettingsStep exam={exam} onUpdate={updateExamField} />}
         {currentStep === 4 && <ReviewStep exam={exam} />}
       </StepWizard>
@@ -345,6 +356,11 @@ function QuestionsStep({ exam, onAddQuestion, onUpdateQuestion, onDeleteQuestion
 }
 
 function QuestionEditor({ question, onUpdate, onDelete }) {
+  const imagePreviews = question?.image_files ? Array.from(question.image_files).map(file => ({
+    name: file.name,
+    url: window.URL.createObjectURL(file)
+  })) : [];
+
   return (
     <div className="space-y-5 rounded-lg border border-border bg-background-surface p-5">
       <div className="flex items-center justify-between">
@@ -401,88 +417,215 @@ function QuestionEditor({ question, onUpdate, onDelete }) {
           <Button variant="ghost" size="sm" onClick={() => onUpdate("options", [...(question?.options || []), ""])}>
             <Plus size={16} /> Add Option
           </Button>
+          <Input
+            label="Correct Answer / Key"
+            value={question?.correct_answer || ""}
+            onChange={event => onUpdate("correct_answer", event.target.value)}
+            placeholder="Type the exact correct option text or key"
+          />
         </div>
       )}
 
-      {question?.type === "code" && (
-        <Textarea
-          label="Model Solution"
-          value={question?.model_answer || ""}
-          onChange={e => onUpdate("model_answer", e.target.value)}
-          placeholder="Enter the model solution code"
-          rows={5}
+      <Textarea
+        label="Model Answer / Review Reference"
+        value={question?.model_answer || ""}
+        onChange={e => onUpdate("model_answer", e.target.value)}
+        placeholder="Enter the model answer or marking guide"
+        rows={4}
+      />
+
+      <div className="space-y-3 rounded-lg border border-border bg-background-base p-4">
+        <Toggle
+          checked={Boolean(question?.has_code_snippet)}
+          onChange={checked => onUpdate("has_code_snippet", checked)}
+          label="Add read-only code snippet"
         />
+        {question?.has_code_snippet && (
+          <div className="space-y-3">
+            <Textarea
+              label="Code Snippet"
+              value={question?.code_snippet || ""}
+              onChange={event => onUpdate("code_snippet", event.target.value)}
+              rows={6}
+              className="font-mono text-sm"
+              placeholder="Paste code shown read-only to students"
+            />
+            <Input
+              label="Snippet Language"
+              value={question?.code_language || "python"}
+              onChange={event => onUpdate("code_language", event.target.value)}
+            />
+          </div>
+        )}
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Input
+          label="Per-question Time Limit"
+          type="number"
+          min="0"
+          value={Math.round((question?.time_limit_seconds || 0) / 60)}
+          onChange={event => onUpdate("time_limit_seconds", Number(event.target.value || 0) * 60)}
+          helperText="Minutes. 0 means no limit."
+        />
+        {question?.type === "code" && (
+          <Input
+            label="Execution Time Limit"
+            type="number"
+            min="1"
+            value={question?.execution_time_limit_seconds || 10}
+            onChange={event => onUpdate("execution_time_limit_seconds", Number(event.target.value || 10))}
+            helperText="Seconds. Stored in editor state; backend currently uses server config."
+          />
+        )}
+      </div>
+
+      <div className="space-y-3 rounded-lg border border-dashed border-border bg-background-base p-4">
+        <Input
+          label="Question Images"
+          type="file"
+          accept=".png,.jpg,.jpeg,.gif,.webp"
+          multiple
+          onChange={event => onUpdate("image_files", Array.from(event.target.files || []))}
+        />
+        {imagePreviews.length > 0 && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {imagePreviews.map(image => (
+              <div key={image.url} className="overflow-hidden rounded-lg border border-border">
+                <img src={image.url} alt={image.name} className="h-32 w-full object-cover" />
+                <div className="flex items-center justify-between gap-2 px-3 py-2">
+                  <span className="truncate text-xs text-text-muted">{image.name}</span>
+                  <Button variant="ghost" size="sm" onClick={() => onUpdate("image_files", [])}>Remove</Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {question?.type === "code" && (
+        <Badge variant="purple">Coding answers render with Monaco and terminal output in the student UI.</Badge>
       )}
     </div>
   );
 }
 
-function EnrollmentStep() {
+function EnrollmentStep({ exam, examId, onUpdate }) {
   return (
     <div className="space-y-5">
-      <div>
-        <label className="block font-semibold text-text-primary mb-3">Add Students</label>
-        <Input placeholder="Search students by name or roll number..." />
+      <div className="rounded-lg border border-info/30 bg-info/5 p-4 text-sm text-info">
+        Enrollment changes are saved on the dedicated Flask enrollment endpoint after the exam exists.
       </div>
-      <div>
-        <label className="block font-semibold text-text-primary mb-3">Or Add Groups</label>
-        <Select
-          label="Select Groups"
-          options={[
-            { value: "group1", label: "Group A" },
-            { value: "group2", label: "Group B" }
-          ]}
-        />
-      </div>
-      <div>
-        <label className="block font-semibold text-text-primary mb-3">Extra Time (per student)</label>
-        <Input type="number" placeholder="Minutes" />
-      </div>
+      {examId && (
+        <Button as="a" href={`/teacher/exam/${examId}/enrollments`} variant="secondary">
+          <Upload size={16} /> Open Live Enrollment Manager
+        </Button>
+      )}
+      <Textarea
+        label="Student Roster Draft"
+        value={exam?.enrollment_lines || ""}
+        onChange={event => onUpdate("enrollment_lines", event.target.value)}
+        rows={8}
+        placeholder="One student per line: ROLL, Student Name, Extra Minutes"
+        helperText="Use this as a staging area while composing the exam."
+      />
+      <Input
+        label="Group ID Draft"
+        value={exam?.group_id || ""}
+        onChange={event => onUpdate("group_id", event.target.value)}
+        placeholder="Paste a group ID from Admin > Groups"
+      />
     </div>
   );
 }
 
 function SettingsStep({ exam, onUpdate }) {
+  const randomEnabled = Boolean(exam?.randomize_delivery);
+  const accessMode = exam?.access_mode || "open";
+
   return (
     <div className="space-y-5">
-      <div>
-        <label className="flex items-center gap-3">
-          <input
-            type="checkbox"
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="rounded-lg border border-border bg-background-base p-4">
+          <Toggle
             checked={exam?.shuffle_questions || false}
-            onChange={e => onUpdate("shuffle_questions", e.target.checked)}
-            className="h-4 w-4"
+            onChange={checked => onUpdate("shuffle_questions", checked)}
+            label="Shuffle Questions"
           />
-          <span className="font-semibold text-text-primary">Shuffle Questions</span>
-        </label>
-      </div>
-      <div>
-        <label className="flex items-center gap-3">
-          <input
-            type="checkbox"
+        </div>
+        <div className="rounded-lg border border-border bg-background-base p-4">
+          <Toggle
             checked={exam?.shuffle_options || false}
-            onChange={e => onUpdate("shuffle_options", e.target.checked)}
-            className="h-4 w-4"
+            onChange={checked => onUpdate("shuffle_options", checked)}
+            label="Shuffle MCQ Options"
           />
-          <span className="font-semibold text-text-primary">Shuffle Options</span>
-        </label>
-      </div>
-      <div>
+          <p className="mt-2 text-xs text-text-muted">Kept in editor state; backend randomizes question order now and can accept option shuffle later.</p>
+        </div>
+        <div className="rounded-lg border border-border bg-background-base p-4">
+          <Toggle
+            checked={randomEnabled}
+            onChange={checked => {
+              onUpdate("randomize_delivery", checked);
+              if (!checked) onUpdate("random_question_count", 0);
+            }}
+            label="Randomize Delivery"
+          />
+        </div>
+        {randomEnabled && (
+          <Input
+            label="Number of Questions"
+            type="number"
+            min="1"
+            max={exam?.questions?.length || undefined}
+            value={exam?.random_question_count || ""}
+            onChange={event => onUpdate("random_question_count", Number(event.target.value || 0))}
+          />
+        )}
         <Input
           label="Attempt Limit"
           type="number"
-          min="1"
-          value={exam?.attempt_limit || 1}
-          onChange={e => onUpdate("attempt_limit", parseInt(e.target.value))}
+          min="0"
+          value={exam?.attempt_limit ?? 1}
+          onChange={e => onUpdate("attempt_limit", parseInt(e.target.value || "0"))}
           helperText="0 for unlimited attempts"
         />
+        <Select
+          label="Access Mode"
+          value={accessMode}
+          onChange={value => onUpdate("access_mode", value)}
+          options={[
+            { value: "open", label: "Open" },
+            { value: "scheduled", label: "Scheduled" },
+            { value: "access_code", label: "Access Code" },
+            { value: "invite_only", label: "Invite Only" }
+          ]}
+        />
       </div>
-      <div>
-        <Input label="Access Window Start" type="datetime-local" />
+      {accessMode === "access_code" && (
+        <Input
+          label="Access Code"
+          value={exam?.access_code || ""}
+          onChange={event => onUpdate("access_code", event.target.value.toUpperCase())}
+          placeholder="Leave blank to keep or generate code"
+        />
+      )}
+      <div className="grid gap-4 md:grid-cols-2">
+        <Input
+          label="Access Window Start"
+          type="datetime-local"
+          value={exam?.start_time || ""}
+          onChange={event => onUpdate("start_time", event.target.value)}
+        />
+        <Input
+          label="Access Window End"
+          type="datetime-local"
+          value={exam?.end_time || ""}
+          onChange={event => onUpdate("end_time", event.target.value)}
+        />
       </div>
-      <div>
-        <Input label="Access Window End" type="datetime-local" />
-      </div>
+      {Number(exam?.attempt_limit || 0) === 0 && (
+        <Badge variant="info">Attempt limit will be saved as Unlimited.</Badge>
+      )}
     </div>
   );
 }
