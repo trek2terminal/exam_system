@@ -438,3 +438,24 @@ Completed in this batch:
 
 Still intentionally left for later phases:
 - Browser-test the full React UI with two real browser sessions on the running LAN app.
+
+## Latest Implementation Batch 16 - 2026-05-23
+
+Completed in this batch:
+- Audited the React/Vite frontend against the UI/UX overhaul prompt and the Python-first migration plan.
+- Kept Tailwind on class-based dark mode and verified the React theme path uses `localStorage`, system preference fallback, and the `html.dark` class.
+- Confirmed the notification bell is separated from the theme toggle: the sun/moon button changes theme, while the bell opens the unread notification dropdown with mark-all-read and view-all actions.
+- Fixed React build blockers from duplicate component symbols, missing imports, unused generated code, and unresolved/unused page imports.
+- Routed the advanced React login, registration, student results, teacher exam editor, admin dashboard, admin users, admin settings, and dedicated 404 screens under the `/react/` app.
+- Updated React login and registration to submit through the existing Flask auth routes instead of nonexistent JSON auth endpoints.
+- Updated React student results to use the existing `/api/student/dashboard` result summaries.
+- Updated React admin settings save/backup and teacher creation flows to use existing Flask form endpoints while keeping the Python backend unchanged.
+- Updated the React exam editor save flow to submit to the existing Flask teacher setup route, preserving the Python-first migration boundary.
+- Removed duplicate, unrouted generated pages for admin proctoring and teacher review because the live routed React implementations are `Proctoring.jsx` and `TeacherReview.jsx`.
+- Removed temporary Vite dev-server log files after targeted shutdown of the identified Vite processes.
+- Verified `npm.cmd run lint` and `npm.cmd run build` complete successfully.
+
+Still intentionally left for later phases:
+- Browser-test the full React UI with real admin, teacher, and student sessions at 375px, 768px, and 1280px.
+- Browser-test realtime push behavior with two real browser sessions on the running LAN app.
+- Add production-grade JSON APIs for admin user management and teacher exam CRUD when the Python API migration is ready, then replace the current Flask-form bridge paths.

@@ -15,13 +15,24 @@ import {
   Trophy
 } from "lucide-react";
 import { PageLayout } from "./components/layout/PageLayout";
-import { Badge, Button, Card } from "./components/ui";
+import { Badge, Button, Card, StatCard } from "./components/ui";
+import { cn } from "./components/ui/utils";
 import { useAppStore } from "./store/appStore";
 import { api } from "./services/api";
 
 const ExamInterface = lazy(() => import("./ExamInterface.jsx"));
 const TeacherReview = lazy(() => import("./TeacherReview.jsx"));
 const Proctoring = lazy(() => import("./Proctoring.jsx"));
+
+// Page Components
+const StudentResults = lazy(() => import("./pages/StudentResults.jsx"));
+const LoginPage = lazy(() => import("./pages/LoginPage.jsx"));
+const RegisterPage = lazy(() => import("./pages/RegisterPage.jsx"));
+const ExamEditor = lazy(() => import("./pages/ExamEditor.jsx"));
+const AdminDashboardPage = lazy(() => import("./pages/AdminDashboard.jsx"));
+const AdminUserManagement = lazy(() => import("./pages/AdminUserManagement.jsx"));
+const AdminSettings = lazy(() => import("./pages/AdminSettings.jsx"));
+const NotFoundPage = lazy(() => import("./pages/NotFoundPage.jsx"));
 
 const loginLinks = [
   { label: "Admin", href: "/admin/login" },
@@ -86,6 +97,14 @@ function Shell({ children, platformName, auth, notifications, theme, onToggleThe
   );
 }
 
+function PageSuspense({ children, label = "Loading workspace..." }) {
+  return (
+    <Suspense fallback={<div className="loadingScreen">{label}</div>}>
+      {children}
+    </Suspense>
+  );
+}
+
 function LoginPanel({ settings }) {
   return (
     <section className="loginPanel">
@@ -110,6 +129,7 @@ function StudentDashboard({ dashboard }) {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const stats = dashboard?.stats || {};
   const exams = dashboard?.exams || [];
+  const student = dashboard?.student || {};
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -118,90 +138,103 @@ function StudentDashboard({ dashboard }) {
     return () => window.clearInterval(intervalId);
   }, []);
 
+  const getTimeBasedGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good morning";
+    if (hour < 18) return "Good afternoon";
+    return "Good evening";
+  };
+
   return (
-    <div className="studentWorkspace">
-      {dashboard?.announcement_message && (
-        <Card className="announcement">
-          <Bell size={18} />
-          <span>{dashboard.announcement_message}</span>
-        </Card>
-      )}
-
-      <Card className="studentHero">
-        <div>
-          <span className="eyebrow">Your exam space</span>
-          <h2>{dashboard?.student?.greeting || "Welcome"}, {dashboard?.student?.name || "student"}.</h2>
-          <p>{dashboard?.quote?.text || dashboard?.quote || "One calm question at a time."}</p>
-        </div>
-        <div className="studentIdentity">
-          <span>Roll No</span>
-          <strong>{dashboard?.student?.roll_no || "-"}</strong>
-          <small>{stats.assigned || 0} assigned exams</small>
-        </div>
-      </Card>
-
-      <section className="studentStats">
-        <Card className="p-5">
-          <div className="flex items-center gap-3">
-            <BookOpenCheck size={18} />
-            <span>Assigned</span>
+    <div className="space-y-6">
+      {/* Greeting Banner */}
+      <div className="relative overflow-hidden rounded-card border border-border bg-gradient-to-br from-brand-primary/10 via-background-surface to-background-base p-6 shadow-card md:p-8">
+        <div className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-brand-primary/5 blur-3xl" />
+        <div className="absolute -bottom-8 -left-8 h-24 w-24 rounded-full bg-info/5 blur-3xl" />
+        <div className="relative z-10">
+          <p className="text-sm font-semibold uppercase text-text-muted">Your exam space</p>
+          <h1 className="mt-2 text-3xl font-bold text-text-primary md:text-4xl">
+            {getTimeBasedGreeting()}, {student.name || "Student"}
+          </h1>
+          <p className="mt-2 text-lg text-text-secondary italic">{dashboard?.quote?.text || dashboard?.quote || "One calm question at a time."}</p>
+          <div className="mt-4 flex items-center gap-6">
+            <div>
+              <p className="text-xs font-semibold text-text-muted">ROLL NUMBER</p>
+              <p className="text-xl font-bold text-text-primary">{student.roll_no || "-"}</p>
+            </div>
+            <div className="h-12 border-l border-border" />
+            <div>
+              <p className="text-xs font-semibold text-text-muted">ASSIGNED EXAMS</p>
+              <p className="text-xl font-bold text-text-primary">{stats.assigned || 0}</p>
+            </div>
           </div>
-          <strong>{stats.assigned || 0}</strong>
-        </Card>
-        <Card className="p-5">
-          <div className="flex items-center gap-3">
-            <Play size={18} />
-            <span>Available</span>
-          </div>
-          <strong>{stats.available || 0}</strong>
-        </Card>
-        <Card className="p-5">
-          <div className="flex items-center gap-3">
-            <Clock3 size={18} />
-            <span>Upcoming</span>
-          </div>
-          <strong>{stats.upcoming || 0}</strong>
-        </Card>
-        <Card className="p-5">
-          <div className="flex items-center gap-3">
-            <Trophy size={18} />
-            <span>Results</span>
-          </div>
-          <strong>{stats.published_results || 0}</strong>
-        </Card>
-      </section>
-
-      <div className="rowBetween">
-        <div>
-          <span className="eyebrow">My exams</span>
-          <h2>Assigned exams</h2>
-        </div>
-        <div className="actionRow">
-          <Button variant="secondary" size="sm" as={Link} to={dashboard?.links?.results || "/student/results"}>
-            <Trophy size={18} /> Results
-          </Button>
-          <Button variant="primary" size="sm" as="a" href={dashboard?.links?.join_exam || "/student/join"}>
-            <KeyRound size={18} /> Use access code
-          </Button>
         </div>
       </div>
 
-      {exams.length === 0 ? (
-        <Card className="emptyState">
-          <CalendarClock size={34} />
-          <h3>No assigned exams yet</h3>
-          <p>Your assigned exams will appear here. You can still join an exam with an access code if your teacher shared one.</p>
-          <Button variant="primary" size="sm" as="a" href={dashboard?.links?.join_exam || "/student/join"}>
-            <KeyRound size={18} /> Open exam lobby
-          </Button>
-        </Card>
-      ) : (
-        <section className="studentExamGrid">
-          {exams.map(exam => (
-            <StudentExamCard key={exam.exam_id} exam={exam} elapsedSeconds={elapsedSeconds} />
-          ))}
-        </section>
+      {/* Announcement Banner */}
+      {dashboard?.announcement_message && (
+        <div className="flex items-start gap-4 rounded-card border border-warning/30 bg-warning/5 p-4 md:p-5">
+          <Bell size={20} className="mt-1 shrink-0 text-warning" />
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-text-primary">{dashboard.announcement_message}</p>
+          </div>
+          <button
+            type="button"
+            className="shrink-0 text-text-muted transition hover:text-text-primary"
+            onClick={e => e.currentTarget.parentElement.remove()}
+            aria-label="Dismiss announcement"
+          >
+            x
+          </button>
+        </div>
       )}
+
+      {/* Stats Row */}
+      <section className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        <StatCard icon={BookOpenCheck} label="Assigned" value={stats.assigned || 0} variant="default" />
+        <StatCard icon={Play} label="Available" value={stats.available || 0} variant="default" />
+        <StatCard icon={Clock3} label="Upcoming" value={stats.upcoming || 0} variant="default" />
+        <StatCard icon={Trophy} label="Results" value={stats.published_results || 0} variant="default" />
+      </section>
+
+      {/* Exams Section */}
+      <div>
+        <div className="mb-5 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold text-text-muted">EXAMS</p>
+            <h2 className="text-2xl font-bold text-text-primary">Assigned exams</h2>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="secondary" size="sm" as={Link} to={dashboard?.links?.results || "/student/results"}>
+              <Trophy size={16} />
+              <span className="hidden sm:inline">Results</span>
+            </Button>
+            <Button variant="primary" size="sm" as="a" href={dashboard?.links?.join_exam || "/student/join"}>
+              <KeyRound size={16} />
+              <span className="hidden sm:inline">Access code</span>
+            </Button>
+          </div>
+        </div>
+
+        {exams.length === 0 ? (
+          <div className="rounded-card border border-border bg-background-surface p-12 text-center shadow-card">
+            <CalendarClock size={40} className="mx-auto mb-4 text-text-muted" />
+            <h3 className="text-lg font-semibold text-text-primary">No assigned exams yet</h3>
+            <p className="mt-2 text-text-secondary">Your assigned exams will appear here. You can still join an exam with an access code if your teacher shared one.</p>
+            <Button variant="primary" size="md" as="a" href={dashboard?.links?.join_exam || "/student/join"} className="mt-4">
+              <KeyRound size={16} /> Open exam lobby
+            </Button>
+          </div>
+        ) : (
+          <section className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {exams.map((exam, index) => (
+              <div key={exam.exam_id} style={{ "--stagger-delay": `${index * 50}ms` }}>
+                <StudentExamCard exam={exam} elapsedSeconds={elapsedSeconds} />
+              </div>
+            ))}
+          </section>
+        )}
+      </div>
     </div>
   );
 }
@@ -215,79 +248,130 @@ function StudentExamCard({ exam, elapsedSeconds }) {
   const startTime = formatDateTime(exam.start_time);
   const endTime = formatDateTime(exam.end_time);
 
-  const toneVariant = {
-    active: "success",
-    result: "primary",
-    upcoming: "warning",
-    closed: "danger",
-    submitted: "secondary"
-  }[tone] || "ghost";
+  const toneConfig = {
+    active: { variant: "success", color: "border-l-success bg-success/5" },
+    result: { variant: "primary", color: "border-l-brand-primary bg-brand-primary/5" },
+    upcoming: { variant: "warning", color: "border-l-warning bg-warning/5" },
+    closed: { variant: "danger", color: "border-l-danger bg-danger/5" },
+    submitted: { variant: "secondary", color: "border-l-border bg-background-elevated/50" }
+  };
+
+  const config = toneConfig[tone] || toneConfig.submitted;
 
   return (
-    <Card className={`studentExamCard ${tone}`}>
-      <div className="examCardHeader">
-        <div>
-          <Badge variant={toneVariant} size="sm">{tone.replace("_", " ")}</Badge>
-          <h3>{exam.exam_name}</h3>
-          <p>{exam.subject} | Set {exam.set_code}</p>
+    <Card className={cn("overflow-hidden transition duration-200 hover:shadow-elevated", config.color)}>
+      {/* Header with badge and icon */}
+      <div className="flex items-start justify-between gap-3 border-b border-border/50 p-4">
+        <div className="flex-1 min-w-0">
+          <Badge variant={config.variant} size="sm" className="capitalize">
+            {tone.replace(/_/g, " ")}
+          </Badge>
+          <h3 className="mt-2 truncate text-lg font-semibold text-text-primary">{exam.exam_name}</h3>
+          <p className="truncate text-sm text-text-secondary">{exam.subject} {exam.set_code && `| Set ${exam.set_code}`}</p>
         </div>
-        <div className="examIcon"><FileText size={22} /></div>
+        <FileText size={24} className="shrink-0 text-text-muted" />
       </div>
 
-      <div className="examMetaGrid">
-        <div><span>Duration</span><strong>{exam.effective_duration_minutes} min</strong></div>
-        <div><span>Marks</span><strong>{exam.total_marks}</strong></div>
-        <div><span>Questions</span><strong>{exam.question_count}</strong></div>
+      {/* Meta grid */}
+      <div className="grid grid-cols-2 gap-4 border-b border-border/50 p-4 text-sm">
         <div>
-          <span>Attempts</span>
-          <strong>{exam.attempt_count}{exam.attempt_limit > 0 ? `/${exam.attempt_limit}` : "/Unlimited"}</strong>
+          <p className="text-xs font-semibold text-text-muted">Duration</p>
+          <p className="mt-1 font-semibold text-text-primary">{exam.effective_duration_minutes} min</p>
+        </div>
+        <div>
+          <p className="text-xs font-semibold text-text-muted">Questions</p>
+          <p className="mt-1 font-semibold text-text-primary">{exam.question_count}</p>
+        </div>
+        <div>
+          <p className="text-xs font-semibold text-text-muted">Total Marks</p>
+          <p className="mt-1 font-semibold text-text-primary">{exam.total_marks}</p>
+        </div>
+        <div>
+          <p className="text-xs font-semibold text-text-muted">Attempts</p>
+          <p className="mt-1 font-semibold text-text-primary">
+            {exam.attempt_count}
+            {exam.attempt_limit > 0 ? `/${exam.attempt_limit}` : "/unlimited"}
+          </p>
         </div>
       </div>
 
+      {/* Extra time notice */}
       {exam.extra_time_minutes > 0 && (
-        <div className="softNote">Includes +{exam.extra_time_minutes} minutes approved extra time.</div>
+        <div className="border-b border-border/50 bg-info/5 px-4 py-2 text-xs font-semibold text-info">
+          Extra time: +{exam.extra_time_minutes} minutes approved
+        </div>
       )}
 
-      <div className="examTimeline">
-        {startTime && <span><CalendarClock size={15} /> Starts {startTime}</span>}
-        {endTime && <span><Clock3 size={15} /> Closes {endTime}</span>}
-        {secondsUntilStart > 0 && <strong>Starts in {formatCountdown(secondsUntilStart)}</strong>}
+      {/* Timeline */}
+      <div className="border-b border-border/50 px-4 py-3 text-xs text-text-muted space-y-1">
+        {startTime && (
+          <div className="flex items-center gap-2">
+            <CalendarClock size={14} />
+            Starts {startTime}
+          </div>
+        )}
+        {endTime && (
+          <div className="flex items-center gap-2">
+            <Clock3 size={14} />
+            Closes {endTime}
+          </div>
+        )}
+        {secondsUntilStart > 0 && (
+          <div className="font-semibold text-text-secondary">
+            Starts in {formatCountdown(secondsUntilStart)}
+          </div>
+        )}
       </div>
 
+      {/* Result or Session strip */}
       {exam.result ? (
-        <div className="resultStrip">
-          <Trophy size={18} />
-          <strong>{exam.result.total_marks_obtained} / {exam.result.total_marks}</strong>
-          <span>{exam.result.percentage}%</span>
+        <div className="flex items-center justify-between gap-3 border-b border-border/50 bg-brand-primary/5 px-4 py-3">
+          <Trophy size={18} className="text-brand-primary" />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold text-text-muted">SCORE</p>
+            <p className="font-bold text-text-primary">
+              {exam.result.total_marks_obtained}/{exam.result.total_marks}
+              <span className="ml-2 text-sm text-text-secondary">({exam.result.percentage}%)</span>
+            </p>
+          </div>
         </div>
-      ) : (
-        <div className="sessionStrip">
-          <span>{exam.latest_session?.status || "not started"}</span>
-          {exam.latest_session?.remaining_seconds != null && (
-            <strong>{formatCountdown(exam.latest_session.remaining_seconds)} remaining</strong>
-          )}
+      ) : exam.latest_session?.remaining_seconds != null ? (
+        <div className="flex items-center justify-between border-b border-border/50 bg-info/5 px-4 py-3 text-sm">
+          <span className="font-semibold text-text-secondary">In Progress</span>
+          <span className="font-bold text-info">{formatCountdown(exam.latest_session.remaining_seconds)} remaining</span>
         </div>
-      )}
+      ) : null}
 
-      <div className="examActions">
+      {/* Action buttons */}
+      <div className="flex flex-col gap-2 p-4">
         {action.disabled ? (
-          <Button variant="secondary" size="sm" disabled>{action.label || "Unavailable"}</Button>
+          <Button variant="secondary" size="sm" disabled className="w-full">
+            {action.label || "Unavailable"}
+          </Button>
         ) : action.method === "post" ? (
-          <form method="post" action={action.href}>
+          <form method="post" action={action.href} className="contents">
             <input type="hidden" name="ui" value="react" />
-            <Button type="submit" variant="primary" size="sm">
+            <Button type="submit" variant={tone === "active" ? "success" : "primary"} size="sm" className="w-full">
               {actionIcon(actionLabel)}
               {actionLabel}
             </Button>
           </form>
         ) : (
-          <Button as="a" variant={action.variant || "secondary"} size="sm" href={action.href}>
+          <Button
+            as="a"
+            variant={action.variant || (tone === "active" ? "success" : "secondary")}
+            size="sm"
+            href={action.href}
+            className="w-full"
+          >
             {actionIcon(actionLabel)}
             {actionLabel}
           </Button>
         )}
         {exam.result?.pdf_href && (
-          <Button as="a" variant="ghost" size="sm" href={exam.result.pdf_href}>PDF</Button>
+          <Button as="a" variant="ghost" size="sm" href={exam.result.pdf_href} className="w-full">
+            PDF Report
+          </Button>
         )}
       </div>
     </Card>
@@ -322,7 +406,7 @@ function TeacherDashboard({ dashboard }) {
   );
 }
 
-function AdminDashboard({ dashboard }) {
+function AdminOverview({ dashboard }) {
   const stats = dashboard?.stats || {};
   return (
     <div className="cardList">
@@ -348,7 +432,7 @@ function AdminDashboard({ dashboard }) {
 function RoleDashboard({ role, dashboard }) {
   if (role === "student") return <StudentDashboard dashboard={dashboard} />;
   if (role === "teacher") return <TeacherDashboard dashboard={dashboard} />;
-  if (role === "admin") return <AdminDashboard dashboard={dashboard} />;
+  if (role === "admin") return <AdminOverview dashboard={dashboard} />;
   return null;
 }
 
@@ -410,7 +494,11 @@ function HomeRoute({ role, settings }) {
   if (role && rolePaths[role]) {
     return <Navigate to={rolePaths[role]} replace />;
   }
-  return <LoginPanel settings={settings} />;
+  return (
+    <PageSuspense label="Loading sign in...">
+      <LoginPage settings={settings} />
+    </PageSuspense>
+  );
 }
 
 function ProtectedRoleRoute({ expectedRole, currentRole, dashboard, settings }) {
@@ -527,6 +615,22 @@ export default function App() {
       <Routes>
         <Route path="/" element={<HomeRoute role={role} settings={bootstrap?.settings} />} />
         <Route
+          path="/login"
+          element={role ? <Navigate to={rolePaths[role] || "/"} replace /> : (
+            <PageSuspense label="Loading sign in...">
+              <LoginPage />
+            </PageSuspense>
+          )}
+        />
+        <Route
+          path="/register"
+          element={role ? <Navigate to={rolePaths[role] || "/"} replace /> : (
+            <PageSuspense label="Loading registration...">
+              <RegisterPage />
+            </PageSuspense>
+          )}
+        />
+        <Route
           path="/student"
           element={
             <ProtectedRoleRoute
@@ -551,7 +655,9 @@ export default function App() {
         <Route
           path="/student/results"
           element={role === "student" ? (
-            <PlaceholderPage title="Results" eyebrow="Student workspace" description="Published exam results from the classic results page can be migrated here next." />
+            <PageSuspense label="Loading results...">
+              <StudentResults />
+            </PageSuspense>
           ) : (
             <LoginPanel settings={bootstrap?.settings} />
           )}
@@ -588,6 +694,26 @@ export default function App() {
           path="/teacher/exams"
           element={role === "teacher" ? (
             <TeacherDashboard dashboard={dashboard} />
+          ) : (
+            <LoginPanel settings={bootstrap?.settings} />
+          )}
+        />
+        <Route
+          path="/teacher/exams/new"
+          element={role === "teacher" ? (
+            <PageSuspense label="Loading exam editor...">
+              <ExamEditor />
+            </PageSuspense>
+          ) : (
+            <LoginPanel settings={bootstrap?.settings} />
+          )}
+        />
+        <Route
+          path="/teacher/exam/:examId/edit"
+          element={role === "teacher" ? (
+            <PageSuspense label="Loading exam editor...">
+              <ExamEditor />
+            </PageSuspense>
           ) : (
             <LoginPanel settings={bootstrap?.settings} />
           )}
@@ -641,18 +767,21 @@ export default function App() {
         <Route
           path="/admin"
           element={
-            <ProtectedRoleRoute
-              expectedRole="admin"
-              currentRole={role}
-              dashboard={dashboard}
-              settings={bootstrap?.settings}
-            />
+            role === "admin" ? (
+              <PageSuspense label="Loading admin dashboard...">
+                <AdminDashboardPage />
+              </PageSuspense>
+            ) : (
+              <LoginPanel settings={bootstrap?.settings} />
+            )
           }
         />
         <Route
           path="/admin/users"
           element={role === "admin" ? (
-            <PlaceholderPage title="User Management" eyebrow="Admin workspace" description="The React user management surface can attach to the existing admin user endpoints in the next pass." />
+            <PageSuspense label="Loading users...">
+              <AdminUserManagement />
+            </PageSuspense>
           ) : (
             <LoginPanel settings={bootstrap?.settings} />
           )}
@@ -684,7 +813,9 @@ export default function App() {
         <Route
           path="/admin/settings"
           element={role === "admin" ? (
-            <PlaceholderPage title="Settings" eyebrow="Admin workspace" description="Platform settings, registration controls, announcements, backups, and notification configuration belong here." />
+            <PageSuspense label="Loading settings...">
+              <AdminSettings />
+            </PageSuspense>
           ) : (
             <LoginPanel settings={bootstrap?.settings} />
           )}
@@ -723,7 +854,14 @@ export default function App() {
             <LoginPanel settings={bootstrap?.settings} />
           )}
         />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route
+          path="*"
+          element={(
+            <PageSuspense label="Loading page...">
+              <NotFoundPage />
+            </PageSuspense>
+          )}
+        />
       </Routes>
     </>
   );
