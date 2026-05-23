@@ -1,9 +1,9 @@
 import { cn } from "./utils";
 
 const variants = {
-  default: "bg-background-surface shadow-card",
-  elevated: "bg-background-elevated shadow-elevated",
-  flat: "bg-background-surface shadow-none"
+  default: "bg-background-card shadow-card",
+  elevated: "bg-background-card shadow-elevated",
+  flat: "bg-background-card shadow-none"
 };
 
 export function Card({ variant = "default", interactive = false, className, children, ...props }) {

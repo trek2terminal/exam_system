@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, redirect, url_for, request, session, flash, jsonify
+from flask import Blueprint, redirect, url_for, request, session, flash, jsonify
 from datetime import datetime, timedelta
 from app.models.database import db
 from app.models.user_model import User
@@ -77,17 +77,19 @@ def _lockout_payload(user):
 def root():
     """Redirect to appropriate login based on user role"""
     if session.get("admin_id"):
-        return redirect(url_for("admin.dashboard"))
+        return redirect("/react/admin")
     elif session.get("teacher_id"):
-        return redirect(url_for("teacher.dashboard"))
+        return redirect("/react/teacher")
+    elif session.get("student_id"):
+        return redirect("/react/student")
     else:
-        return redirect(url_for("auth.login_selector"))
+        return redirect("/react/login")
 
 
 @auth_bp.route("/login")
 def login_selector():
     """Login selector page"""
-    return render_template("auth/login_selector.html")
+    return redirect("/react/login")
 
 
 # ==================== ADMIN SETUP & LOGIN ====================
@@ -97,7 +99,10 @@ def admin_setup():
     """Initial admin setup - only allowed if no admin exists"""
     admin_exists = User.query.filter_by(role="admin").first()
     if admin_exists:
-        return redirect(url_for("auth.admin_login"))
+        return redirect("/react/admin/login")
+
+    if request.method == "GET":
+        return redirect("/react/admin/setup")
 
     if request.method == "POST":
         name = request.form.get("name", "").strip()
@@ -151,9 +156,9 @@ def admin_setup():
         ).save()
 
         flash("Admin account created successfully. Please login.", "success")
-        return redirect(url_for("auth.admin_login"))
+        return redirect("/react/admin/login")
 
-    return render_template("auth/admin_setup.html")
+    return redirect("/react/admin/setup")
 
 
 @auth_bp.route("/admin/login", methods=["GET", "POST"])
@@ -241,9 +246,9 @@ def admin_login():
         flash("Welcome Admin! You are logged in.", "success")
         if _wants_json_response():
             return jsonify({"ok": True, "message": "Welcome Admin!", "redirect": "/react/admin"})
-        return redirect(url_for("admin.dashboard"))
+        return redirect("/react/admin")
 
-    return render_template("auth/admin_login.html")
+    return redirect("/react/admin/login")
 
 
 @auth_bp.route("/admin/logout")
@@ -266,7 +271,7 @@ def admin_logout():
             db.session.commit()
     session.clear()
     flash("You have been logged out.", "info")
-    return redirect(url_for("auth.login_selector"))
+    return redirect("/react/login")
 
 
 # ==================== TEACHER LOGIN ====================
@@ -275,7 +280,7 @@ def admin_logout():
 def teacher_setup():
     """Teacher account setup - Deprecated (use admin to create teachers)"""
     flash("Teacher accounts are now created by the admin. Contact your administrator.", "warning")
-    return redirect(url_for("auth.teacher_login"))
+    return redirect("/react/login")
 
 
 @auth_bp.route("/teacher/login", methods=["GET", "POST"])
@@ -346,9 +351,9 @@ def teacher_login():
             return redirect(url_for("auth.teacher_change_password"))
 
         flash("Login successful. Welcome back!", "success")
-        return redirect(url_for("teacher.dashboard"))
+        return redirect("/react/teacher")
 
-    return render_template("teacher/login.html")
+    return redirect("/react/login")
 
 
 @auth_bp.route("/teacher/change-password", methods=["GET", "POST"])
@@ -356,13 +361,13 @@ def teacher_change_password():
     teacher_id = session.get("teacher_id")
     if not teacher_id or session.get("role") != "teacher":
         flash("Please log in as teacher first.", "danger")
-        return redirect(url_for("auth.teacher_login"))
+        return redirect("/react/login")
 
     user = User.query.get_or_404(teacher_id)
     if not current_session_matches_user(user):
         session.clear()
         flash("This teacher account is active in another browser. Please log in again here.", "warning")
-        return redirect(url_for("auth.teacher_login"))
+        return redirect("/react/login")
     if request.method == "POST":
         current_password = request.form.get("current_password", "")
         new_password = request.form.get("new_password", "")
@@ -388,9 +393,9 @@ def teacher_change_password():
         session.modified = True
         db.session.commit()
         flash("Password updated. You can continue now.", "success")
-        return redirect(url_for("teacher.dashboard"))
+        return redirect("/react/teacher")
 
-    return render_template("teacher/change_password.html")
+    return redirect("/react/settings")
 
 
 @auth_bp.route("/teacher/logout")
@@ -413,7 +418,7 @@ def teacher_logout():
             db.session.commit()
     session.clear()
     flash("You have been logged out successfully.", "info")
-    return redirect(url_for("auth.login_selector"))
+    return redirect("/react/login")
 
 
 # ==================== STUDENT LOGIN ====================
@@ -490,7 +495,7 @@ def student_login():
             ).save()
 
             flash(f"Welcome {user.name}!", "success")
-            return redirect(url_for("student.dashboard"))
+            return redirect("/react/student")
 
         student_name = request.form.get("student_name", "").strip()
         roll_no = request.form.get("roll_no", "").strip().upper()
@@ -502,9 +507,9 @@ def student_login():
         _set_student_session(student_name, roll_no)
 
         flash(f"Welcome {student_name}!", "success")
-        return redirect(url_for("student.dashboard"))
+        return redirect("/react/student")
 
-    return render_template("auth/student_login.html", settings=platform_settings)
+    return redirect("/react/login")
 
 
 @auth_bp.route("/student/register", methods=["GET", "POST"])
@@ -514,7 +519,7 @@ def student_register():
     platform_settings = SettingsService.get_settings()
     if not platform_settings.student_self_registration:
         flash("Student registration is currently closed. Please use the details provided by your teacher.", "warning")
-        return redirect(url_for("auth.student_login"))
+        return redirect("/react/login")
 
     if request.method == "POST":
         name = request.form.get("name", "").strip()
@@ -593,9 +598,9 @@ def student_register():
             auth_session_token=auth_session_token,
         )
         flash("Student account created. Welcome!", "success")
-        return redirect(url_for("student.dashboard"))
+        return redirect("/react/student")
 
-    return render_template("auth/student_register.html", settings=platform_settings)
+    return redirect("/react/register")
 
 
 @auth_bp.route("/student/logout")
@@ -610,4 +615,4 @@ def student_logout():
             db.session.commit()
     session.clear()
     flash("You have been logged out.", "info")
-    return redirect(url_for("auth.login_selector"))
+    return redirect("/react/login")

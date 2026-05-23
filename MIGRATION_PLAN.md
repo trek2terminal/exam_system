@@ -525,3 +525,22 @@ Still intentionally left for later phases:
 - React admin login still posts to `/admin/login` with JSON/XHR headers; it does not render the old admin template, but can be moved to `/api/auth/admin-login` in a later cleanup.
 - Enrollment management is no longer linked to the old Flask page from React Exam Editor, but a full React enrollment manager with live student/group assignment remains to be built.
 - Browser-test the complete React-only user journey with real admin, teacher, and student accounts: login, register, start exam, precheck, submit, review, proctoring, reports, settings, and backup.
+
+## Latest Implementation Batch 20 - 2026-05-23
+
+Completed in this batch:
+- Added a dedicated React first-admin setup page at `/react/admin/setup`.
+- Added JSON admin setup and admin login endpoints: `/api/auth/admin-setup` and `/api/auth/admin-login`.
+- Moved the React Admin Login page off the old `/admin/login` bridge and onto the JSON admin login endpoint.
+- Updated legacy auth GET entry points so `/`, `/login`, `/admin/login`, `/teacher/login`, `/student/login`, and `/student/register` redirect into the React app.
+- Added route-level redirects for old admin, teacher, and student HTML page URLs so direct browser visits land on matching React pages instead of Jinja templates.
+- Kept CSV/PDF/file endpoints available because they return downloads, not styled pages.
+- Improved light mode professionalism with app/card background tokens, white card surfaces, cleaner borders, softer shadows, a subtle app backdrop, polished topbar/sidebar surfaces, and carded login/register forms.
+- Identified tracked Python `__pycache__` artifacts as generated files that should be removed from source control; the final cleanup command was blocked by the execution environment, so this remains a source-control hygiene item.
+- Verified `npm.cmd run lint`, `npm.cmd run build`, Python route syntax, and test-client redirects for the legacy page URLs into `/react/...`.
+
+Still intentionally left for later phases:
+- Runtime browser-test the full React-only user journey with real accounts at 375px, 768px, and 1280px.
+- Runtime-smoke file downloads after authentication: teacher CSV/PDF exports, student PDF exports, admin violation CSV, and admin complete exam report PDF.
+- Complete a dedicated React enrollment-management experience if live roster editing outside the Exam Editor is still desired.
+- Remove tracked Python `__pycache__` artifacts once the environment allows the cleanup command or via a normal Git cleanup commit.

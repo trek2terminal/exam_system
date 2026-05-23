@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AlertTriangle, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck } from "lucide-react";
 import { useAppStore } from "../store/appStore";
+import { api } from "../services/api";
 
 function cleanAdminLoginError(data, fallback = "Invalid credentials.") {
   if (!data) return fallback;
@@ -29,6 +30,7 @@ export default function AdminLoginPage() {
   const [error, setError] = useState("");
   const [lockoutSeconds, setLockoutSeconds] = useState(0);
   const [shakeKey, setShakeKey] = useState(0);
+  const [setupRequired, setSetupRequired] = useState(false);
 
   useEffect(() => {
     if (!lockoutSeconds) return undefined;
@@ -48,38 +50,22 @@ export default function AdminLoginPage() {
     setLoading(true);
     setError("");
     setLockoutSeconds(0);
+    setSetupRequired(false);
 
     try {
-      const formData = new window.FormData();
-      formData.append("username", username);
-      formData.append("password", password);
-
-      const response = await window.fetch("/admin/login", {
-        method: "POST",
-        headers: {
-          Accept: "application/json",
-          "X-Requested-With": "XMLHttpRequest"
-        },
-        credentials: "same-origin",
-        body: formData
-      });
-      const data = await response.json().catch(() => null);
-
-      if (!response.ok || data?.ok === false) {
-        setShakeKey(current => current + 1);
-        setError(cleanAdminLoginError(data));
-        if (data?.retry_after_seconds) {
-          setLockoutSeconds(Number(data.retry_after_seconds));
-        }
-        return;
-      }
+      const { data } = await api.post("/auth/admin-login", { username, password });
 
       const bootstrap = await loadBootstrap();
       if (bootstrap?.auth?.role) await loadDashboard(bootstrap.auth.role);
-      navigate("/admin", { replace: true });
-    } catch {
+      navigate((data.redirect || "/react/admin").replace(/^\/react/, "") || "/admin", { replace: true });
+    } catch (submitError) {
+      const data = submitError.response?.data;
       setShakeKey(current => current + 1);
-      setError("Unexpected error. Check your connection.");
+      setError(cleanAdminLoginError(data, submitError.message || "Invalid credentials."));
+      setSetupRequired(Boolean(data?.setup_required));
+      if (data?.retry_after_seconds) {
+        setLockoutSeconds(Number(data.retry_after_seconds));
+      }
     } finally {
       setLoading(false);
     }
@@ -147,6 +133,12 @@ export default function AdminLoginPage() {
               {displayedError}
             </span>
           </div>
+
+          {setupRequired && (
+            <Link className="text-center text-sm font-semibold text-brand-primary transition hover:text-brand-hover" to="/admin/setup">
+              Create the first admin account
+            </Link>
+          )}
         </form>
       </section>
 

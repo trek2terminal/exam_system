@@ -12,7 +12,7 @@ export function PageLayout({ children, auth, platformName, notifications, theme,
   const studentTabs = (roleNavigation.student || []).filter(item => ["Dashboard", "My Exams", "Results"].includes(item.label));
 
   return (
-    <div className="min-h-screen bg-background-base text-text-primary">
+    <div className="appShellSurface min-h-screen text-text-primary">
       <Sidebar auth={auth} platformName={platformName} />
       <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} auth={auth} platformName={platformName} />
       <div className="min-h-screen md:pl-16 lg:pl-60">

@@ -805,6 +805,166 @@ def bootstrap():
     )
 
 
+def _admin_lockout_payload(user):
+    if not user or not user.locked_until:
+        return {}
+    remaining = max(int((user.locked_until - datetime.utcnow()).total_seconds()), 0)
+    if remaining > 24 * 60 * 60:
+        return {
+            "locked": True,
+            "server_unlock_required": True,
+            "locked_until": user.locked_until.isoformat(),
+        }
+    return {
+        "locked": True,
+        "retry_after_seconds": remaining,
+        "retry_after_minutes": max((remaining + 59) // 60, 1),
+        "locked_until": user.locked_until.isoformat(),
+    }
+
+
+@api_bp.route("/auth/admin-login", methods=["POST"])
+@rate_limit("auth_login")
+def react_admin_login_api():
+    if not User.query.filter_by(role="admin").first():
+        return jsonify({
+            "ok": False,
+            "message": "Admin setup is required before sign in.",
+            "setup_required": True,
+            "redirect": "/admin/setup",
+        }), 409
+
+    payload = _get_json_payload()
+    username = (payload.get("username") or "").strip()
+    password = (payload.get("password") or "").strip()
+
+    if not username or not password:
+        return jsonify({"ok": False, "message": "Username and password are required."}), 400
+
+    admin = User.query.filter_by(username=username, role="admin").first()
+    if not admin:
+        return jsonify({"ok": False, "message": "Invalid credentials."}), 401
+
+    if not admin.is_active:
+        return jsonify({"ok": False, "message": "Admin account is disabled."}), 403
+
+    if admin.is_account_locked():
+        message = (
+            "Account locked. Unlock it from the server CLI."
+            if admin.locked_until and (admin.locked_until - datetime.utcnow()).days > 1
+            else "Account locked. Try again later."
+        )
+        return jsonify({"ok": False, "message": message, **_admin_lockout_payload(admin)}), 423
+
+    if not admin.check_password(password):
+        admin.failed_login_attempts += 1
+        if admin.failed_login_attempts >= 3:
+            admin.locked_until = datetime.utcnow() + timedelta(days=3650)
+            message = "Admin account is locked. Unlock it from the server CLI."
+        else:
+            message = "Invalid credentials."
+        db.session.commit()
+        AuditLog(
+            user_id=admin.id,
+            action="failed_login",
+            resource_type="user",
+            resource_id=admin.id,
+            status="failed",
+            ip_address=get_client_ip(),
+            user_agent=request.headers.get("User-Agent"),
+        ).save()
+        return jsonify({
+            "ok": False,
+            "message": message,
+            "failed_attempts": admin.failed_login_attempts,
+            "attempts_remaining": max(3 - admin.failed_login_attempts, 0),
+            **_admin_lockout_payload(admin),
+        }), 423 if admin.failed_login_attempts >= 3 else 401
+
+    admin.reset_failed_attempts()
+    auth_session_token = admin.issue_active_session_token()
+    db.session.commit()
+    session.clear()
+    session.permanent = True
+    session["user_id"] = admin.id
+    session["admin_id"] = admin.id
+    session["admin_name"] = admin.name
+    session["admin_username"] = admin.username
+    session["role"] = "admin"
+    session["auth_session_token"] = auth_session_token
+    session["login_time"] = datetime.utcnow().isoformat()
+    session["admin_last_activity"] = datetime.utcnow().isoformat()
+
+    AuditLog(
+        user_id=admin.id,
+        action="login",
+        resource_type="user",
+        resource_id=admin.id,
+        status="success",
+        ip_address=get_client_ip(),
+        user_agent=request.headers.get("User-Agent"),
+    ).save()
+
+    return jsonify({"ok": True, "message": "Welcome Admin!", "redirect": "/react/admin", "role": "admin"})
+
+
+@api_bp.route("/auth/admin-setup", methods=["GET", "POST"])
+@rate_limit("auth_login", methods=("POST",))
+def react_admin_setup_api():
+    admin_exists = User.query.filter_by(role="admin").first()
+    if request.method == "GET":
+        return jsonify({"ok": True, "setup_required": not bool(admin_exists)})
+
+    if admin_exists:
+        return jsonify({
+            "ok": False,
+            "message": "Admin account already exists. Sign in instead.",
+            "setup_required": False,
+            "redirect": "/react/admin/login",
+        }), 409
+
+    payload = _get_json_payload()
+    name = (payload.get("name") or "").strip()
+    username = (payload.get("username") or "").strip()
+    password = (payload.get("password") or "").strip()
+    confirm_password = (payload.get("confirm_password") or "").strip()
+
+    if not name or not username or not password or not confirm_password:
+        return jsonify({"ok": False, "message": "Name, username, password, and confirmation are required."}), 400
+    if password != confirm_password:
+        return jsonify({"ok": False, "message": "Passwords do not match."}), 400
+    if len(username) < 5:
+        return jsonify({"ok": False, "message": "Username must be at least 5 characters."}), 400
+    if not _strong_password(password):
+        return jsonify({"ok": False, "message": "Admin password must be at least 10 characters and include uppercase, lowercase, and number."}), 400
+    if User.query.filter_by(username=username).first():
+        return jsonify({"ok": False, "message": "Username already exists."}), 400
+
+    admin = User(
+        name=name,
+        username=username,
+        role="admin",
+        is_active=True,
+        is_verified=True,
+        created_at=datetime.utcnow(),
+    )
+    admin.set_password(password)
+    db.session.add(admin)
+    db.session.commit()
+
+    AuditLog(
+        user_id=admin.id,
+        action="admin_setup",
+        resource_type="user",
+        resource_id=admin.id,
+        status="success",
+        ip_address=get_client_ip(),
+        user_agent=request.headers.get("User-Agent"),
+    ).save()
+
+    return jsonify({"ok": True, "message": "Admin account created. Please sign in.", "redirect": "/react/admin/login"})
+
+
 @api_bp.route("/auth/login", methods=["POST"])
 @rate_limit("auth_login")
 def react_login_api():

@@ -2,6 +2,7 @@ import csv
 from difflib import SequenceMatcher
 import json
 import os
+import re
 import secrets
 from datetime import datetime
 from flask import Blueprint, current_app, render_template, redirect, url_for, request, session, flash, jsonify, send_file
@@ -22,6 +23,58 @@ from app.utils.export_utils import csv_response, format_datetime
 from app.utils.helpers import teacher_required, parse_options, create_submission_pdf
 
 teacher_bp = Blueprint("teacher", __name__, url_prefix="/teacher")
+
+
+@teacher_bp.before_request
+def _redirect_classic_teacher_pages_to_react():
+    if request.method != "GET":
+        return None
+
+    path = request.path.rstrip("/") or "/teacher"
+    passthrough = (
+        "/teacher/proctoring/status",
+        "/teacher/results/export",
+    )
+    if (
+        any(path.startswith(prefix) for prefix in passthrough)
+        or path.endswith("/export")
+        or path.endswith("/answer-pdf")
+    ):
+        return None
+
+    direct = {
+        "/teacher": "/react/teacher",
+        "/teacher/dashboard": "/react/teacher",
+        "/teacher/results": "/react/teacher/reports",
+        "/teacher/proctoring": "/react/teacher/proctoring",
+        "/teacher/question-bank": "/react/teacher/question-bank",
+        "/teacher/setup": "/react/teacher/exam/new",
+    }
+    if path in direct:
+        return redirect(direct[path])
+
+    setup_match = re.fullmatch(r"/teacher/setup/(\d+)", path)
+    if setup_match:
+        return redirect(f"/react/teacher/exam/{setup_match.group(1)}/edit")
+
+    review_match = re.fullmatch(r"/teacher/exam/(\d+)/(results|similarity|import|question-bank/import)", path)
+    if review_match:
+        target = "review" if review_match.group(2) in {"results", "similarity"} else "edit"
+        return redirect(f"/react/teacher/exam/{review_match.group(1)}/{target}")
+
+    compare_match = re.fullmatch(r"/teacher/exam/(\d+)/question/\d+/compare", path)
+    if compare_match:
+        return redirect(f"/react/teacher/exam/{compare_match.group(1)}/review")
+
+    enrollment_match = re.fullmatch(r"/teacher/exam/(\d+)/enrollments", path)
+    if enrollment_match:
+        return redirect(f"/react/teacher/exam/{enrollment_match.group(1)}/edit")
+
+    session_match = re.fullmatch(r"/teacher/session/(\d+)", path)
+    if session_match:
+        return redirect(f"/react/teacher/session/{session_match.group(1)}/review")
+
+    return None
 
 
 def _normalize_roll(roll_no):

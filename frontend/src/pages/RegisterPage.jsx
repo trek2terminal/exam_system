@@ -64,7 +64,7 @@ export default function RegisterPage({ settings }) {
   };
 
   return (
-    <div className="min-h-screen bg-background-base text-text-primary">
+    <div className="appShellSurface min-h-screen text-text-primary">
       <div className="flex min-h-screen flex-col lg:flex-row">
         <div className="relative hidden flex-1 overflow-hidden bg-gradient-to-br from-brand-primary via-indigo-500 to-info p-8 text-white lg:flex lg:flex-col lg:justify-center">
           <div className="absolute inset-0 overflow-hidden">
@@ -99,8 +99,8 @@ export default function RegisterPage({ settings }) {
           </div>
         </div>
 
-        <div className="flex flex-1 flex-col justify-center bg-background-base px-4 py-12 transition-colors sm:px-6 lg:px-8">
-          <div className="mx-auto w-full max-w-md">
+        <div className="flex flex-1 flex-col justify-center px-4 py-12 transition-colors sm:px-6 lg:px-8">
+          <div className="mx-auto w-full max-w-md rounded-card border border-border bg-background-card p-6 shadow-elevated sm:p-8">
             <div className="mb-8 flex items-center justify-center gap-2 lg:hidden">
               <span className="grid h-10 w-10 place-items-center rounded-lg bg-brand-primary text-base font-bold text-white">EP</span>
               <h2 className="text-2xl font-bold text-text-primary">{settings?.platform_name || "Exam Platform"}</h2>

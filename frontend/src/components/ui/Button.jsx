@@ -3,7 +3,7 @@ import { cn } from "./utils";
 
 const variants = {
   primary: "border-transparent bg-brand-primary text-white shadow-sm hover:bg-brand-hover focus-visible:ring-brand-primary",
-  secondary: "border-border bg-background-surface text-text-primary hover:bg-background-elevated focus-visible:ring-brand-primary",
+  secondary: "border-border bg-background-card text-text-primary shadow-sm hover:bg-background-surface focus-visible:ring-brand-primary",
   ghost: "border-transparent bg-transparent text-text-secondary hover:bg-background-elevated hover:text-text-primary focus-visible:ring-brand-primary",
   danger: "border-transparent bg-danger text-white hover:brightness-95 focus-visible:ring-danger",
   success: "border-transparent bg-success text-white hover:brightness-95 focus-visible:ring-success",

@@ -86,7 +86,7 @@ export function Select({
         onClick={() => setOpen(current => !current)}
         onKeyDown={onKeyDown}
         className={cn(
-          "flex min-h-11 w-full items-center justify-between rounded-md border bg-background-base px-3 text-left text-base text-text-primary transition duration-150 ease-out",
+          "flex min-h-11 w-full items-center justify-between rounded-md border bg-background-card px-3 text-left text-base text-text-primary shadow-sm transition duration-150 ease-out",
           "focus:outline-none focus:ring-2 focus:ring-brand-primary/20 disabled:cursor-not-allowed disabled:opacity-60",
           error ? "border-danger" : "border-border"
         )}
@@ -98,7 +98,7 @@ export function Select({
         <div
           id={listboxId}
           role="listbox"
-          className="absolute left-0 right-0 top-full z-40 mt-2 max-h-64 overflow-auto rounded-md border border-border bg-background-surface shadow-elevated"
+          className="absolute left-0 right-0 top-full z-40 mt-2 max-h-64 overflow-auto rounded-md border border-border bg-background-card shadow-elevated"
         >
           {options.map((option, index) => (
             <button

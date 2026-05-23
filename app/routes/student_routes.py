@@ -1,4 +1,5 @@
 from datetime import datetime
+import re
 from flask import Blueprint, render_template, redirect, url_for, request, flash, session, send_file
 from app.models.database import db
 from app.models.exam_model import ExamEnrollment, ExamSet, Question
@@ -11,6 +12,37 @@ from app.services.settings_service import SettingsService
 from app.utils.helpers import create_submission_pdf
 
 student_bp = Blueprint("student", __name__, url_prefix="/student")
+
+
+@student_bp.before_request
+def _redirect_classic_student_pages_to_react():
+    if request.method != "GET":
+        return None
+
+    path = request.path.rstrip("/") or "/student"
+    if path.startswith("/student/export/") or re.fullmatch(r"/student/result/[^/]+/pdf", path):
+        return None
+
+    direct = {
+        "/student": "/react/student",
+        "/student/dashboard": "/react/student",
+        "/student/results": "/react/student/results",
+        "/student/join": "/react/student/join",
+    }
+    if path in direct:
+        return redirect(direct[path])
+
+    for classic_prefix, react_prefix in (
+        ("/student/waiting/", "/react/student/waiting/"),
+        ("/student/precheck/", "/react/student/precheck/"),
+        ("/student/exam/", "/react/exam/"),
+        ("/student/submitted/", "/react/student/submitted/"),
+        ("/student/session-active/", "/react/student/waiting/"),
+    ):
+        if path.startswith(classic_prefix):
+            return redirect(f"{react_prefix}{path.removeprefix(classic_prefix)}")
+
+    return None
 
 
 def _owns_session(session_code):

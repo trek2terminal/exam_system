@@ -63,7 +63,7 @@ export function Modal({ open, onClose, title, children, footer, required = false
         tabIndex={-1}
         onClick={event => event.stopPropagation()}
         className={cn(
-          "max-h-[88vh] w-full max-w-xl overflow-hidden rounded-card border border-border bg-background-surface shadow-elevated transition",
+          "max-h-[88vh] w-full max-w-xl overflow-hidden rounded-card border border-border bg-background-card shadow-elevated transition",
           isVisible ? "scale-100 opacity-100 duration-200 ease-out" : "scale-95 opacity-0 duration-150 ease-in",
           className
         )}

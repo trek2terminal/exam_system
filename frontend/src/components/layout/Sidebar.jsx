@@ -11,7 +11,7 @@ export function Sidebar({ auth, platformName, mobile = false, onNavigate }) {
   return (
     <aside
       className={cn(
-        "flex h-full flex-col overflow-y-auto border-r border-border bg-background-base text-text-primary",
+        "flex h-full flex-col overflow-y-auto border-r border-border bg-background-card text-text-primary shadow-sm dark:bg-background-base",
         mobile ? "w-72 p-5" : "fixed inset-y-0 left-0 z-30 hidden w-16 p-3 md:flex lg:w-60 lg:p-5"
       )}
     >

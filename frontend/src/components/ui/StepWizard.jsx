@@ -13,7 +13,7 @@ export function StepWizard({
   children
 }) {
   return (
-    <section className="rounded-card border border-border bg-background-surface shadow-card">
+    <section className="rounded-card border border-border bg-background-card shadow-card">
       <header className="border-b border-border px-5 py-4">
         <div className="hidden items-start md:flex">
           {steps.map((step, index) => {
@@ -26,7 +26,7 @@ export function StepWizard({
                     "grid h-9 w-9 place-items-center rounded-full border text-sm font-bold",
                     done && "border-success bg-success text-white",
                     active && "border-brand-primary bg-brand-primary text-white",
-                    !done && !active && "border-border bg-background-base text-text-muted"
+                    !done && !active && "border-border bg-background-surface text-text-muted"
                   )}>
                     {done ? <Check size={18} /> : index + 1}
                   </span>

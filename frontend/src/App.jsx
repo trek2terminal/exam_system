@@ -37,6 +37,7 @@ const StudentWaitingPage = lazy(() => import("./pages/StudentWaitingPage.jsx"));
 const StudentSubmittedPage = lazy(() => import("./pages/StudentSubmittedPage.jsx"));
 const LoginPage = lazy(() => import("./pages/LoginPage.jsx"));
 const AdminLoginPage = lazy(() => import("./pages/AdminLoginPage.jsx"));
+const AdminSetupPage = lazy(() => import("./pages/AdminSetupPage.jsx"));
 const RegisterPage = lazy(() => import("./pages/RegisterPage.jsx"));
 const ExamEditor = lazy(() => import("./pages/ExamEditor.jsx"));
 const AdminDashboardPage = lazy(() => import("./pages/AdminDashboard.jsx"));
@@ -170,7 +171,7 @@ function LoginPanel({ settings }) {
       <div>
         <span className="eyebrow">Local LAN and hosted ready</span>
         <h2>{settings?.welcome_message || "Choose your workspace"}</h2>
-        <p>Use the current Flask login while the React migration grows around the live APIs.</p>
+        <p>Sign in to the modern React workspace for exams, reviews, proctoring, reports, and settings.</p>
       </div>
       <div className="loginLinks">
         {loginLinks.map(item => (
@@ -741,6 +742,14 @@ export default function App() {
           element={role === "admin" ? <Navigate to="/admin" replace /> : (
             <PageSuspense label="Loading admin portal...">
               <AdminLoginPage />
+            </PageSuspense>
+          )}
+        />
+        <Route
+          path="/admin/setup"
+          element={role === "admin" ? <Navigate to="/admin" replace /> : (
+            <PageSuspense label="Loading admin setup...">
+              <AdminSetupPage />
             </PageSuspense>
           )}
         />

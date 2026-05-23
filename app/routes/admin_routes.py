@@ -28,6 +28,42 @@ from app.utils.rate_limiter import rate_limit
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
 
+@admin_bp.before_request
+def _redirect_classic_admin_pages_to_react():
+    if request.method != "GET":
+        return None
+
+    path = request.path.rstrip("/") or "/admin"
+    passthrough_prefixes = (
+        "/admin/proctoring/status",
+        "/admin/violations/export",
+    )
+    if path.endswith("/report.pdf") or any(path.startswith(prefix) for prefix in passthrough_prefixes):
+        return None
+
+    direct = {
+        "/admin": "/react/admin",
+        "/admin/account": "/react/settings",
+        "/admin/users": "/react/admin/users",
+        "/admin/users/create-teacher": "/react/admin/users",
+        "/admin/groups": "/react/admin/groups",
+        "/admin/exams": "/react/admin/exams",
+        "/admin/analytics": "/react/admin/reports",
+        "/admin/audit-logs": "/react/admin/reports",
+        "/admin/proctoring": "/react/admin/proctoring",
+        "/admin/violations": "/react/admin/reports",
+        "/admin/suspicious-activity": "/react/admin/reports",
+        "/admin/settings": "/react/admin/settings",
+    }
+    if path in direct:
+        return redirect(direct[path])
+    if re.fullmatch(r"/admin/users/\d+/edit", path):
+        return redirect("/react/admin/users")
+    if re.fullmatch(r"/admin/exams/\d+", path):
+        return redirect("/react/admin/exams")
+    return None
+
+
 def _validate_username(username):
     return bool(re.fullmatch(r"[A-Za-z0-9_.@-]{4,50}", username or ""))
 

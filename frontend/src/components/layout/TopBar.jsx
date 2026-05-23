@@ -34,7 +34,7 @@ export function TopBar({ auth, notifications, theme, onToggleTheme, onMarkAllRea
   }, []);
 
   return (
-    <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-border bg-background-surface px-4 shadow-sm md:px-6">
+    <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-border bg-background-card/95 px-4 shadow-sm backdrop-blur md:px-6">
       <Button variant="ghost" className="h-11 w-11 px-0 md:hidden" aria-label="Open menu" onClick={onOpenDrawer}>
         <Menu size={20} />
       </Button>
@@ -55,7 +55,7 @@ export function TopBar({ auth, notifications, theme, onToggleTheme, onMarkAllRea
 
       <div className="ml-auto flex items-center gap-2" ref={containerRef}>
         {searchOpen && (
-          <label className="hidden h-11 w-64 items-center gap-2 rounded-md border border-border bg-background-base px-3 text-sm text-text-secondary md:flex">
+          <label className="hidden h-11 w-64 items-center gap-2 rounded-md border border-border bg-background-card px-3 text-sm text-text-secondary shadow-sm md:flex">
             <Search size={17} />
             <input
               className="min-w-0 flex-1 bg-transparent text-text-primary outline-none placeholder:text-text-muted"
@@ -97,7 +97,7 @@ export function TopBar({ auth, notifications, theme, onToggleTheme, onMarkAllRea
           </Button>
 
           {showNotifications && (
-            <div className="absolute right-0 top-full z-50 mt-2 w-[min(360px,calc(100vw-2rem))] origin-top-right overflow-hidden rounded-card border border-border bg-background-surface shadow-elevated animate-modal-in">
+            <div className="absolute right-0 top-full z-50 mt-2 w-[min(360px,calc(100vw-2rem))] origin-top-right overflow-hidden rounded-card border border-border bg-background-card shadow-elevated animate-modal-in">
               <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
                 <div>
                   <strong className="block text-sm text-text-primary">Notifications</strong>
@@ -159,7 +159,7 @@ export function TopBar({ auth, notifications, theme, onToggleTheme, onMarkAllRea
           </Button>
 
           {showUserMenu && (
-            <div className="absolute right-0 top-full z-50 mt-2 w-64 origin-top-right overflow-hidden rounded-card border border-border bg-background-surface shadow-elevated animate-modal-in">
+            <div className="absolute right-0 top-full z-50 mt-2 w-64 origin-top-right overflow-hidden rounded-card border border-border bg-background-card shadow-elevated animate-modal-in">
               <div className="flex items-center gap-3 border-b border-border px-4 py-3">
                 <Avatar name={userName(auth)} size="lg" />
                 <div className="min-w-0">

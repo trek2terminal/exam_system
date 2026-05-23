@@ -5,20 +5,23 @@
 :root {
   color-scheme: light;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --bg: #f6f8fb;
+  --bg: #f8fafc;
   --panel: #ffffff;
-  --text: #111827;
-  --muted: #667085;
-  --border: #d9e0ea;
-  --primary: #2563eb;
-  --success: #0f766e;
+  --text: #0f172a;
+  --muted: #475569;
+  --border: #dbe4ef;
+  --primary: #4f46e5;
+  --success: #16a34a;
   --warning: #d97706;
   --danger: #dc2626;
+  --info: #0284c7;
   /* design token variables for Tailwind config */
+  --color-background-app: 248 250 252;
   --color-background-base: 255 255 255; /* will be used as rgb(var(--color-background-base)) */
+  --color-background-card: 255 255 255;
   --color-background-surface: 248 250 252;
   --color-background-elevated: 241 245 249;
-  --color-border: 226 232 240;
+  --color-border: 219 228 239;
   --color-text-primary: 15 23 42;
   --color-text-secondary: 71 85 105;
   --color-text-muted: 148 163 184;
@@ -28,8 +31,8 @@
   --color-warning: 217 119 6;
   --color-danger: 220 38 38;
   --color-info: 2 132 199;
-  --shadow-card: 0 1px 3px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.06);
-  --shadow-elevated: 0 4px 16px rgba(0,0,0,0.06);
+  --shadow-card: 0 1px 2px rgba(15,23,42,0.04), 0 10px 28px rgba(15,23,42,0.06);
+  --shadow-elevated: 0 1px 3px rgba(15,23,42,0.06), 0 18px 44px rgba(15,23,42,0.10);
 }
 
 .dark {
@@ -44,7 +47,9 @@
   --warning: #fbbf24;
   --danger: #f87171;
   /* dark mode design tokens (RGB triplets) */
+  --color-background-app: 15 23 42;
   --color-background-base: 15 23 42;
+  --color-background-card: 30 41 59;
   --color-background-surface: 30 41 59;
   --color-background-elevated: 51 65 85;
   --color-border: 51 65 85;
@@ -479,9 +484,22 @@
 
 body {
   margin: 0;
-  background: var(--bg);
+  background: rgb(var(--color-background-app));
   color: var(--text);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
   transition: background 180ms ease, color 180ms ease;
+}
+
+.appShellSurface {
+  background:
+    radial-gradient(circle at top left, rgb(var(--color-brand-primary) / 0.06), transparent 28rem),
+    linear-gradient(180deg, rgb(var(--color-background-app)), rgb(var(--color-background-surface)));
+}
+
+.dark .appShellSurface {
+  background: rgb(var(--color-background-base));
 }
 
 .font-small {

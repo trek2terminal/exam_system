@@ -57,7 +57,7 @@ export function Table({
   }, [page, pageCount]);
 
   return (
-    <section className={cn("overflow-hidden rounded-card border border-border bg-background-surface shadow-card", className)}>
+    <section className={cn("overflow-hidden rounded-card border border-border bg-background-card shadow-card", className)}>
       <div className="overflow-auto">
         <table className="min-w-full border-collapse text-left text-sm">
           <thead className="sticky top-0 z-10 bg-background-surface text-text-secondary">
@@ -106,7 +106,7 @@ export function Table({
                 <td colSpan={totalColumns}><SkeletonTableRows rows={rowsPerPage} /></td>
               </tr>
             ) : visibleRows.map((row, index) => (
-              <tr className="group bg-background-base transition hover:bg-background-elevated/70" key={row[rowKey] || index} role="row">
+              <tr className="group bg-background-card transition hover:bg-background-surface" key={row[rowKey] || index} role="row">
                 {columns.map(column => (
                   <td className="px-4 py-3 text-text-primary" key={column.key} role="cell">
                     {column.render ? column.render(row) : row[column.key]}
@@ -131,7 +131,7 @@ export function Table({
         <span>Page {page} of {pageCount}</span>
         <div className="flex items-center gap-2">
           <select
-            className="h-10 rounded-md border border-border bg-background-base px-2 text-text-primary"
+            className="h-10 rounded-md border border-border bg-background-card px-2 text-text-primary shadow-sm"
             value={rowsPerPage}
             onChange={event => {
               setRowsPerPage(Number(event.target.value));

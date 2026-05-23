@@ -6,7 +6,9 @@ export default {
     extend: {
       colors: {
         background: {
+          app: "rgb(var(--color-background-app) / <alpha-value>)",
           base: "rgb(var(--color-background-base) / <alpha-value>)",
+          card: "rgb(var(--color-background-card) / <alpha-value>)",
           surface: "rgb(var(--color-background-surface) / <alpha-value>)",
           elevated: "rgb(var(--color-background-elevated) / <alpha-value>)"
         },

@@ -6,7 +6,7 @@ export function EmptyState({ icon: Icon = SearchX, heading, description, action,
   return (
     <div
       className={cn(
-        "grid place-items-center rounded-card border border-dashed border-border bg-background-surface px-6 text-center",
+        "grid place-items-center rounded-card border border-dashed border-border bg-background-card px-6 text-center shadow-card",
         compact ? "min-h-52 py-8" : "min-h-72 py-12",
         className
       )}

@@ -13,7 +13,7 @@ export function Skeleton({ className }) {
 
 export function SkeletonCard() {
   return (
-    <div className="rounded-card border border-border bg-background-surface p-5 shadow-card">
+    <div className="rounded-card border border-border bg-background-card p-5 shadow-card">
       <Skeleton className="mb-4 h-5 w-2/3" />
       <Skeleton className="mb-3 h-4 w-full" />
       <Skeleton className="h-4 w-5/6" />
@@ -34,7 +34,7 @@ export function SkeletonTableRows({ rows = 5 }) {
 
 export function SkeletonStat() {
   return (
-    <div className="rounded-card border border-border bg-background-surface p-5 shadow-card">
+    <div className="rounded-card border border-border bg-background-card p-5 shadow-card">
       <Skeleton className="mb-5 h-10 w-10 rounded-lg" />
       <Skeleton className="mb-3 h-4 w-1/2" />
       <Skeleton className="h-8 w-1/3" />
