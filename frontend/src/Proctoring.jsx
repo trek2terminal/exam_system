@@ -11,6 +11,8 @@ import {
   Radio,
   RefreshCw,
   ShieldAlert,
+  Volume2,
+  VolumeX,
   TimerReset,
   UserCheck,
   XCircle
@@ -23,6 +25,7 @@ import { ConfirmationDialog } from "./components/ui/ConfirmationDialog";
 import { Badge } from "./components/ui/Badge";
 import { Input } from "./components/ui/Input";
 import { Textarea } from "./components/ui/Textarea";
+import { Select } from "./components/ui/Select";
 
 function formatSeconds(value) {
   const total = Math.max(Number(value || 0), 0);
@@ -72,6 +75,9 @@ export default function Proctoring({ mode }) {
   const isAdmin = mode === "admin";
   const [data, setData] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
+  const [selectedExamId, setSelectedExamId] = useState("all");
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(() => window.localStorage.getItem("proctorSoundEnabled") === "true");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
@@ -82,6 +88,31 @@ export default function Proctoring({ mode }) {
   const sessionsRef = useRef([]);
 
   const endpoint = isAdmin ? "/admin/proctoring/status" : "/teacher/proctoring/status";
+
+  useEffect(() => {
+    window.localStorage.setItem("proctorSoundEnabled", String(soundEnabled));
+  }, [soundEnabled]);
+
+  const playViolationBeep = useCallback(() => {
+    if (!soundEnabled) return;
+    try {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) return;
+      const context = new AudioContextClass();
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.type = "sine";
+      oscillator.frequency.value = 880;
+      gain.gain.value = 0.07;
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.start();
+      oscillator.stop(context.currentTime + 0.12);
+      window.setTimeout(() => context.close?.(), 180);
+    } catch {
+      // Browser may block audio until user interaction.
+    }
+  }, [soundEnabled]);
 
   const loadStatus = useCallback(async soft => {
     setError("");
@@ -187,6 +218,7 @@ export default function Proctoring({ mode }) {
       if (payload?.student_name) {
         toast.error(`${payload.student_name}: ${payload.type || "violation"}`, { duration: 5000 });
       }
+      playViolationBeep();
       window.setTimeout(() => loadStatus(true), 400);
     };
     const handleSubmitted = payload => {
@@ -216,15 +248,31 @@ export default function Proctoring({ mode }) {
       socketRef.current = null;
       joinedExamIds.clear();
     };
-  }, [applySessionPatch, joinExamRooms, loadStatus]);
+  }, [applySessionPatch, joinExamRooms, loadStatus, playViolationBeep]);
+
+  const examOptions = useMemo(() => {
+    const exams = new Map();
+    (data?.sessions || []).forEach(item => {
+      const examId = String(item.exam_id || "");
+      if (!examId) return;
+      exams.set(examId, item.exam_name || `Exam ${examId}`);
+    });
+    return [
+      { value: "all", label: "All Active Exams" },
+      ...Array.from(exams.entries()).map(([value, label]) => ({ value, label }))
+    ];
+  }, [data?.sessions]);
 
   const sortedSessions = useMemo(() => {
     const sessions = data?.sessions || [];
-    return [...sessions].sort((left, right) => {
+    const filtered = selectedExamId === "all"
+      ? sessions
+      : sessions.filter(item => String(item.exam_id) === String(selectedExamId));
+    return [...filtered].sort((left, right) => {
       if (right.focus_violations !== left.focus_violations) return right.focus_violations - left.focus_violations;
       return (right.remaining_seconds || 0) - (left.remaining_seconds || 0);
     });
-  }, [data]);
+  }, [data, selectedExamId]);
 
   const selectedSession = sortedSessions.find(item => item.id === selectedId) || sortedSessions[0] || null;
 
@@ -246,6 +294,17 @@ export default function Proctoring({ mode }) {
           <Badge className={`realtimePill ${realtimeStatus}`} variant={realtimeStatus === "connected" ? "success" : realtimeStatus === "reconnecting" ? "warning" : "secondary"}>
             {realtimeStatus}
           </Badge>
+          {isAdmin && (
+            <Button
+              variant={soundEnabled ? "primary" : "secondary"}
+              size="sm"
+              className="h-11 w-11 px-0"
+              onClick={() => setSoundEnabled(current => !current)}
+              aria-label={soundEnabled ? "Disable violation sound" : "Enable violation sound"}
+            >
+              {soundEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
+            </Button>
+          )}
           <Button variant="secondary" size="sm" disabled={refreshing} onClick={() => loadStatus(true)}>
             <RefreshCw size={18} /> {refreshing ? "Refreshing..." : "Refresh"}
           </Button>
@@ -262,6 +321,15 @@ export default function Proctoring({ mode }) {
         <Card className="statsCard"><ShieldAlert size={18} /><span>Flagged</span><strong>{data?.counts?.flagged_sessions || 0}</strong></Card>
       </section>
 
+      <Card className="p-4">
+        <div className="grid gap-3 md:grid-cols-[minmax(0,320px)_1fr] md:items-end">
+          <Select label="Active Exam" value={selectedExamId} onChange={setSelectedExamId} options={examOptions} />
+          <p className="mb-0 text-sm text-text-muted">
+            Showing {sortedSessions.length} of {(data?.sessions || []).length} active, waiting, or paused attempts.
+          </p>
+        </div>
+      </Card>
+
       <div className="proctorLayout">
         <section className="proctorCardGrid">
           {sortedSessions.map(item => (
@@ -269,7 +337,10 @@ export default function Proctoring({ mode }) {
               type="button"
               className={`proctorStudentCard ${violationTone(item.focus_violations)} ${selectedSession?.id === item.id ? "selected" : ""}`}
               key={item.id}
-              onClick={() => setSelectedId(item.id)}
+              onClick={() => {
+                setSelectedId(item.id);
+                setMobileDetailOpen(true);
+              }}
             >
               <div className="proctorCardTop">
                 <div>
@@ -299,7 +370,7 @@ export default function Proctoring({ mode }) {
           )}
         </section>
 
-        <aside className="proctorDetailPanel">
+        <aside className="proctorDetailPanel hidden md:block">
           {selectedSession ? (
             <SessionDetail
               sessionItem={selectedSession}
@@ -317,6 +388,25 @@ export default function Proctoring({ mode }) {
           )}
         </aside>
       </div>
+
+      {mobileDetailOpen && selectedSession && (
+        <div className="fixed inset-0 z-50 md:hidden">
+          <button className="absolute inset-0 bg-black/55 animate-page-fade" type="button" aria-label="Close student detail" onClick={() => setMobileDetailOpen(false)} />
+          <div className="absolute inset-x-0 bottom-0 max-h-[88vh] overflow-auto rounded-t-card border border-border bg-background-surface p-4 shadow-elevated animate-drawer-bottom">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <strong className="text-text-primary">Student Detail</strong>
+              <Button variant="ghost" size="sm" onClick={() => setMobileDetailOpen(false)}>Close</Button>
+            </div>
+            <SessionDetail
+              sessionItem={selectedSession}
+              isAdmin={isAdmin}
+              onActionMessage={setMessage}
+              onActionError={setError}
+              onReload={() => loadStatus(true)}
+            />
+          </div>
+        </div>
+      )}
 
       {isAdmin && data?.recent_violations?.length > 0 && (
         <section className="recentViolationFeed">
