@@ -32,6 +32,7 @@ const Proctoring = lazy(() => import("./Proctoring.jsx"));
 const StudentResults = lazy(() => import("./pages/StudentResults.jsx"));
 const StudentHistory = lazy(() => import("./pages/StudentHistory.jsx"));
 const LoginPage = lazy(() => import("./pages/LoginPage.jsx"));
+const AdminLoginPage = lazy(() => import("./pages/AdminLoginPage.jsx"));
 const RegisterPage = lazy(() => import("./pages/RegisterPage.jsx"));
 const ExamEditor = lazy(() => import("./pages/ExamEditor.jsx"));
 const AdminDashboardPage = lazy(() => import("./pages/AdminDashboard.jsx"));
@@ -716,6 +717,14 @@ export default function App() {
           element={role ? <Navigate to={rolePaths[role] || "/"} replace /> : (
             <PageSuspense label="Loading sign in...">
               <LoginPage />
+            </PageSuspense>
+          )}
+        />
+        <Route
+          path="/admin/login"
+          element={role === "admin" ? <Navigate to="/admin" replace /> : (
+            <PageSuspense label="Loading admin portal...">
+              <AdminLoginPage />
             </PageSuspense>
           )}
         />

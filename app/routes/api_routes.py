@@ -1,3 +1,4 @@
+import secrets
 from datetime import datetime, timedelta
 
 from flask import Blueprint, current_app, jsonify, request, session, url_for
@@ -145,6 +146,21 @@ def _strong_password(password):
     )
 
 
+def _valid_username(username):
+    username = (username or "").strip()
+    allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-@")
+    return 4 <= len(username) <= 50 and all(char in allowed for char in username)
+
+
+def _row_payload_value(row, *names):
+    lowered = {str(key).strip().lower(): value for key, value in (row or {}).items()}
+    for name in names:
+        value = lowered.get(name)
+        if value not in (None, ""):
+            return str(value).strip()
+    return ""
+
+
 def _user_payload(user):
     return {
         "id": user.id,
@@ -259,21 +275,35 @@ def _find_student_by_identifier(identifier):
     )
 
 
+def _current_session_user():
+    user_id = session.get("user_id") or session.get("admin_id") or session.get("teacher_id") or session.get("student_user_id")
+    if not user_id:
+        return None, _role_error("Login required", 401)
+    user = User.query.get(user_id)
+    if not user or not user.is_active or not current_session_matches_user(user):
+        session.clear()
+        return None, _role_error("This account is active in another browser. Please log in again here.", 401)
+    return user, None
+
+
 def _result_question_payload(question, answer, question_mark, result):
     answer_text = answer.answer_text if answer else ""
+    marks_awarded = question_mark.marks_awarded if question_mark else 0
     return {
         "id": question.id,
         "question_number": question.question_number,
         "question_text": question.question_text,
         "question_type": question.question_type,
         "type": question.question_type,
-        "marks_obtained": question_mark.marks_awarded if question_mark else 0,
+        "marks_obtained": marks_awarded,
+        "marks_awarded": marks_awarded,
         "max_marks": question.marks,
         "student_answer": answer_text,
         "code_output": answer.code_output if answer else None,
         "execution_output": answer.code_output if answer else None,
         "execution_status": answer.execution_status if answer else None,
         "correct_answer": question.correct_answer if result and result.published else None,
+        "correct_option": question.correct_answer if result and result.published else None,
         "model_answer": question.model_answer if result and result.published else None,
         "teacher_remark": question_mark.teacher_remark if question_mark else None,
         "explanation": question.explanation,
@@ -1151,6 +1181,138 @@ def admin_users_api():
     )
 
 
+@api_bp.route("/admin/users/teachers", methods=["POST"])
+@rate_limit("admin_action")
+def admin_create_teacher_api():
+    admin, error_response = _require_admin_api()
+    if error_response:
+        return error_response
+
+    payload = _get_json_payload()
+    name = (payload.get("name") or "").strip()
+    username = (payload.get("username") or "").strip()
+    email = (payload.get("email") or "").strip() or None
+    password = (payload.get("password") or "").strip()
+    department = (payload.get("department") or "").strip() or None
+    designation = (payload.get("designation") or "").strip() or None
+
+    if not name or not username or not password:
+        return jsonify({"ok": False, "message": "Name, username, and password are required."}), 400
+    if not _valid_username(username):
+        return jsonify({"ok": False, "message": "Username must be 4-50 characters and use only letters, numbers, dot, @, dash, or underscore."}), 400
+    if not _strong_password(password):
+        return jsonify({"ok": False, "message": "Password must be at least 10 characters and include uppercase, lowercase, and a number."}), 400
+    if User.query.filter_by(username=username).first():
+        return jsonify({"ok": False, "message": "Username already exists."}), 400
+    if email and User.query.filter_by(email=email).first():
+        return jsonify({"ok": False, "message": "Email already exists."}), 400
+
+    teacher = User(
+        name=name,
+        username=username,
+        email=email,
+        role="teacher",
+        department=department,
+        designation=designation,
+        is_active=True,
+        is_verified=True,
+        must_change_password=True,
+        created_at=datetime.utcnow(),
+    )
+    teacher.set_password(password)
+    db.session.add(teacher)
+    db.session.commit()
+    AuditLog(
+        user_id=admin.id,
+        action="create_user_api",
+        resource_type="user",
+        resource_id=teacher.id,
+        changes=f"Created teacher: {teacher.username}",
+        status="success",
+        ip_address=get_client_ip(),
+    ).save()
+    return jsonify({"ok": True, "message": "Teacher account created.", "user": _user_payload(teacher)}), 201
+
+
+@api_bp.route("/admin/users/import-students", methods=["POST"])
+@rate_limit("admin_action")
+def admin_import_students_api():
+    admin, error_response = _require_admin_api()
+    if error_response:
+        return error_response
+
+    payload = _get_json_payload()
+    rows = payload.get("rows") or []
+    if not isinstance(rows, list) or not rows:
+        return jsonify({"ok": False, "message": "No student rows were provided."}), 400
+
+    created = 0
+    skipped = 0
+    failed = []
+    created_users = []
+
+    for index, row in enumerate(rows, start=2):
+        name = _row_payload_value(row, "name", "full_name", "student_name")
+        email = _row_payload_value(row, "email", "email_address") or None
+        roll_no = _row_payload_value(row, "roll", "roll_no", "roll_number", "registration").upper()
+        username = _row_payload_value(row, "username", "user_name") or roll_no or (email.split("@")[0] if email else "")
+        password = _row_payload_value(row, "password", "temporary_password")
+
+        if not name or not username or not roll_no:
+            failed.append({"row": index, "message": "Missing name, username/roll, or roll number."})
+            continue
+        if not _valid_username(username):
+            failed.append({"row": index, "message": "Invalid username."})
+            continue
+        if User.query.filter_by(username=username).first():
+            skipped += 1
+            continue
+        if email and User.query.filter_by(email=email).first():
+            skipped += 1
+            continue
+        if User.query.filter_by(role="student", roll_number=roll_no).first():
+            skipped += 1
+            continue
+        if not password:
+            password = f"{secrets.token_urlsafe(8)}A1!"
+
+        student = User(
+            name=name,
+            username=username,
+            email=email,
+            role="student",
+            roll_number=roll_no,
+            is_active=True,
+            is_verified=True,
+            created_at=datetime.utcnow(),
+        )
+        student.set_password(password)
+        db.session.add(student)
+        created += 1
+        created_users.append(student)
+
+    if created:
+        db.session.commit()
+    AuditLog(
+        user_id=admin.id,
+        action="bulk_import_students_api",
+        resource_type="user",
+        changes=f"created={created}, skipped={skipped}, failed={len(failed)}",
+        status="success" if not failed else "warning",
+        ip_address=get_client_ip(),
+    ).save()
+    return jsonify(
+        {
+            "ok": True,
+            "message": f"Student import finished: {created} created, {skipped} skipped, {len(failed)} failed.",
+            "created": created,
+            "skipped": skipped,
+            "failed": failed,
+            "users": [_user_payload(user) for user in created_users],
+        }
+    )
+
+
 @api_bp.route("/admin/users/<int:user_id>", methods=["PATCH"])
 @rate_limit("admin_action")
 def admin_update_user_api(user_id):
@@ -1312,6 +1474,46 @@ def admin_exams_api():
             },
         }
     )
+
+
+@api_bp.route("/admin/exams/<int:exam_id>/status", methods=["POST"])
+@rate_limit("admin_action")
+def admin_exam_status_api(exam_id):
+    admin, error_response = _require_admin_api()
+    if error_response:
+        return error_response
+
+    payload = _get_json_payload()
+    action = (payload.get("action") or "").strip().lower()
+    exam = ExamSet.query.get_or_404(exam_id)
+
+    if action in {"activate", "publish", "published"}:
+        if exam.status != "draft":
+            return jsonify({"ok": False, "message": "Only draft exams can be activated."}), 400
+        if not exam.questions:
+            return jsonify({"ok": False, "message": "Add at least one question before activating."}), 400
+        exam.activate()
+        audit_action = "activate_exam_api"
+        message = f"Exam {exam.exam_name} activated."
+    elif action in {"close", "archive", "archived"}:
+        if exam.status == "closed":
+            return jsonify({"ok": False, "message": "Exam is already closed."}), 400
+        exam.close()
+        audit_action = "close_exam_api"
+        message = "Exam closed."
+    else:
+        return jsonify({"ok": False, "message": "Unsupported exam status action."}), 400
+
+    AuditLog(
+        user_id=admin.id,
+        action=audit_action,
+        resource_type="exam",
+        resource_id=exam.id,
+        changes=f"{action}: {exam.exam_name}",
+        status="success",
+        ip_address=get_client_ip(),
+    ).save()
+    return jsonify({"ok": True, "message": message, "exam": _admin_exam_payload(exam)})
 
 
 @api_bp.route("/admin/audit-log")
@@ -1531,6 +1733,76 @@ def teacher_question_bank_item_api(item_id):
     return jsonify({"ok": True, "item": _question_bank_payload(item)})
 
 
+@api_bp.route("/teacher/exam/<int:exam_id>/question-bank/import", methods=["POST"])
+@rate_limit("admin_action")
+def teacher_import_question_bank_api(exam_id):
+    exam, error_response = _require_teacher_owner(exam_id=exam_id)
+    if error_response:
+        return error_response
+    if exam.status == "active":
+        return jsonify({"ok": False, "message": "Cannot import bank questions while the exam is active. Close it first."}), 400
+
+    payload = _get_json_payload()
+    raw_ids = payload.get("bank_item_ids") or payload.get("bank_item_id") or []
+    if not isinstance(raw_ids, list):
+        raw_ids = [raw_ids]
+    selected_ids = []
+    for item_id in raw_ids:
+        try:
+            selected_ids.append(int(item_id))
+        except (TypeError, ValueError):
+            continue
+    if not selected_ids:
+        return jsonify({"ok": False, "message": "Choose at least one bank question to import."}), 400
+
+    bank_items = QuestionBankItem.query.filter(
+        QuestionBankItem.teacher_id == exam.created_by,
+        QuestionBankItem.id.in_(selected_ids),
+    ).all()
+    if not bank_items:
+        return jsonify({"ok": False, "message": "No matching bank questions found."}), 404
+
+    last_question = (
+        Question.query.filter_by(exam_set_id=exam.id)
+        .order_by(Question.question_number.desc())
+        .first()
+    )
+    next_number = (last_question.question_number if last_question else 0) + 1
+    imported_questions = []
+
+    for item in bank_items:
+        question = Question(
+            exam_set_id=exam.id,
+            question_number=next_number,
+            question_text=item.question_text,
+            question_type=item.question_type,
+            marks=item.marks,
+            correct_answer=item.correct_answer,
+            explanation=item.explanation,
+            model_answer=item.model_answer,
+            code_snippet=item.code_snippet,
+            code_language=item.code_language,
+            time_limit_seconds=item.time_limit_seconds,
+        )
+        question.set_options(item.options_as_list())
+        question.set_image_paths(item.image_paths_as_list())
+        db.session.add(question)
+        imported_questions.append(question)
+        next_number += 1
+
+    db.session.flush()
+    exam.total_marks = sum(q.marks for q in Question.query.filter_by(exam_set_id=exam.id).all())
+    db.session.commit()
+    return jsonify(
+        {
+            "ok": True,
+            "message": f"Imported {len(imported_questions)} question(s).",
+            "imported_count": len(imported_questions),
+            "questions": [_question_payload(question) for question in imported_questions],
+        }
+    )
+
+
 @api_bp.route("/student/results")
 def student_results_api():
     if session.get("role") != "student" or not session.get("roll_no"):
@@ -1591,6 +1863,74 @@ def student_results_api():
             }
         )
     return jsonify({"ok": True, "results": payload})
+
+
+@api_bp.route("/student/results/<int:exam_id>")
+def student_result_detail_api(exam_id):
+    if session.get("role") != "student" or not session.get("roll_no"):
+        return jsonify({"ok": False, "message": "Student login required"}), 401
+    student_user_id = session.get("student_user_id")
+    if student_user_id:
+        student_user = User.query.get(student_user_id)
+        if (
+            not student_user
+            or student_user.role != "student"
+            or not student_user.is_active
+            or not current_session_matches_user(student_user)
+        ):
+            session.clear()
+            return jsonify({"ok": False, "message": "This student account is active in another browser. Please log in again here."}), 401
+
+    roll_no = (session.get("roll_no") or "").strip().upper()
+    result = (
+        Result.query.join(StudentSession, Result.session_id == StudentSession.id)
+        .filter(
+            db.func.upper(StudentSession.roll_no) == roll_no,
+            StudentSession.exam_set_id == exam_id,
+            Result.published.is_(True),
+        )
+        .order_by(Result.published_at.desc(), Result.updated_at.desc())
+        .first()
+    )
+    if not result:
+        return jsonify({"ok": False, "message": "Published result not found."}), 404
+
+    student_session = result.session
+    exam = student_session.exam_set
+    answers_by_question = {answer.question_id: answer for answer in student_session.answers}
+    marks_by_question = {mark.question_id: mark for mark in result.question_marks}
+    questions = Question.query.filter_by(exam_set_id=exam.id).order_by(Question.question_number.asc()).all()
+    return jsonify(
+        {
+            "ok": True,
+            "result": {
+                "id": result.id,
+                "session_id": student_session.id,
+                "session_code": student_session.session_code,
+                "exam_id": exam.id,
+                "exam_name": exam.exam_name,
+                "subject": exam.subject,
+                "teacher_name": exam.creator.name if exam.creator else None,
+                "submitted_at": _iso_datetime(student_session.submitted_at),
+                "published_at": _iso_datetime(result.published_at),
+                "total_marks_obtained": result.total_marks_obtained,
+                "total_marks": result.total_marks,
+                "percentage": result.percentage,
+                "teacher_remarks": result.teacher_remarks,
+                "status": "passed" if result.percentage >= 40 else "failed",
+                "pdf_url": url_for("student.result_pdf", session_code=student_session.session_code),
+                "questions": [
+                    _result_question_payload(
+                        question,
+                        answers_by_question.get(question.id),
+                        marks_by_question.get(question.id),
+                        result,
+                    )
+                    for question in questions
+                ],
+            },
+        }
+    )
 
 
 @api_bp.route("/notifications")

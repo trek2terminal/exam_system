@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, redirect, url_for, request, session, flash
+from flask import Blueprint, render_template, redirect, url_for, request, session, flash, jsonify
 from datetime import datetime, timedelta
 from app.models.database import db
 from app.models.user_model import User
@@ -36,6 +36,41 @@ def _set_student_session(student_name, roll_no, student_id=None, username=None, 
     session["roll_no"] = (roll_no or "").strip().upper()
     session["role"] = "student"
     session["login_time"] = datetime.utcnow().isoformat()
+
+
+def _wants_json_response():
+    return (
+        request.is_json
+        or "application/json" in (request.headers.get("Accept") or "")
+        or request.headers.get("X-Requested-With") == "XMLHttpRequest"
+    )
+
+
+def _admin_login_failure(message, status_code=400, **extra):
+    if _wants_json_response():
+        payload = {"ok": False, "message": message}
+        payload.update(extra)
+        return jsonify(payload), status_code
+    flash(message, "danger")
+    return redirect(url_for("auth.admin_login"))
+
+
+def _lockout_payload(user):
+    if not user or not user.locked_until:
+        return {}
+    remaining = max(int((user.locked_until - datetime.utcnow()).total_seconds()), 0)
+    if remaining > 24 * 60 * 60:
+        return {
+            "locked": True,
+            "server_unlock_required": True,
+            "locked_until": user.locked_until.isoformat(),
+        }
+    return {
+        "locked": True,
+        "retry_after_seconds": remaining,
+        "retry_after_minutes": max((remaining + 59) // 60, 1),
+        "locked_until": user.locked_until.isoformat(),
+    }
 
 
 @auth_bp.route("/")
@@ -126,37 +161,41 @@ def admin_setup():
 def admin_login():
     """Admin Login"""
     if not User.query.filter_by(role="admin").first():
+        if _wants_json_response():
+            return jsonify({"ok": False, "message": "Admin setup is required before sign in.", "setup_required": True}), 409
         return redirect(url_for("auth.admin_setup"))
 
     if request.method == "POST":
-        username = request.form.get("username", "").strip()
-        password = request.form.get("password", "").strip()
+        payload = request.get_json(silent=True) if request.is_json else request.form
+        payload = payload or {}
+        username = (payload.get("username") or "").strip()
+        password = (payload.get("password") or "").strip()
 
         if not username or not password:
-            flash("Username and password are required.", "danger")
-            return redirect(url_for("auth.admin_login"))
+            return _admin_login_failure("Username and password are required.")
 
         admin = User.query.filter_by(username=username, role="admin").first()
 
         if not admin:
-            flash("Invalid credentials.", "danger")
-            return redirect(url_for("auth.admin_login"))
+            return _admin_login_failure("Invalid credentials.", 401)
 
         if not admin.is_active:
-            flash("Admin account is disabled.", "danger")
-            return redirect(url_for("auth.admin_login"))
+            return _admin_login_failure("Admin account is disabled.", 403)
 
         if admin.is_account_locked():
-            flash("Account is temporarily locked. Try again later.", "danger")
-            return redirect(url_for("auth.admin_login"))
+            return _admin_login_failure(
+                "Account locked. Unlock it from the server CLI." if admin.locked_until and (admin.locked_until - datetime.utcnow()).days > 1 else "Account locked. Try again later.",
+                423,
+                **_lockout_payload(admin),
+            )
 
         if not admin.check_password(password):
             admin.failed_login_attempts += 1
             if admin.failed_login_attempts >= 3:
                 admin.locked_until = datetime.utcnow() + timedelta(days=3650)
-                flash("Admin account is locked. Unlock it from the server CLI.", "danger")
+                message = "Admin account is locked. Unlock it from the server CLI."
             else:
-                flash("Invalid credentials.", "danger")
+                message = "Invalid credentials."
             db.session.commit()
             AuditLog(
                 user_id=admin.id,
@@ -166,7 +205,13 @@ def admin_login():
                 status="failed",
                 ip_address=get_client_ip()
             ).save()
-            return redirect(url_for("auth.admin_login"))
+            return _admin_login_failure(
+                message,
+                423 if admin.failed_login_attempts >= 3 else 401,
+                failed_attempts=admin.failed_login_attempts,
+                attempts_remaining=max(3 - admin.failed_login_attempts, 0),
+                **_lockout_payload(admin),
+            )
 
         # Successful login
         admin.reset_failed_attempts()
@@ -194,6 +239,8 @@ def admin_login():
         ).save()
 
         flash("Welcome Admin! You are logged in.", "success")
+        if _wants_json_response():
+            return jsonify({"ok": True, "message": "Welcome Admin!", "redirect": "/react/admin"})
         return redirect(url_for("admin.dashboard"))
 
     return render_template("auth/admin_login.html")

@@ -144,9 +144,9 @@ export default function LoginPage({ settings }) {
                   Create one
                 </Link>
               </div>
-              <a href="/admin/login" className="block text-xs font-semibold text-text-muted transition hover:text-text-primary">
+              <Link to="/admin/login" className="block text-xs font-semibold text-text-muted transition hover:text-text-primary">
                 Admin sign in
-              </a>
+              </Link>
             </div>
           </div>
         </div>

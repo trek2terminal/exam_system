@@ -188,6 +188,291 @@
   transform: translateX(12px);
 }
 
+.adminLoginScene {
+  position: relative;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(99, 102, 241, 0.24), transparent 34%),
+    linear-gradient(135deg, #0f172a 0%, #1e1b4b 48%, #0f172a 100%);
+  animation: adminRadialShift 8s ease-in-out infinite alternate;
+}
+
+.adminLoginScene::before {
+  content: "";
+  position: absolute;
+  inset: -20%;
+  background: radial-gradient(circle at var(--x, 30%) var(--y, 35%), rgba(99, 102, 241, 0.24), transparent 28%);
+  animation: adminOrbMove 8s ease-in-out infinite;
+}
+
+.adminLoginShape {
+  position: absolute;
+  border: 2px solid rgba(99, 102, 241, 0.42);
+  border-radius: 9999px;
+  opacity: 0.06;
+  animation: adminFloatShape 9s ease-in-out infinite;
+}
+
+.adminLoginShapeOne {
+  width: 180px;
+  height: 180px;
+  left: 10%;
+  top: 18%;
+}
+
+.adminLoginShapeTwo {
+  width: 260px;
+  height: 260px;
+  right: 9%;
+  bottom: 12%;
+  animation-delay: 2s;
+}
+
+.adminLoginShapeThree {
+  width: 90px;
+  height: 90px;
+  right: 22%;
+  top: 20%;
+  background: rgba(99, 102, 241, 0.6);
+  animation-delay: 4s;
+}
+
+.adminLoginCard {
+  position: relative;
+  z-index: 1;
+  width: min(420px, 100%);
+  padding: 40px;
+  border: 1px solid #334155;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
+  color: #0f172a;
+  animation: adminCardEnter 400ms ease-out 100ms both;
+}
+
+.dark .adminLoginCard {
+  background: #1e293b;
+  color: #f8fafc;
+}
+
+.adminShieldGlow {
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 18px;
+  border-radius: 9999px;
+  color: #6366f1;
+  animation: adminShieldPulse 2s ease-out infinite;
+}
+
+.adminLoginCard h1 {
+  margin: 0;
+  text-align: center;
+  font-size: 24px;
+  font-weight: 600;
+  color: inherit;
+}
+
+.adminLoginCard > p {
+  margin: 8px 0 0;
+  text-align: center;
+  font-size: 14px;
+  color: #64748b;
+}
+
+.dark .adminLoginCard > p {
+  color: #94a3b8;
+}
+
+.adminLoginDivider {
+  height: 1px;
+  margin: 24px 0;
+  background: #334155;
+  opacity: 0.55;
+}
+
+.adminLoginField {
+  display: grid;
+  gap: 8px;
+}
+
+.adminLoginField > span:first-child {
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.dark .adminLoginField > span:first-child {
+  color: #cbd5e1;
+}
+
+.adminInputWrap {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  padding: 0 12px;
+  background: #ffffff;
+  color: #64748b;
+  transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
+}
+
+.dark .adminInputWrap {
+  background: #0f172a;
+}
+
+.adminInputWrap:focus-within {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.16);
+}
+
+.adminInputWrap input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #0f172a;
+  font: inherit;
+}
+
+.dark .adminInputWrap input {
+  color: #f8fafc;
+}
+
+.adminInputWrap input::placeholder {
+  color: #94a3b8;
+}
+
+.adminInputWrap button {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+}
+
+.adminInputWrap button:hover {
+  background: rgba(99, 102, 241, 0.12);
+  color: #6366f1;
+}
+
+.adminLoginButton {
+  height: 48px;
+  width: 100%;
+  border: 0;
+  border-radius: 10px;
+  background: #4f46e5;
+  color: #ffffff;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 150ms ease, transform 150ms ease;
+}
+
+.adminLoginButton:hover:not(:disabled) {
+  background: #4338ca;
+  transform: scale(1.01);
+}
+
+.adminLoginButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.76;
+}
+
+.adminButtonSpinner {
+  width: 20px;
+  height: 20px;
+  display: inline-block;
+  border-radius: 9999px;
+  border: 2px solid rgba(255, 255, 255, 0.48);
+  border-top-color: #ffffff;
+  animation: adminSpin 1s linear infinite;
+}
+
+.adminLoginError {
+  max-height: 0;
+  overflow: hidden;
+  color: #f87171;
+  font-size: 14px;
+  transition: max-height 220ms ease, margin-top 220ms ease;
+}
+
+.adminLoginError.open {
+  max-height: 72px;
+  margin-top: 2px;
+}
+
+.adminLoginError span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.adminLoginReturn {
+  position: absolute;
+  bottom: 28px;
+  z-index: 1;
+  margin: 0;
+  color: rgba(248, 250, 252, 0.72);
+  font-size: 14px;
+}
+
+.adminLoginReturn a {
+  color: #a5b4fc;
+  font-weight: 700;
+}
+
+.adminLoginShake .adminInputWrap {
+  animation: adminShake 300ms ease both;
+}
+
+@keyframes adminRadialShift {
+  from { background-position: 0% 50%; }
+  to { background-position: 100% 50%; }
+}
+
+@keyframes adminOrbMove {
+  0%, 100% { --x: 24%; --y: 30%; transform: translate3d(0, 0, 0); }
+  50% { --x: 70%; --y: 58%; transform: translate3d(3%, -2%, 0); }
+}
+
+@keyframes adminFloatShape {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-18px) scale(1.04); }
+}
+
+@keyframes adminCardEnter {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes adminShieldPulse {
+  0% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4); }
+  70% { box-shadow: 0 0 0 12px rgba(99, 102, 241, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); }
+}
+
+@keyframes adminShake {
+  0%, 100% { transform: translateX(0); }
+  16%, 50%, 84% { transform: translateX(-8px); }
+  33%, 67% { transform: translateX(8px); }
+}
+
+@keyframes adminSpin {
+  to { transform: rotate(360deg); }
+}
+
 * {
   box-sizing: border-box;
 }
