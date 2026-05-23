@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { Link, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import {
   Bell,
   BookOpenCheck,
@@ -22,6 +22,7 @@ import { Badge, Button, Card, EmptyState, StatCard } from "./components/ui";
 import { cn } from "./components/ui/utils";
 import { useAppStore } from "./store/appStore";
 import { api } from "./services/api";
+import { notify } from "./components/ui/Toast";
 
 const ExamInterface = lazy(() => import("./ExamInterface.jsx"));
 const TeacherReview = lazy(() => import("./TeacherReview.jsx"));
@@ -30,6 +31,10 @@ const Proctoring = lazy(() => import("./Proctoring.jsx"));
 // Page Components
 const StudentResults = lazy(() => import("./pages/StudentResults.jsx"));
 const StudentHistory = lazy(() => import("./pages/StudentHistory.jsx"));
+const StudentJoinPage = lazy(() => import("./pages/StudentJoinPage.jsx"));
+const StudentPrecheckPage = lazy(() => import("./pages/StudentPrecheckPage.jsx"));
+const StudentWaitingPage = lazy(() => import("./pages/StudentWaitingPage.jsx"));
+const StudentSubmittedPage = lazy(() => import("./pages/StudentSubmittedPage.jsx"));
 const LoginPage = lazy(() => import("./pages/LoginPage.jsx"));
 const AdminLoginPage = lazy(() => import("./pages/AdminLoginPage.jsx"));
 const RegisterPage = lazy(() => import("./pages/RegisterPage.jsx"));
@@ -48,8 +53,7 @@ const NotFoundPage = lazy(() => import("./pages/NotFoundPage.jsx"));
 
 const loginLinks = [
   { label: "Admin", href: "/admin/login" },
-  { label: "Teacher", href: "/teacher/login" },
-  { label: "Student", href: "/student/login" }
+  { label: "Teacher or Student", href: "/login" }
 ];
 
 const rolePaths = {
@@ -138,6 +142,11 @@ function actionIcon(label) {
   return <FileText size={18} />;
 }
 
+function toRouterPath(target, fallback = "/") {
+  if (!target) return fallback;
+  return String(target).replace(/^\/react/, "") || fallback;
+}
+
 function Shell({ children, platformName, auth, notifications, theme, onToggleTheme, onMarkAllRead }) {
   // layout handled by PageLayout
   return (
@@ -165,10 +174,10 @@ function LoginPanel({ settings }) {
       </div>
       <div className="loginLinks">
         {loginLinks.map(item => (
-          <a key={item.label} href={item.href}>
+          <Link key={item.label} to={item.href}>
             <LogIn size={18} />
             {item.label} Login
-          </a>
+          </Link>
         ))}
       </div>
     </section>
@@ -259,7 +268,7 @@ function StudentDashboard({ dashboard }) {
               <Trophy size={16} />
               <span className="hidden sm:inline">Results</span>
             </Button>
-            <Button variant="primary" size="sm" as="a" href={dashboard?.links?.join_exam || "/student/join"}>
+            <Button variant="primary" size="sm" as={Link} to="/student/join">
               <KeyRound size={16} />
               <span className="hidden sm:inline">Access code</span>
             </Button>
@@ -271,7 +280,7 @@ function StudentDashboard({ dashboard }) {
             <CalendarClock size={40} className="mx-auto mb-4 text-text-muted" />
             <h3 className="text-lg font-semibold text-text-primary">No assigned exams yet</h3>
             <p className="mt-2 text-text-secondary">Your assigned exams will appear here. You can still join an exam with an access code if your teacher shared one.</p>
-            <Button variant="primary" size="md" as="a" href={dashboard?.links?.join_exam || "/student/join"} className="mt-4">
+            <Button variant="primary" size="md" as={Link} to="/student/join" className="mt-4">
               <KeyRound size={16} /> Open exam lobby
             </Button>
           </div>
@@ -290,6 +299,8 @@ function StudentDashboard({ dashboard }) {
 }
 
 function StudentExamCard({ exam, elapsedSeconds }) {
+  const navigate = useNavigate();
+  const [starting, setStarting] = useState(false);
   const tone = examTone(exam);
   const secondsUntilStart = Math.max((exam.window?.seconds_until_start || 0) - elapsedSeconds, 0);
   const isReadyNow = exam.status === "active" && secondsUntilStart === 0 && !exam.window?.has_ended;
@@ -307,6 +318,20 @@ function StudentExamCard({ exam, elapsedSeconds }) {
   };
 
   const config = toneConfig[tone] || toneConfig.submitted;
+
+  const startExam = async () => {
+    if (!action.api_path) return;
+    setStarting(true);
+    try {
+      const { data } = await api.post(action.api_path);
+      if (data.message) notify.success(data.message);
+      navigate(toRouterPath(data.redirect, "/student"), { replace: false });
+    } catch (error) {
+      notify.error(error.message || "Could not open exam");
+    } finally {
+      setStarting(false);
+    }
+  };
 
   return (
     <Card className={cn("overflow-hidden transition duration-200 hover:shadow-elevated", config.color)}>
@@ -399,13 +424,18 @@ function StudentExamCard({ exam, elapsedSeconds }) {
             {action.label || "Unavailable"}
           </Button>
         ) : action.method === "post" ? (
-          <form method="post" action={action.href} className="contents">
-            <input type="hidden" name="ui" value="react" />
-            <Button type="submit" variant={tone === "active" ? "success" : "primary"} size="sm" className="w-full">
-              {actionIcon(actionLabel)}
-              {actionLabel}
-            </Button>
-          </form>
+          <Button
+            type="button"
+            variant={tone === "active" ? "success" : "primary"}
+            size="sm"
+            className="w-full"
+            loading={starting}
+            loadingLabel="Opening..."
+            onClick={startExam}
+          >
+            {actionIcon(actionLabel)}
+            {actionLabel}
+          </Button>
         ) : (
           <Button
             as="a"
@@ -759,6 +789,46 @@ export default function App() {
           element={role === "student" ? (
             <PageSuspense label="Loading exam history...">
               <StudentHistory />
+            </PageSuspense>
+          ) : (
+            <LoginPanel settings={bootstrap?.settings} />
+          )}
+        />
+        <Route
+          path="/student/join"
+          element={role === "student" ? (
+            <PageSuspense label="Loading join form...">
+              <StudentJoinPage />
+            </PageSuspense>
+          ) : (
+            <LoginPanel settings={bootstrap?.settings} />
+          )}
+        />
+        <Route
+          path="/student/precheck/:sessionCode"
+          element={role === "student" ? (
+            <PageSuspense label="Loading checklist...">
+              <StudentPrecheckPage />
+            </PageSuspense>
+          ) : (
+            <LoginPanel settings={bootstrap?.settings} />
+          )}
+        />
+        <Route
+          path="/student/waiting/:sessionCode"
+          element={role === "student" ? (
+            <PageSuspense label="Loading waiting room...">
+              <StudentWaitingPage />
+            </PageSuspense>
+          ) : (
+            <LoginPanel settings={bootstrap?.settings} />
+          )}
+        />
+        <Route
+          path="/student/submitted/:sessionCode"
+          element={role === "student" ? (
+            <PageSuspense label="Loading submission...">
+              <StudentSubmittedPage />
             </PageSuspense>
           ) : (
             <LoginPanel settings={bootstrap?.settings} />

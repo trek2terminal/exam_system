@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AlertTriangle, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck } from "lucide-react";
+import { useAppStore } from "../store/appStore";
 
 function cleanAdminLoginError(data, fallback = "Invalid credentials.") {
   if (!data) return fallback;
@@ -19,6 +20,8 @@ function formatCountdown(seconds) {
 
 export default function AdminLoginPage() {
   const navigate = useNavigate();
+  const loadBootstrap = useAppStore(state => state.loadBootstrap);
+  const loadDashboard = useAppStore(state => state.loadDashboard);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -71,6 +74,8 @@ export default function AdminLoginPage() {
         return;
       }
 
+      const bootstrap = await loadBootstrap();
+      if (bootstrap?.auth?.role) await loadDashboard(bootstrap.auth.role);
       navigate("/admin", { replace: true });
     } catch {
       setShakeKey(current => current + 1);

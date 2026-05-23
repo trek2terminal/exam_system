@@ -162,7 +162,7 @@ export default function AdminExams() {
           rowsPerPageOptions={[10, 20, 50]}
           renderRowActions={row => (
             <>
-              <Button as="a" href={row.links?.classic || `/admin/exams/${row.id}`} variant="ghost" size="sm">
+              <Button as="a" href={`/react/admin/reports?exam=${row.id}`} variant="ghost" size="sm">
                 <Eye size={16} /> View
               </Button>
               {row.status === "draft" && (

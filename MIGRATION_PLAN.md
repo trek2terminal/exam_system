@@ -501,3 +501,27 @@ Still intentionally left for later phases:
 - Runtime-smoke the new JSON actions against a live authenticated Flask session, especially admin user import/create/status, account password change, and teacher question-bank import.
 - Finish JSON replacements for the few intentional Flask bridge flows that still depend on protected classic endpoints: student start/precheck/login/register, admin settings save/backup download, and teacher exam setup save.
 - Leave `instance/database.db` untouched as local runtime data even if it appears modified in the working tree.
+
+## Latest Implementation Batch 19 - 2026-05-23
+
+Completed in this batch:
+- Moved the remaining high-traffic Flask-template exits into React/JSON flows.
+- Added JSON auth endpoints for React student/teacher login and student self-registration: `/api/auth/login` and `/api/auth/register`.
+- Converted the React Login and Register pages to use JSON APIs, refresh bootstrap/dashboard state after success, and stay inside the `/react/` app.
+- Added React-owned student access-code join, waiting room, precheck checklist, and submitted-confirmation pages.
+- Added JSON student exam flow endpoints for start, access-code join, and precheck confirmation, returning React redirects instead of Flask template redirects.
+- Updated student dashboard exam cards so Start/Resume opens sessions through JSON APIs instead of posting a classic Flask form.
+- Updated exam submit/locked redirects and exam-state payloads to point at React submitted/results surfaces.
+- Added JSON admin settings save and database backup endpoints, then moved React Admin Settings off `/admin/settings/save` and the old backup form.
+- Added JSON teacher exam create/edit/load endpoints, then moved the React Exam Editor off `/teacher/setup`.
+- Added a JSON teacher similarity report endpoint and replaced the React Teacher Review similarity link with an in-app modal.
+- Removed React quick-action links to old admin violations/suspicious pages and redirected them to React proctoring/reports.
+- Removed old classic exam view links from React Admin Exams.
+- Cleaned generated Python cache files after verification.
+- Verified `npm.cmd run lint`, `npm.cmd run build`, `frontend/dist/index.html`, and Python route syntax.
+
+Still intentionally left for later phases:
+- File download endpoints still use existing Flask routes for CSV/PDF downloads because they return files, not styled pages: teacher exports, answer PDFs, admin violation CSV, and admin exam PDF reports.
+- React admin login still posts to `/admin/login` with JSON/XHR headers; it does not render the old admin template, but can be moved to `/api/auth/admin-login` in a later cleanup.
+- Enrollment management is no longer linked to the old Flask page from React Exam Editor, but a full React enrollment manager with live student/group assignment remains to be built.
+- Browser-test the complete React-only user journey with real admin, teacher, and student accounts: login, register, start exam, precheck, submit, review, proctoring, reports, settings, and backup.

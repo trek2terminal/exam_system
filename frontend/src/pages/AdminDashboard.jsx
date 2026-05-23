@@ -134,10 +134,10 @@ export default function AdminDashboard() {
           <Button variant="primary" size="sm" as="a" href="/react/admin/users">
             <Plus size={16} /> Create Teacher
           </Button>
-          <Button variant="secondary" size="sm" as="a" href="/admin/users?role=student">
+          <Button variant="secondary" size="sm" as="a" href="/react/admin/users">
             <Upload size={16} /> Import Students
           </Button>
-          <Button variant="secondary" size="sm" as="a" href="/admin/violations">
+          <Button variant="secondary" size="sm" as="a" href="/react/admin/proctoring">
             <AlertTriangle size={16} /> View Violations
           </Button>
           <Button variant="secondary" size="sm" as="a" href="/react/admin/settings">
@@ -237,7 +237,7 @@ export default function AdminDashboard() {
               <h2 className="text-xl font-semibold text-warning">Suspicious Students</h2>
               <p className="text-sm text-text-secondary">Students with repeated violations across exams.</p>
             </div>
-            <Button as="a" href="/admin/suspicious-activity" variant="warning" size="sm">
+            <Button as="a" href="/react/admin/reports" variant="warning" size="sm">
               <Eye size={16} /> Review
             </Button>
           </div>

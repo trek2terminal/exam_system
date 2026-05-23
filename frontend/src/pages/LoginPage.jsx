@@ -1,10 +1,16 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { CheckCircle2, Eye, EyeOff, LogIn } from "lucide-react";
 import { Button, Input } from "../components/ui";
 import { cn } from "../components/ui/utils";
+import { api } from "../services/api";
+import { notify } from "../components/ui/Toast";
+import { useAppStore } from "../store/appStore";
 
 export default function LoginPage({ settings }) {
+  const navigate = useNavigate();
+  const loadBootstrap = useAppStore(state => state.loadBootstrap);
+  const loadDashboard = useAppStore(state => state.loadDashboard);
   const [role, setRole] = useState("student");
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -14,7 +20,6 @@ export default function LoginPage({ settings }) {
   const loginMeta = useMemo(() => {
     if (role === "teacher") {
       return {
-        action: "/teacher/login",
         identifierName: "username",
         identifierLabel: "Teacher Username",
         identifierPlaceholder: "teacher.username"
@@ -22,12 +27,32 @@ export default function LoginPage({ settings }) {
     }
 
     return {
-      action: "/student/login",
       identifierName: "identifier",
       identifierLabel: "Username, Email, or Roll Number",
       identifierPlaceholder: "student@example.com"
     };
   }, [role]);
+
+  const handleSubmit = async event => {
+    event.preventDefault();
+    setSubmitting(true);
+    try {
+      const { data } = await api.post("/auth/login", {
+        role,
+        identifier,
+        password
+      });
+      notify.success(data.message || "Login successful");
+      const bootstrap = await loadBootstrap();
+      if (bootstrap?.auth?.role) await loadDashboard(bootstrap.auth.role);
+      const target = (data.redirect || `/react/${role}`).replace(/^\/react/, "") || `/${role}`;
+      navigate(target, { replace: true });
+    } catch (error) {
+      notify.error(error.message || "Could not sign in");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background-base text-text-primary">
@@ -95,8 +120,7 @@ export default function LoginPage({ settings }) {
               ))}
             </div>
 
-            <form method="post" action={loginMeta.action} className="space-y-5" onSubmit={() => setSubmitting(true)}>
-              {role === "student" && <input type="hidden" name="login_mode" value="account" />}
+            <form className="space-y-5" onSubmit={handleSubmit}>
               <Input
                 label={loginMeta.identifierLabel}
                 name={loginMeta.identifierName}
@@ -135,9 +159,6 @@ export default function LoginPage({ settings }) {
             </form>
 
             <div className="mt-6 space-y-3 text-center text-sm">
-              <a href={role === "teacher" ? "/teacher/login" : "/student/login"} className="block font-semibold text-brand-primary transition hover:text-brand-hover">
-                Need the Flask login page?
-              </a>
               <div className="text-text-secondary">
                 Do not have a student account?{" "}
                 <Link to="/register" className="font-semibold text-brand-primary transition hover:text-brand-hover">

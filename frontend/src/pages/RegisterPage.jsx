@@ -1,10 +1,16 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Check, CheckCircle2, Eye, EyeOff, UserPlus } from "lucide-react";
 import { Button, Input, ProgressBar } from "../components/ui";
 import { cn } from "../components/ui/utils";
+import { api } from "../services/api";
+import { notify } from "../components/ui/Toast";
+import { useAppStore } from "../store/appStore";
 
 export default function RegisterPage({ settings }) {
+  const navigate = useNavigate();
+  const loadBootstrap = useAppStore(state => state.loadBootstrap);
+  const loadDashboard = useAppStore(state => state.loadDashboard);
   const [fullName, setFullName] = useState("");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
@@ -32,6 +38,30 @@ export default function RegisterPage({ settings }) {
 
   const passwordsMatch = password.length > 0 && password === confirmPassword;
   const isFormValid = Boolean(fullName && username && rollNumber && password && confirmPassword && passwordsMatch && validations.length && validations.uppercase && validations.number && validations.special);
+
+  const handleSubmit = async event => {
+    event.preventDefault();
+    if (!isFormValid) return;
+    setSubmitting(true);
+    try {
+      const { data } = await api.post("/auth/register", {
+        name: fullName,
+        username,
+        email,
+        roll_no: rollNumber,
+        password,
+        confirm_password: confirmPassword
+      });
+      notify.success(data.message || "Student account created");
+      const bootstrap = await loadBootstrap();
+      if (bootstrap?.auth?.role) await loadDashboard(bootstrap.auth.role);
+      navigate("/student", { replace: true });
+    } catch (error) {
+      notify.error(error.message || "Could not create account");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background-base text-text-primary">
@@ -78,10 +108,10 @@ export default function RegisterPage({ settings }) {
 
             <div className="mb-8 text-center">
               <h1 className="text-3xl font-bold text-text-primary">Create student account</h1>
-              <p className="mt-2 text-text-secondary">Registration uses the existing secure Flask endpoint</p>
+              <p className="mt-2 text-text-secondary">Registration opens your React student workspace immediately</p>
             </div>
 
-            <form method="post" action="/student/register" className="space-y-5" onSubmit={() => setSubmitting(true)}>
+            <form className="space-y-5" onSubmit={handleSubmit}>
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                 <Input
                   label="Full Name"

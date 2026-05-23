@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { Trash2, Plus, Upload } from "lucide-react";
 import { Badge, Button, Input, Select, Textarea, StepWizard, ConfirmationDialog, Modal, Toggle } from "../components/ui";
 import { api } from "../services/api";
@@ -30,8 +30,10 @@ const createEmptyExam = () => ({
 
 export default function ExamEditor() {
   const { examId } = useParams();
+  const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(0);
   const [loading, setLoading] = useState(!!examId);
+  const [saving, setSaving] = useState(false);
   const [exam, setExam] = useState(() => createEmptyExam());
   const [showImportWizard, setShowImportWizard] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -70,6 +72,7 @@ export default function ExamEditor() {
   };
 
   const publishExam = async () => {
+    setSaving(true);
     try {
       const formData = new window.FormData();
       formData.append("exam_name", exam.name);
@@ -100,16 +103,18 @@ export default function ExamEditor() {
         });
       });
 
-      const response = await window.fetch(examId ? `/teacher/setup/${examId}` : "/teacher/setup", {
-        method: "POST",
-        body: formData,
-        credentials: "same-origin"
+      const response = await api.request({
+        url: examId ? `/teacher/exams/${examId}` : "/teacher/exams",
+        method: examId ? "patch" : "post",
+        data: formData,
+        headers: { "Content-Type": "multipart/form-data" }
       });
-      if (!response.ok) throw new Error("Exam save failed");
-      notify.success("Exam saved successfully");
-      window.location.href = "/react/teacher/exams";
-    } catch {
-      notify.error("Failed to save exam");
+      notify.success(response.data?.message || "Exam saved successfully");
+      navigate("/teacher/exams", { replace: true });
+    } catch (error) {
+      notify.error(error.message || "Failed to save exam");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -164,7 +169,7 @@ export default function ExamEditor() {
         onNext={handleNext}
         onBack={handleBack}
         nextLabel={currentStep === steps.length - 1 ? "Save Exam" : "Next"}
-        nextDisabled={!isStepValid(currentStep, exam)}
+        nextDisabled={saving || !isStepValid(currentStep, exam)}
       >
         {currentStep === 0 && <ExamDetailsStep exam={exam} onUpdate={updateExamField} />}
         {currentStep === 1 && (
@@ -514,13 +519,9 @@ function EnrollmentStep({ exam, examId, onUpdate }) {
   return (
     <div className="space-y-5">
       <div className="rounded-lg border border-info/30 bg-info/5 p-4 text-sm text-info">
-        Enrollment changes are saved on the dedicated Flask enrollment endpoint after the exam exists.
+        Draft roster notes stay with this React editor flow. Use Admin Groups and the teacher dashboard APIs for live assignments.
       </div>
-      {examId && (
-        <Button as="a" href={`/teacher/exam/${examId}/enrollments`} variant="secondary">
-          <Upload size={16} /> Open Live Enrollment Manager
-        </Button>
-      )}
+      {examId && <Badge variant="info">Editing exam #{examId}</Badge>}
       <Textarea
         label="Student Roster Draft"
         value={exam?.enrollment_lines || ""}

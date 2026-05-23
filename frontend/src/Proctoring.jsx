@@ -415,7 +415,7 @@ export default function Proctoring({ mode }) {
               <span className="eyebrow">Recent alerts</span>
               <h3>Violation Feed</h3>
             </div>
-            <Button as="a" variant="ghost" size="sm" href="/admin/violations">Full log</Button>
+            <Button as="a" variant="ghost" size="sm" href="/react/admin/reports">Full log</Button>
           </div>
           {data.recent_violations.map(item => (
             <article key={item.id}>

@@ -399,9 +399,9 @@ export default function ExamInterface() {
         requestPayload({ reason }),
         { headers: requestHeaders() }
       );
-      window.location.replace(data.redirect || examState?.student_session?.submitted_url || "/student/dashboard");
+      window.location.replace(data.redirect || examState?.student_session?.submitted_url || "/react/student");
     } catch {
-      window.location.replace(examState?.student_session?.submitted_url || "/student/dashboard");
+      window.location.replace(examState?.student_session?.submitted_url || "/react/student");
     }
   }, [sessionCode, sessionToken, windowToken, statuses, answers, saveAnswerNow, requestHeaders, requestPayload, examState]);
 
@@ -548,7 +548,7 @@ export default function ExamInterface() {
       submittedRef.current = true;
       toast.error(payload?.reason || "Your exam was ended by admin.", { duration: 5000 });
       window.setTimeout(() => {
-        window.location.replace(payload?.redirect || examState?.student_session?.submitted_url || `/student/submitted/${sessionCode}`);
+        window.location.replace(payload?.redirect || examState?.student_session?.submitted_url || `/react/student/submitted/${sessionCode}`);
       }, 700);
     };
     const handleTimeReduced = payload => {
@@ -580,7 +580,7 @@ export default function ExamInterface() {
     };
     const handleSubmitted = payload => {
       submittedRef.current = true;
-      window.location.replace(payload?.redirect || examState?.student_session?.submitted_url || `/student/submitted/${sessionCode}`);
+      window.location.replace(payload?.redirect || examState?.student_session?.submitted_url || `/react/student/submitted/${sessionCode}`);
     };
 
     socket.on("connect", showConnectionToast);
@@ -703,7 +703,7 @@ export default function ExamInterface() {
         <ShieldAlert size={36} />
         <h2>Exam cannot open</h2>
         <p>{error}</p>
-        <Button as="a" variant="primary" size="sm" href="/student/dashboard">Back to dashboard</Button>
+        <Button as="a" variant="primary" size="sm" href="/react/student">Back to dashboard</Button>
       </section>
     );
   }

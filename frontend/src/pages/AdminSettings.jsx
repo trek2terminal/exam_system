@@ -16,6 +16,7 @@ const tabs = [
 export default function AdminSettings() {
   const [activeTab, setActiveTab] = useState("general");
   const [loading, setLoading] = useState(false);
+  const [backupLoading, setBackupLoading] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [backupPassword, setBackupPassword] = useState("");
   const [quoteDraft, setQuoteDraft] = useState("");
@@ -100,26 +101,47 @@ export default function AdminSettings() {
   const handleSave = async () => {
     setLoading(true);
     try {
-      const formData = new window.FormData();
-      formData.append("platform_name", general.platform_name);
-      formData.append("welcome_message", general.welcome_message);
-      formData.append("announcement_message", announcement.enabled ? announcement.message : "");
-      formData.append("quote_pool", general.quote_pool.join("\n"));
-      formData.append("max_violations_before_alert", String(security.violation_threshold));
-      if (registration.self_registration_enabled) formData.append("student_self_registration", "on");
-
-      const response = await window.fetch("/admin/settings/save", {
-        method: "POST",
-        body: formData,
-        credentials: "same-origin"
+      await api.patch("/admin/settings", {
+        platform_name: general.platform_name,
+        welcome_message: general.welcome_message,
+        announcement_message: announcement.enabled ? announcement.message : "",
+        quote_pool: general.quote_pool.join("\n"),
+        max_violations_before_alert: security.violation_threshold,
+        student_self_registration: registration.self_registration_enabled
       });
-      if (!response.ok) throw new Error("Settings save failed");
       notify.success("Settings saved successfully");
       setHasChanges(false);
-    } catch {
-      notify.error("Failed to save settings");
+    } catch (error) {
+      notify.error(error.message || "Failed to save settings");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleBackup = async event => {
+    event.preventDefault();
+    if (!backupPassword.trim()) return;
+    setBackupLoading(true);
+    try {
+      const response = await api.post(
+        "/admin/settings/backup",
+        { admin_password: backupPassword },
+        { responseType: "blob" }
+      );
+      const blobUrl = window.URL.createObjectURL(response.data);
+      const link = document.createElement("a");
+      const disposition = response.headers?.["content-disposition"] || "";
+      const match = disposition.match(/filename="?([^"]+)"?/i);
+      link.href = blobUrl;
+      link.download = match?.[1] || "exam_backup.db";
+      link.click();
+      window.URL.revokeObjectURL(blobUrl);
+      notify.success("Backup downloaded");
+      setBackupPassword("");
+    } catch (error) {
+      notify.error(error.message || "Backup failed");
+    } finally {
+      setBackupLoading(false);
     }
   };
 
@@ -140,6 +162,8 @@ export default function AdminSettings() {
       onQuoteDraftChange={setQuoteDraft}
       onAddQuote={addQuote}
       onRemoveQuote={removeQuote}
+      onBackup={handleBackup}
+      backupLoading={backupLoading}
     />
   );
 
@@ -221,7 +245,9 @@ function SettingsSection({
   onBackupPasswordChange,
   onQuoteDraftChange,
   onAddQuote,
-  onRemoveQuote
+  onRemoveQuote,
+  onBackup,
+  backupLoading
 }) {
   if (sectionId === "general") {
     return (
@@ -326,9 +352,9 @@ function SettingsSection({
           <div className="rounded-lg border border-border bg-background-base p-4">
             <p className="mb-0 text-sm text-text-secondary">Last backup timestamp is recorded by the server after a download is generated.</p>
           </div>
-          <form method="post" action="/admin/settings/backup" className="space-y-3 rounded-lg border border-border bg-background-base p-4">
+          <form onSubmit={onBackup} className="space-y-3 rounded-lg border border-border bg-background-base p-4">
             <Input label="Admin Password" name="admin_password" type="password" value={backupPassword} onChange={event => onBackupPasswordChange(event.target.value)} autoComplete="current-password" required />
-            <Button type="submit" variant="primary">
+            <Button type="submit" variant="primary" loading={backupLoading} loadingLabel="Preparing...">
               <Download size={16} /> Download Backup
             </Button>
           </form>

@@ -1,12 +1,17 @@
+import json
+import os
 import secrets
+import shutil
+import subprocess
 from datetime import datetime, timedelta
+from difflib import SequenceMatcher
 
-from flask import Blueprint, current_app, jsonify, request, session, url_for
+from flask import Blueprint, current_app, jsonify, request, send_file, session, url_for
 from sqlalchemy import or_
 
 from app.models.audit_model import AuditLog, ViolationLog
 from app.models.database import db
-from app.models.exam_model import ExamEnrollment, ExamSet, Question, QuestionBankItem
+from app.models.exam_model import ExamEnrollment, ExamSet, Question, QuestionBankItem, generate_access_code
 from app.models.group_model import StudentGroup, StudentGroupMember
 from app.models.notification_model import Notification
 from app.models.result_model import QuestionMark, Result
@@ -58,7 +63,7 @@ def _get_json_payload():
 
 
 def _submitted_redirect(session_code):
-    return f"/student/submitted/{session_code}"
+    return f"/react/student/submitted/{session_code}"
 
 
 def _active_elsewhere_redirect(session_code):
@@ -109,7 +114,7 @@ def _require_attempt(session_code, payload=None, require_active=False, require_w
         if time_state == "not_started":
             return None, _forbidden_session_response(
                 "This exam has not opened yet.",
-                redirect=f"/student/waiting/{student_session.session_code}",
+                redirect=f"/react/student/waiting/{student_session.session_code}",
             )
 
     allowed_statuses = allowed_statuses or {MUTABLE_SESSION_STATUS}
@@ -143,6 +148,16 @@ def _strong_password(password):
         and any(char.isupper() for char in password)
         and any(char.islower() for char in password)
         and any(char.isdigit() for char in password)
+    )
+
+
+def _valid_student_password(password):
+    password = password or ""
+    return (
+        len(password) >= 8
+        and any(char.isupper() for char in password)
+        and any(char.isdigit() for char in password)
+        and any(char in "!@#$%^&*" for char in password)
     )
 
 
@@ -210,7 +225,6 @@ def _admin_exam_payload(exam):
         "start_time": _iso_datetime(exam.start_time),
         "end_time": _iso_datetime(exam.end_time),
         "links": {
-            "classic": url_for("admin.view_exam", exam_id=exam.id),
             "report_pdf": url_for("admin.export_exam_report_pdf", exam_id=exam.id),
         },
     }
@@ -286,6 +300,150 @@ def _current_session_user():
     return user, None
 
 
+def _set_react_student_session(student_name, roll_no, student_id=None, username=None, auth_session_token=None):
+    session.clear()
+    session.permanent = True
+    session["student_id"] = student_id or hash(f"{student_name}_{roll_no}_{datetime.utcnow().isoformat()}")
+    if student_id:
+        session["user_id"] = student_id
+        session["student_user_id"] = student_id
+    if auth_session_token:
+        session["auth_session_token"] = auth_session_token
+    if username:
+        session["student_username"] = username
+    session["student_name"] = student_name
+    session["roll_no"] = (roll_no or "").strip().upper()
+    session["role"] = "student"
+    session["login_time"] = datetime.utcnow().isoformat()
+    session.modified = True
+
+
+def _remember_react_attempt(student_session):
+    session.permanent = True
+    session["role"] = "student"
+    session["student_id"] = student_session.id
+    session["student_name"] = student_session.student_name
+    session["roll_no"] = student_session.roll_no
+    ExamSessionGuard.remember_browser_attempt(student_session)
+
+
+def _require_student_api_details():
+    student_user_id = session.get("student_user_id")
+    if student_user_id:
+        user = User.query.get(student_user_id)
+        if (
+            not user
+            or user.role != "student"
+            or not user.is_active
+            or not current_session_matches_user(user)
+        ):
+            session.clear()
+            return None, None, _role_error("Student login required", 401)
+
+    student_name = (session.get("student_name") or "").strip()
+    roll_no = (session.get("roll_no") or "").strip().upper()
+    if session.get("role") != "student" or not student_name or not roll_no:
+        return None, None, _role_error("Student login required", 401)
+    return student_name, roll_no, None
+
+
+def _latest_student_attempt(exam_id, roll_no):
+    return (
+        StudentSession.query.filter(
+            StudentSession.exam_set_id == exam_id,
+            db.func.upper(StudentSession.roll_no) == (roll_no or "").strip().upper(),
+        )
+        .order_by(StudentSession.created_at.desc())
+        .first()
+    )
+
+
+def _exam_requires_enrollment(exam_id):
+    return ExamEnrollment.query.filter_by(exam_set_id=exam_id).first() is not None
+
+
+def _student_is_enrolled(exam_id, roll_no):
+    return (
+        ExamEnrollment.query.filter(
+            ExamEnrollment.exam_set_id == exam_id,
+            db.func.upper(ExamEnrollment.roll_no) == (roll_no or "").strip().upper(),
+        ).first()
+        is not None
+    )
+
+
+def _react_attempt_destination(student_session):
+    exam = student_session.exam_set
+    _remember_react_attempt(student_session)
+    time_state = ExamService.enforce_time_window(student_session)
+
+    if ExamSessionGuard.is_locked(student_session) or time_state == "ended":
+        return {"state": "submitted", "redirect": f"/react/student/submitted/{student_session.session_code}"}
+    if exam.status == "active" and time_state == "not_started":
+        return {"state": "waiting", "redirect": f"/react/student/waiting/{student_session.session_code}"}
+    if exam.status == "active" and not student_session.start_time:
+        return {"state": "precheck", "redirect": f"/react/student/precheck/{student_session.session_code}"}
+    if exam.status == "active":
+        return {"state": "exam", "redirect": f"/react/exam/{student_session.session_code}"}
+    return {"state": "waiting", "redirect": f"/react/student/waiting/{student_session.session_code}"}
+
+
+def _parse_datetime_local_value(raw_value):
+    value = (raw_value or "").strip()
+    if not value:
+        return None
+    for fmt in ("%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M:%S"):
+        try:
+            return datetime.strptime(value, fmt)
+        except ValueError:
+            pass
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _exam_editor_payload(exam):
+    questions = Question.query.filter_by(exam_set_id=exam.id).order_by(Question.question_number.asc()).all()
+    return {
+        "id": exam.id,
+        "name": exam.exam_name,
+        "exam_name": exam.exam_name,
+        "subject": exam.subject,
+        "set_code": exam.set_code,
+        "status": exam.status,
+        "total_marks": exam.total_marks,
+        "duration_minutes": exam.duration_minutes,
+        "attempt_limit": exam.attempt_limit,
+        "random_question_count": exam.random_question_count,
+        "randomize_delivery": bool(exam.random_question_count),
+        "shuffle_questions": bool(exam.shuffle_questions),
+        "shuffle_options": False,
+        "access_mode": "access_code" if exam.access_code else "open",
+        "access_code": exam.access_code,
+        "start_time": exam.start_time.strftime("%Y-%m-%dT%H:%M") if exam.start_time else "",
+        "end_time": exam.end_time.strftime("%Y-%m-%dT%H:%M") if exam.end_time else "",
+        "questions": [
+            {
+                "id": question.id,
+                "text": question.question_text,
+                "type": question.question_type,
+                "options": question.options_as_list(),
+                "max_marks": question.marks,
+                "correct_answer": question.correct_answer or "",
+                "model_answer": question.model_answer or "",
+                "image_paths": question.image_paths_as_list(),
+                "image_urls": [url_for("static", filename=path) for path in question.image_paths_as_list()],
+                "code_snippet": question.code_snippet or "",
+                "has_code_snippet": bool(question.code_snippet),
+                "code_language": question.code_language or "python",
+                "time_limit_seconds": question.time_limit_seconds or 0,
+            }
+            for question in questions
+        ],
+    }
+
+
 def _result_question_payload(question, answer, question_mark, result):
     answer_text = answer.answer_text if answer else ""
     marks_awarded = question_mark.marks_awarded if question_mark else 0
@@ -343,7 +501,7 @@ def _student_exam_action_payload(exam, student_session, attempts_remaining, wind
     if locked and no_attempts_left:
         return {
             "label": "View submission",
-            "href": url_for("student.submitted", session_code=student_session.session_code),
+            "href": f"/react/student/submitted/{student_session.session_code}",
             "method": "get",
             "variant": "secondary",
             "disabled": False,
@@ -377,7 +535,8 @@ def _student_exam_action_payload(exam, student_session, attempts_remaining, wind
     return {
         "label": label,
         "ready_label": "Start exam" if exam.status == "active" else label,
-        "href": url_for("student.start_assigned_exam", exam_id=exam.id),
+        "href": f"/react/student/precheck/{student_session.session_code}" if student_session and student_session.start_time is None else url_for("student.start_assigned_exam", exam_id=exam.id),
+        "api_path": f"/student/exams/{exam.id}/start",
         "method": "post",
         "variant": "primary",
         "disabled": False,
@@ -646,6 +805,161 @@ def bootstrap():
     )
 
 
+@api_bp.route("/auth/login", methods=["POST"])
+@rate_limit("auth_login")
+def react_login_api():
+    payload = _get_json_payload()
+    role = (payload.get("role") or "student").strip().lower()
+    identifier = (payload.get("identifier") or payload.get("username") or "").strip()
+    password = (payload.get("password") or "").strip()
+
+    if role not in {"student", "teacher"}:
+        return jsonify({"ok": False, "message": "Choose a valid role."}), 400
+    if not identifier or not password:
+        return jsonify({"ok": False, "message": "Username and password are required."}), 400
+
+    if role == "teacher":
+        user = User.query.filter_by(username=identifier, role="teacher").first()
+    else:
+        user = User.query.filter(
+            User.role == "student",
+            or_(
+                User.username == identifier,
+                User.email == identifier,
+                User.roll_number == identifier.upper(),
+            ),
+        ).first()
+
+    if not user or not user.check_password(password):
+        if user:
+            user.increment_failed_attempts()
+            AuditLog(
+                user_id=user.id,
+                action="failed_login" if role == "teacher" else "failed_student_login",
+                resource_type="user",
+                resource_id=user.id,
+                status="failed",
+                ip_address=get_client_ip(),
+                user_agent=request.headers.get("User-Agent"),
+            ).save()
+        return jsonify({"ok": False, "message": "Invalid credentials."}), 401
+
+    if not user.is_active:
+        return jsonify({"ok": False, "message": "This account is disabled by the administrator."}), 403
+    if user.is_account_locked():
+        minutes = max(int((user.locked_until - datetime.utcnow()).total_seconds() // 60), 1) if user.locked_until else 30
+        return jsonify({"ok": False, "message": f"Account locked. Try again in {minutes} minutes.", "locked": True}), 423
+
+    user.reset_failed_attempts()
+    auth_session_token = user.issue_active_session_token()
+    db.session.commit()
+
+    if role == "teacher":
+        session.clear()
+        session.permanent = True
+        session["user_id"] = user.id
+        session["teacher_id"] = user.id
+        session["teacher_name"] = user.name
+        session["teacher_username"] = user.username
+        session["role"] = "teacher"
+        session["auth_session_token"] = auth_session_token
+        session["login_time"] = datetime.utcnow().isoformat()
+        redirect = "/react/settings" if user.must_change_password else "/react/teacher"
+    else:
+        _set_react_student_session(
+            user.name,
+            user.roll_number or user.username,
+            student_id=user.id,
+            username=user.username,
+            auth_session_token=auth_session_token,
+        )
+        redirect = "/react/student"
+
+    AuditLog(
+        user_id=user.id,
+        action="login" if role == "teacher" else "student_login",
+        resource_type="user",
+        resource_id=user.id,
+        status="success",
+        ip_address=get_client_ip(),
+        user_agent=request.headers.get("User-Agent"),
+    ).save()
+    return jsonify({"ok": True, "message": "Login successful.", "redirect": redirect, "role": role})
+
+
+@api_bp.route("/auth/register", methods=["POST"])
+@rate_limit("student_login")
+def react_register_api():
+    settings = SettingsService.get_settings()
+    if not settings.student_self_registration:
+        return jsonify({"ok": False, "message": "Student registration is currently closed."}), 403
+
+    payload = _get_json_payload()
+    name = (payload.get("name") or "").strip()
+    username = (payload.get("username") or "").strip()
+    email = (payload.get("email") or "").strip() or None
+    roll_no = (payload.get("roll_no") or payload.get("roll_number") or "").strip().upper()
+    password = (payload.get("password") or "").strip()
+    confirm_password = (payload.get("confirm_password") or "").strip()
+
+    if not name or not username or not roll_no or not password or not confirm_password:
+        return jsonify({"ok": False, "message": "Name, username, roll number, password, and confirmation are required."}), 400
+    if len(username) < 4:
+        return jsonify({"ok": False, "message": "Username must be at least 4 characters."}), 400
+    if password != confirm_password:
+        return jsonify({"ok": False, "message": "Passwords do not match."}), 400
+    if not _valid_student_password(password):
+        return jsonify({"ok": False, "message": "Password must be at least 8 characters and include uppercase, number, and special character."}), 400
+    if User.query.filter_by(username=username).first():
+        return jsonify({"ok": False, "message": "Username already exists."}), 400
+    if email and User.query.filter_by(email=email).first():
+        return jsonify({"ok": False, "message": "Email already exists."}), 400
+    if User.query.filter_by(role="student", roll_number=roll_no).first():
+        return jsonify({"ok": False, "message": "A student account with this roll number already exists."}), 400
+
+    student = User(
+        name=name,
+        username=username,
+        email=email,
+        role="student",
+        roll_number=roll_no,
+        is_active=True,
+        is_verified=True,
+        created_at=datetime.utcnow(),
+    )
+    student.set_password(password)
+    db.session.add(student)
+    db.session.commit()
+    auth_session_token = student.issue_active_session_token()
+    db.session.commit()
+
+    AuditLog(
+        user_id=student.id,
+        action="student_self_register",
+        resource_type="user",
+        resource_id=student.id,
+        status="success",
+        ip_address=get_client_ip(),
+        user_agent=request.headers.get("User-Agent"),
+    ).save()
+    NotificationService.notify_role(
+        "admin",
+        f"New student registered: {student.name} ({student.roll_number}).",
+        notification_type="student_registered",
+        related_entity_type="user",
+        related_entity_id=student.id,
+    )
+    db.session.commit()
+    _set_react_student_session(
+        student.name,
+        student.roll_number,
+        student_id=student.id,
+        username=student.username,
+        auth_session_token=auth_session_token,
+    )
+    return jsonify({"ok": True, "message": "Student account created.", "redirect": "/react/student", "role": "student"}), 201
+
+
 @api_bp.route("/account/profile", methods=["PATCH"])
 @rate_limit("admin_action")
 def account_profile_api():
@@ -851,9 +1165,126 @@ def student_dashboard_api():
             "stats": stats,
             "exams": cards,
             "links": {
-                "join_exam": url_for("student.join_exam"),
-                "results": url_for("student.results"),
-                "dashboard": url_for("student.dashboard"),
+                "join_exam": "/react/student/join",
+                "results": "/react/student/results",
+                "dashboard": "/react/student",
+            },
+        }
+    )
+
+
+@api_bp.route("/student/exams/<int:exam_id>/start", methods=["POST"])
+@rate_limit("submit")
+def react_start_exam_api(exam_id):
+    student_name, roll_no, error_response = _require_student_api_details()
+    if error_response:
+        return error_response
+
+    exam = ExamSet.query.get_or_404(exam_id)
+    if not _student_is_enrolled(exam.id, roll_no):
+        return jsonify({"ok": False, "message": "This exam is not assigned to your roll number."}), 403
+    if exam.status == "closed":
+        return jsonify({"ok": False, "message": "This exam has been closed by the teacher."}), 403
+
+    existing_session = _latest_student_attempt(exam.id, roll_no)
+    if existing_session and ExamSessionGuard.is_locked(existing_session) and not ExamService.can_start_new_attempt(exam.id, roll_no):
+        return jsonify({"ok": True, "message": "Maximum attempts reached.", **_react_attempt_destination(existing_session)})
+
+    student_session = ExamService.create_student_session(
+        exam_set_id=exam.id,
+        student_name=student_name,
+        roll_no=roll_no,
+    )
+    return jsonify({"ok": True, "message": "Exam session ready.", **_react_attempt_destination(student_session)})
+
+
+@api_bp.route("/student/join", methods=["POST"])
+@rate_limit("submit")
+def react_join_exam_api():
+    student_name, roll_no, error_response = _require_student_api_details()
+    if error_response:
+        return error_response
+
+    payload = _get_json_payload()
+    access_code = (payload.get("access_code") or "").strip().upper()
+    if not access_code:
+        return jsonify({"ok": False, "message": "Exam access code is required."}), 400
+
+    exam = ExamSet.query.filter_by(access_code=access_code).first()
+    if not exam:
+        return jsonify({"ok": False, "message": "Invalid exam access code."}), 404
+    if _exam_requires_enrollment(exam.id) and not _student_is_enrolled(exam.id, roll_no):
+        return jsonify({"ok": False, "message": "This exam is assigned by roll number and is not available for your login."}), 403
+    if exam.status == "closed":
+        existing_session = _latest_student_attempt(exam.id, roll_no)
+        if existing_session and ExamSessionGuard.is_locked(existing_session):
+            return jsonify({"ok": True, "message": "This exam is already submitted.", **_react_attempt_destination(existing_session)})
+        return jsonify({"ok": False, "message": "This exam has been closed by the teacher."}), 403
+
+    existing_session = _latest_student_attempt(exam.id, roll_no)
+    if existing_session and ExamSessionGuard.is_locked(existing_session) and not ExamService.can_start_new_attempt(exam.id, roll_no):
+        return jsonify({"ok": True, "message": "Maximum attempts reached.", **_react_attempt_destination(existing_session)})
+
+    student_session = ExamService.create_student_session(
+        exam_set_id=exam.id,
+        student_name=student_name,
+        roll_no=roll_no,
+    )
+    return jsonify({"ok": True, "message": "Exam session ready.", **_react_attempt_destination(student_session)})
+
+
+@api_bp.route("/student/session/<session_code>/precheck", methods=["GET", "POST"])
+@rate_limit("submit", methods=("POST",))
+def react_precheck_api(session_code):
+    student_session = _get_student_session(session_code)
+    if not ExamSessionGuard.browser_owns_attempt(student_session):
+        return _forbidden_session_response()
+
+    exam = student_session.exam_set
+    question_count = Question.query.filter_by(exam_set_id=exam.id).count()
+    time_state = ExamService.enforce_time_window(student_session)
+
+    if ExamSessionGuard.is_locked(student_session) or time_state == "ended":
+        return jsonify({"ok": True, "redirect": f"/react/student/submitted/{session_code}", "state": "submitted"})
+    if exam.status != "active" or time_state == "not_started":
+        return jsonify({"ok": True, "redirect": f"/react/student/waiting/{session_code}", "state": "waiting"})
+    if student_session.start_time:
+        return jsonify({"ok": True, "redirect": f"/react/exam/{session_code}", "state": "exam"})
+
+    if request.method == "POST":
+        payload = _get_json_payload()
+        if not payload.get("rules_ack"):
+            return jsonify({"ok": False, "message": "Please confirm that you understand the exam rules."}), 400
+        if not ExamService.start_exam(session_code):
+            time_state = ExamService.enforce_time_window(student_session)
+            if time_state == "ended":
+                return jsonify({"ok": True, "redirect": f"/react/student/submitted/{session_code}", "state": "submitted"})
+            return jsonify({"ok": True, "redirect": f"/react/student/waiting/{session_code}", "state": "waiting"})
+        return jsonify({"ok": True, "redirect": f"/react/exam/{session_code}", "state": "exam"})
+
+    return jsonify(
+        {
+            "ok": True,
+            "state": "precheck",
+            "attempt_token": ExamSessionGuard.ensure_token(student_session),
+            "question_count": question_count,
+            "max_violations_allowed": SettingsService.max_violations_allowed(),
+            "exam": {
+                "id": exam.id,
+                "exam_name": exam.exam_name,
+                "subject": exam.subject,
+                "set_code": exam.set_code,
+                "duration_minutes": exam.duration_minutes,
+                "total_marks": exam.total_marks,
+                "start_time": _iso_datetime(exam.start_time),
+                "end_time": _iso_datetime(exam.end_time),
+            },
+            "student_session": {
+                "id": student_session.id,
+                "session_code": student_session.session_code,
+                "student_name": student_session.student_name,
+                "roll_no": student_session.roll_no,
+                "extra_time_minutes": student_session.extra_time_minutes,
             },
         }
     )
@@ -882,12 +1313,286 @@ def teacher_dashboard_api():
                     "question_count": len(exam.questions),
                     "session_count": len(exam.sessions),
                     "review_url": f"/react/teacher/exam/{exam.id}/review",
-                    "flask_results_url": url_for("teacher.exam_results", exam_id=exam.id),
                 }
                 for exam in exams
             ],
         }
     )
+
+
+def _json_exam_question_rows(payload):
+    rows = []
+    for index, question in enumerate(payload.get("questions") or [], start=1):
+        text = (question.get("text") or question.get("question_text") or "").strip()
+        if not text:
+            continue
+        q_type = (question.get("type") or question.get("question_type") or "short").strip().lower()
+        if q_type == "short_answer":
+            q_type = "short"
+        if q_type == "long_answer":
+            q_type = "long"
+        if q_type == "code":
+            q_type = "coding"
+        try:
+            marks = int(question.get("max_marks") or question.get("marks") or 1)
+        except (TypeError, ValueError):
+            marks = 1
+        options = parse_options(question.get("options") or [])
+        if q_type == "mcq" and len(options) < 2:
+            raise ValueError(f"Question {index} needs at least two MCQ options.")
+        rows.append(
+            {
+                "number": index,
+                "text": text,
+                "type": q_type,
+                "marks": max(marks, 1),
+                "options": options,
+                "answer": (question.get("correct_answer") or "").strip(),
+                "model_answer": (question.get("model_answer") or "").strip(),
+                "image_paths": question.get("image_paths") or [],
+                "code_snippet": (question.get("code_snippet") or "").strip(),
+                "code_language": (question.get("code_language") or "").strip() or None,
+                "time_limit_seconds": max(int(question.get("time_limit_seconds") or 0), 0),
+            }
+        )
+    return rows
+
+
+def _multipart_exam_question_rows():
+    q_numbers = request.form.getlist("question_number")
+    q_texts = request.form.getlist("question_text")
+    q_types = request.form.getlist("question_type")
+    q_marks = request.form.getlist("marks")
+    q_options = request.form.getlist("options")
+    q_answers = request.form.getlist("correct_answer")
+    q_model_answers = request.form.getlist("model_answer")
+    q_existing_images = request.form.getlist("existing_image_paths")
+    q_code_snippets = request.form.getlist("code_snippet")
+    q_code_languages = request.form.getlist("code_language")
+    q_time_limits = request.form.getlist("time_limit_seconds")
+
+    rows = []
+    for index, raw_text in enumerate(q_texts):
+        text = (raw_text or "").strip()
+        if not text:
+            continue
+        try:
+            number = int(q_numbers[index]) if index < len(q_numbers) and q_numbers[index].strip() else index + 1
+        except ValueError:
+            number = index + 1
+        q_type = (q_types[index] if index < len(q_types) else "short").strip().lower()
+        try:
+            marks = int(q_marks[index]) if index < len(q_marks) and q_marks[index].strip() else 1
+        except ValueError:
+            marks = 1
+        options = parse_options(q_options[index] if index < len(q_options) else "")
+        if q_type == "mcq" and len(options) < 2:
+            raise ValueError(f"Question {number} needs at least two MCQ options.")
+        existing_images = []
+        if index < len(q_existing_images):
+            try:
+                existing_images = json.loads(q_existing_images[index] or "[]")
+            except json.JSONDecodeError:
+                existing_images = []
+        image_paths = existing_images + _save_question_images(request.files.getlist(f"question_images_{index}"))
+        try:
+            time_limit_seconds = int(q_time_limits[index]) if index < len(q_time_limits) and q_time_limits[index].strip() else 0
+        except ValueError:
+            time_limit_seconds = 0
+        rows.append(
+            {
+                "number": number,
+                "text": text,
+                "type": q_type,
+                "marks": max(marks, 1),
+                "options": options,
+                "answer": (q_answers[index] if index < len(q_answers) else "").strip(),
+                "model_answer": (q_model_answers[index] if index < len(q_model_answers) else "").strip(),
+                "image_paths": image_paths,
+                "code_snippet": (q_code_snippets[index] if index < len(q_code_snippets) else "").strip(),
+                "code_language": (q_code_languages[index] if index < len(q_code_languages) else "").strip() or None,
+                "time_limit_seconds": max(time_limit_seconds, 0),
+            }
+        )
+    return rows
+
+
+def _save_teacher_exam_from_request(teacher, exam=None):
+    is_multipart = bool(request.content_type and "multipart/form-data" in request.content_type)
+    payload = {} if is_multipart else _get_json_payload()
+
+    if exam and exam.status == "active":
+        return None, (jsonify({"ok": False, "message": "Cannot edit an active exam. Close it first."}), 400)
+
+    exam_name = (request.form.get("exam_name") if is_multipart else payload.get("exam_name") or payload.get("name") or "").strip()
+    set_code = (request.form.get("set_code") if is_multipart else payload.get("set_code") or "").strip().upper()
+    subject = (request.form.get("subject") if is_multipart else payload.get("subject") or "").strip()
+    duration_raw = request.form.get("duration_minutes") if is_multipart else payload.get("duration_minutes")
+    access_code = (request.form.get("access_code") if is_multipart else payload.get("access_code") or "").strip().upper()
+    start_time = _parse_datetime_local_value(request.form.get("start_time") if is_multipart else payload.get("start_time"))
+    end_time = _parse_datetime_local_value(request.form.get("end_time") if is_multipart else payload.get("end_time"))
+    shuffle_questions = request.form.get("shuffle_questions") == "on" if is_multipart else bool(payload.get("shuffle_questions"))
+    attempt_limit = _parse_int_field(request.form if is_multipart else payload, "attempt_limit")
+    random_question_count = _parse_int_field(request.form if is_multipart else payload, "random_question_count")
+
+    if not exam_name or not set_code or not subject:
+        return None, (jsonify({"ok": False, "message": "Exam name, set code, and subject are required."}), 400)
+    duration_minutes = _parse_int_field({"duration_minutes": duration_raw}, "duration_minutes") or 0
+    if duration_minutes <= 0:
+        return None, (jsonify({"ok": False, "message": "Duration must be a positive number."}), 400)
+    if start_time and end_time and end_time <= start_time:
+        return None, (jsonify({"ok": False, "message": "End time must be after start time."}), 400)
+    duplicate = ExamSet.query.filter(ExamSet.set_code == set_code)
+    if exam:
+        duplicate = duplicate.filter(ExamSet.id != exam.id)
+    if duplicate.first():
+        return None, (jsonify({"ok": False, "message": "Set code already exists. Choose another."}), 400)
+
+    try:
+        question_rows = _multipart_exam_question_rows() if is_multipart else _json_exam_question_rows(payload)
+    except ValueError as exc:
+        return None, (jsonify({"ok": False, "message": str(exc)}), 400)
+    if not question_rows:
+        return None, (jsonify({"ok": False, "message": "Add at least one question."}), 400)
+
+    total_marks = sum(row["marks"] for row in question_rows)
+    if exam:
+        Question.query.filter_by(exam_set_id=exam.id).delete()
+        exam.exam_name = exam_name
+        exam.set_code = set_code
+        exam.subject = subject
+        exam.duration_minutes = duration_minutes
+        exam.total_marks = total_marks
+        exam.start_time = start_time
+        exam.end_time = end_time
+        exam.shuffle_questions = shuffle_questions
+        exam.random_question_count = max(random_question_count or 0, 0)
+        exam.attempt_limit = max(attempt_limit if attempt_limit is not None else 1, 0)
+        if access_code:
+            exam.access_code = access_code
+    else:
+        exam = ExamSet(
+            exam_name=exam_name,
+            set_code=set_code,
+            subject=subject,
+            duration_minutes=duration_minutes,
+            total_marks=total_marks,
+            access_code=access_code or generate_access_code(),
+            status="draft",
+            created_by=teacher.id,
+            start_time=start_time,
+            end_time=end_time,
+            shuffle_questions=shuffle_questions,
+            random_question_count=max(random_question_count or 0, 0),
+            attempt_limit=max(attempt_limit if attempt_limit is not None else 1, 0),
+        )
+        db.session.add(exam)
+        db.session.flush()
+
+    for row in question_rows:
+        question = Question(
+            exam_set_id=exam.id,
+            question_number=row["number"],
+            question_text=row["text"],
+            question_type=row["type"],
+            marks=row["marks"],
+            correct_answer=row["answer"],
+            model_answer=row["model_answer"],
+            code_snippet=row["code_snippet"],
+            code_language=row["code_language"],
+            time_limit_seconds=row["time_limit_seconds"],
+        )
+        question.set_options(row["options"])
+        question.set_image_paths(row["image_paths"])
+        db.session.add(question)
+
+    db.session.commit()
+    return exam, None
+
+
+@api_bp.route("/teacher/exams", methods=["POST"])
+@rate_limit("admin_action")
+def teacher_create_exam_api():
+    teacher, error_response = _require_teacher_api()
+    if error_response:
+        return error_response
+    exam, save_error = _save_teacher_exam_from_request(teacher)
+    if save_error:
+        return save_error
+    return jsonify({"ok": True, "message": "Exam saved successfully.", "exam": _exam_editor_payload(exam)}), 201
+
+
+@api_bp.route("/teacher/exams/<int:exam_id>", methods=["GET", "PATCH"])
+@rate_limit("admin_action", methods=("PATCH",))
+def teacher_exam_editor_api(exam_id):
+    exam, error_response = _require_teacher_owner(exam_id=exam_id)
+    if error_response:
+        return error_response
+    if request.method == "GET":
+        return jsonify(_exam_editor_payload(exam))
+    saved_exam, save_error = _save_teacher_exam_from_request(exam.creator, exam=exam)
+    if save_error:
+        return save_error
+    return jsonify({"ok": True, "message": "Exam saved successfully.", "exam": _exam_editor_payload(saved_exam)})
+
+
+@api_bp.route("/teacher/exam/<int:exam_id>/similarity")
+def teacher_similarity_api(exam_id):
+    exam, error_response = _require_teacher_owner(exam_id=exam_id)
+    if error_response:
+        return error_response
+
+    threshold = 0.8
+    flags = []
+    questions = Question.query.filter(
+        Question.exam_set_id == exam.id,
+        Question.question_type.in_(["long", "coding"]),
+    ).order_by(Question.question_number.asc()).all()
+
+    for question in questions:
+        answers = (
+            db.session.query(StudentSession, Answer)
+            .join(Answer, Answer.session_id == StudentSession.id)
+            .filter(
+                StudentSession.exam_set_id == exam.id,
+                StudentSession.status.in_(LOCKED_SESSION_STATUSES),
+                Answer.question_id == question.id,
+            )
+            .all()
+        )
+        for index, (left_session, left_answer) in enumerate(answers):
+            left_text = (left_answer.answer_text or "").strip()
+            if len(left_text) < 40:
+                continue
+            for right_session, right_answer in answers[index + 1:]:
+                right_text = (right_answer.answer_text or "").strip()
+                if len(right_text) < 40:
+                    continue
+                score = SequenceMatcher(None, left_text.lower(), right_text.lower()).ratio()
+                if score >= threshold:
+                    flags.append(
+                        {
+                            "question_id": question.id,
+                            "question_text": question.question_text,
+                            "question_type": question.question_type,
+                            "student_a": {
+                                "session_id": left_session.id,
+                                "name": left_session.student_name,
+                                "roll_no": left_session.roll_no,
+                                "answer": left_text,
+                            },
+                            "student_b": {
+                                "session_id": right_session.id,
+                                "name": right_session.student_name,
+                                "roll_no": right_session.roll_no,
+                                "answer": right_text,
+                            },
+                            "score": round(score * 100, 1),
+                        }
+                    )
+
+    flags.sort(key=lambda item: item["score"], reverse=True)
+    return jsonify({"ok": True, "threshold": int(threshold * 100), "flags": flags})
 
 
 @api_bp.route("/teacher/exam/<int:exam_id>/review")
@@ -1216,6 +1921,86 @@ def admin_dashboard_api():
             "suspicious_students": suspicious_students[:10],
         }
     )
+
+
+@api_bp.route("/admin/settings", methods=["PATCH"])
+@rate_limit("admin_action")
+def admin_settings_api():
+    admin, error_response = _require_admin_api()
+    if error_response:
+        return error_response
+
+    payload = _get_json_payload()
+    settings_payload = {
+        "platform_name": payload.get("platform_name"),
+        "welcome_message": payload.get("welcome_message"),
+        "announcement_message": payload.get("announcement_message"),
+        "quote_pool": payload.get("quote_pool"),
+        "max_violations_before_alert": payload.get("max_violations_before_alert"),
+        "student_self_registration": "on" if payload.get("student_self_registration") else "",
+    }
+    settings = SettingsService.update_settings(settings_payload, updated_by=admin.id)
+    AuditLog(
+        user_id=admin.id,
+        action="update_platform_settings_api",
+        resource_type="settings",
+        resource_id=settings.id,
+        changes="Updated platform settings from React",
+        status="success",
+        ip_address=get_client_ip(),
+        user_agent=request.headers.get("User-Agent"),
+    ).save()
+    return jsonify({"ok": True, "message": "Settings saved successfully.", "settings": _settings_payload(settings)})
+
+
+@api_bp.route("/admin/settings/backup", methods=["POST"])
+@rate_limit("admin_action")
+def admin_backup_api():
+    admin, error_response = _require_admin_api()
+    if error_response:
+        return error_response
+    payload = _get_json_payload()
+    if not _admin_password_matches(payload):
+        return jsonify({"ok": False, "message": "Admin password confirmation failed."}), 403
+
+    backup_root = current_app.config.get("BACKUP_FOLDER")
+    os.makedirs(backup_root, exist_ok=True)
+    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    database_url = str(db.engine.url)
+
+    if database_url.startswith("sqlite"):
+        source_path = db.engine.url.database
+        if not source_path or not os.path.exists(source_path):
+            return jsonify({"ok": False, "message": "SQLite database file could not be found."}), 404
+        backup_path = os.path.join(backup_root, f"exam_backup_{timestamp}.db")
+        shutil.copy2(source_path, backup_path)
+    elif database_url.startswith("postgres"):
+        backup_path = os.path.join(backup_root, f"exam_backup_{timestamp}.sql")
+        try:
+            subprocess.run(
+                ["pg_dump", database_url, "-f", backup_path],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+        except Exception as exc:
+            current_app.logger.exception("Database backup failed")
+            return jsonify({"ok": False, "message": f"PostgreSQL backup failed. Ensure pg_dump is installed. Details: {exc}"}), 500
+    else:
+        return jsonify({"ok": False, "message": "Database backup is not configured for this database engine."}), 400
+
+    download_name = os.path.basename(backup_path)
+    AuditLog(
+        user_id=admin.id,
+        action="backup_database_api",
+        resource_type="system",
+        changes=download_name,
+        status="success",
+        ip_address=get_client_ip(),
+        user_agent=request.headers.get("User-Agent"),
+    ).save()
+    return send_file(backup_path, as_attachment=True, download_name=download_name)
 
 
 @api_bp.route("/admin/users")
@@ -2306,6 +3091,16 @@ def session_status(session_code):
     return jsonify(
         {
             "ok": True,
+            "exam": {
+                "id": exam.id,
+                "exam_name": exam.exam_name,
+                "subject": exam.subject,
+                "set_code": exam.set_code,
+                "duration_minutes": exam.duration_minutes,
+                "total_marks": exam.total_marks,
+                "start_time": _iso_datetime(exam.start_time),
+                "end_time": _iso_datetime(exam.end_time),
+            },
             "exam_status": exam.status,
             "session_status": student_session.status,
             "time_state": time_state,
@@ -2318,6 +3113,8 @@ def session_status(session_code):
             "paused": student_session.status == "paused",
             "submitted": is_locked,
             "redirect": _submitted_redirect(session_code) if is_locked else None,
+            "ready_redirect": f"/react/student/precheck/{session_code}" if exam.status == "active" and time_state == "open" and not student_session.start_time else None,
+            "exam_redirect": f"/react/exam/{session_code}" if exam.status == "active" and student_session.start_time and not is_locked else None,
         }
     )
 
@@ -2412,7 +3209,7 @@ def exam_state(session_code):
                 "status": student_session.status,
                 "extra_time_minutes": student_session.extra_time_minutes,
                 "focus_violations": student_session.focus_violations,
-                "submitted_url": url_for("student.submitted", session_code=session_code),
+                "submitted_url": f"/react/student/submitted/{session_code}",
             },
             "questions": question_payloads,
         }
@@ -2779,7 +3576,7 @@ def submit_session(session_code):
                 {
                     "ok": True,
                     "warning": "Submission saved, but result calculation failed",
-                    "redirect": f"/student/submitted/{session_code}",
+                    "redirect": f"/react/student/submitted/{session_code}",
                 }
             ),
             200,
@@ -2806,7 +3603,7 @@ def submit_session(session_code):
     emit_to_session(
         student_session,
         "exam:submitted",
-        {"message": "Your exam has been submitted.", "redirect": f"/student/submitted/{session_code}"},
+        {"message": "Your exam has been submitted.", "redirect": f"/react/student/submitted/{session_code}"},
     )
 
-    return jsonify({"ok": True, "redirect": f"/student/submitted/{session_code}"})
+    return jsonify({"ok": True, "redirect": f"/react/student/submitted/{session_code}"})

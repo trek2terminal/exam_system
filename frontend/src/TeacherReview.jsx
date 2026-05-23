@@ -10,8 +10,9 @@ import {
   ShieldAlert,
   Users
 } from "lucide-react";
-import { Badge, Button, Card, EmptyState, Input, Textarea } from "./components/ui";
+import { Badge, Button, Card, EmptyState, Input, Modal, Textarea } from "./components/ui";
 import { api } from "./services/api";
+import { notify } from "./components/ui/Toast";
 
 function formatDate(value) {
   if (!value) return "-";
@@ -41,6 +42,9 @@ function TeacherExamReview() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [similarityOpen, setSimilarityOpen] = useState(false);
+  const [similarityLoading, setSimilarityLoading] = useState(false);
+  const [similarityFlags, setSimilarityFlags] = useState([]);
 
   const loadReview = useCallback(async () => {
     setLoading(true);
@@ -72,6 +76,19 @@ function TeacherExamReview() {
     }
   };
 
+  const openSimilarity = async () => {
+    setSimilarityOpen(true);
+    setSimilarityLoading(true);
+    try {
+      const response = await api.get(`/teacher/exam/${examId}/similarity`);
+      setSimilarityFlags(response.data.flags || []);
+    } catch (err) {
+      notify.error(err.message || "Could not load similarity report.");
+    } finally {
+      setSimilarityLoading(false);
+    }
+  };
+
   if (loading) return <div className="loadingScreen">Loading review workspace...</div>;
   if (error) return <ErrorPanel message={error} backHref="/react/teacher" />;
 
@@ -88,7 +105,7 @@ function TeacherExamReview() {
         </div>
         <div className="actionRow">
           <Button variant="secondary" size="sm" as="a" href={data.links.csv_export}><Download size={18} /> CSV</Button>
-          <Button variant="secondary" size="sm" as="a" href={data.links.similarity}><FileSearch size={18} /> Similarity</Button>
+          <Button variant="secondary" size="sm" onClick={openSimilarity}><FileSearch size={18} /> Similarity</Button>
           <Button variant="primary" size="sm" disabled={saving || stats.evaluated === 0} onClick={() => publishAll(true)}>
             <CheckCircle2 size={18} /> Publish evaluated
           </Button>
@@ -157,6 +174,40 @@ function TeacherExamReview() {
           />
         )}
       </section>
+
+      <Modal open={similarityOpen} onClose={() => setSimilarityOpen(false)} title="Similarity Report" className="max-w-4xl">
+        {similarityLoading ? (
+          <Card className="p-5 text-center text-text-muted">Checking submissions...</Card>
+        ) : similarityFlags.length > 0 ? (
+          <div className="max-h-[70vh] overflow-auto rounded-lg border border-border">
+            <table className="w-full text-left text-sm">
+              <thead className="sticky top-0 bg-background-surface text-text-secondary">
+                <tr>
+                  <th className="px-3 py-2">Question</th>
+                  <th className="px-3 py-2">Student A</th>
+                  <th className="px-3 py-2">Student B</th>
+                  <th className="px-3 py-2">Similarity</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {similarityFlags.map((flag, index) => (
+                  <tr key={`${flag.question_id}-${flag.student_a?.session_id}-${flag.student_b?.session_id}-${index}`}>
+                    <td className="px-3 py-2 text-text-primary">
+                      <p className="line-clamp-2">{flag.question_text}</p>
+                      <Badge variant="purple" size="sm">{flag.question_type}</Badge>
+                    </td>
+                    <td className="px-3 py-2 text-text-secondary">{flag.student_a?.name} ({flag.student_a?.roll_no})</td>
+                    <td className="px-3 py-2 text-text-secondary">{flag.student_b?.name} ({flag.student_b?.roll_no})</td>
+                    <td className="px-3 py-2"><Badge variant="warning">{flag.score}%</Badge></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <Card className="p-6 text-center text-text-muted">No high-similarity answer pairs found.</Card>
+        )}
+      </Modal>
     </section>
   );
 }
