@@ -233,7 +233,7 @@ function SettingsSection({
             <label className="mb-3 block font-semibold text-text-primary">Logo</label>
             <div className="rounded-lg border-2 border-dashed border-border bg-background-base p-6 text-center">
               {general.logo_url ? <img src={general.logo_url} alt="Logo" className="mx-auto mb-3 h-16" /> : <Upload size={32} className="mx-auto mb-3 text-text-muted" />}
-              <p className="mb-3 text-sm text-text-secondary">Logo upload is available on the classic settings/storage path when configured.</p>
+              <p className="mb-3 text-sm text-text-secondary">Logo upload can be enabled when server-side storage is configured.</p>
               <input type="file" accept="image/*" className="hidden" />
             </div>
           </div>

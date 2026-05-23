@@ -11,7 +11,6 @@ import {
   FileText,
   KeyRound,
   LogIn,
-  MoreHorizontal,
   Play,
   Plus,
   Radio,
@@ -511,19 +510,6 @@ function TeacherExamCard({ exam, index }) {
             <h4 className="mt-3 truncate text-lg font-semibold text-text-primary">{exam.exam_name}</h4>
             <p className="truncate text-sm text-text-secondary">{exam.subject} {exam.set_code ? `| Set ${exam.set_code}` : ""}</p>
           </div>
-          <details className="relative">
-            <summary className="grid h-10 w-10 cursor-pointer list-none place-items-center rounded-md text-text-muted transition hover:bg-background-elevated hover:text-text-primary">
-              <MoreHorizontal size={18} />
-            </summary>
-            <div className="absolute right-0 top-full z-20 mt-2 w-44 overflow-hidden rounded-md border border-border bg-background-surface shadow-elevated">
-              <a className="flex min-h-11 items-center gap-2 px-3 text-sm font-semibold text-text-secondary hover:bg-background-elevated" href={exam.flask_results_url}>
-                <FileText size={16} /> Classic results
-              </a>
-              <span className="flex min-h-11 items-center gap-2 px-3 text-sm font-semibold text-text-muted opacity-60">
-                <FileText size={16} /> Duplicate pending
-              </span>
-            </div>
-          </details>
         </div>
 
         <div className="grid grid-cols-2 gap-2 text-sm">

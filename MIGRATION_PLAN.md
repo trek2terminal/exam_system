@@ -477,3 +477,27 @@ Still intentionally left for later phases:
 - Browser-test the full React UI with real admin, teacher, and student sessions at 375px, 768px, and 1280px.
 - Browser-test realtime push behavior with two real browser sessions on the running LAN app.
 - Complete final hosted deployment hardening and HTTPS validation in the target environment.
+
+## Latest Implementation Batch 18 - 2026-05-23
+
+Completed in this batch:
+- Rechecked the React frontend with `npm.cmd run lint` and `npm.cmd run build` before continuing; both passed before edits.
+- Added JSON account APIs for the shared React account settings page: `/api/account/profile` and `/api/account/password`.
+- Extended `/api/bootstrap` to include username, email, and profile picture data so the React account/settings shell has real profile context.
+- Wired React Account Settings to save profile changes and change passwords through the new JSON APIs with button loading states and clean success/error toasts.
+- Replaced remaining React admin user-management bridges with JSON calls for activate/deactivate, bulk activate/deactivate, create teacher, import students, edit user, reset password, and session history.
+- Replaced React admin exam publish/archive actions with `/api/admin/exams/<id>/status` instead of classic Flask form endpoints.
+- Replaced teacher question-bank "import into exam" form posts with `/api/teacher/exam/<id>/question-bank/import` JSON calls and per-card loading feedback.
+- Hardened the shared Axios client so API failures become human-readable messages and network failures show `Unexpected error. Check your connection.`
+- Aligned toast timing with the UI overhaul prompt: success/info toasts auto-dismiss after 4 seconds, warning/error toasts after 7 seconds, with the existing maximum-visible toast cap preserved.
+- Updated the rate limiter to return JSON 429 responses for React/XHR requests, including the React admin login flow.
+- Removed the explicit legacy `Classic view` link from React teacher per-student review and the `Classic results` link from React teacher exam cards.
+- Cleaned stale "classic" wording from React copy and removed tracked Python `__pycache__` artifacts because they are generated files already covered by `.gitignore`.
+- Verified Python route/util syntax with an AST parse check that does not recreate `.pyc` files, then verified `npm.cmd run lint` and `npm.cmd run build` again.
+
+Still intentionally left for later phases:
+- Browser-test the full React UI with real authenticated admin, teacher, and student sessions at 375px, 768px, and 1280px.
+- Browser-test realtime push behavior with two real browser sessions on the running LAN app.
+- Runtime-smoke the new JSON actions against a live authenticated Flask session, especially admin user import/create/status, account password change, and teacher question-bank import.
+- Finish JSON replacements for the few intentional Flask bridge flows that still depend on protected classic endpoints: student start/precheck/login/register, admin settings save/backup download, and teacher exam setup save.
+- Leave `instance/database.db` untouched as local runtime data even if it appears modified in the working tree.

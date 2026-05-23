@@ -70,6 +70,12 @@ def _limit_response(retry_after, json_response):
     return redirect(request.referrer or request.path)
 
 
+def _request_wants_json():
+    accept = request.headers.get("Accept", "")
+    requested_with = request.headers.get("X-Requested-With", "")
+    return request.is_json or "application/json" in accept or requested_with == "XMLHttpRequest"
+
+
 def rate_limit(scope, limit=None, window_seconds=None, methods=("POST",), json_response=True):
     """Rate limiter with local-memory default and optional Redis storage."""
     methods = set(methods or [])
@@ -106,7 +112,7 @@ def rate_limit(scope, limit=None, window_seconds=None, methods=("POST",), json_r
                 allowed, retry_after = _memory_rate_limit(key, max_requests, window)
 
             if not allowed:
-                return _limit_response(retry_after, json_response)
+                return _limit_response(retry_after, json_response or _request_wants_json())
 
             return view(*args, **kwargs)
 

@@ -24,7 +24,7 @@ export function ToastViewport() {
     <Toaster
       position="top-right"
       toastOptions={{
-        duration: 5000,
+        duration: 4000,
         className: "toastFrame"
       }}
     />
@@ -33,7 +33,7 @@ export function ToastViewport() {
 
 function show(type, message, options = {}) {
   const Icon = icons[type] || Info;
-  const duration = type === "warning" || type === "error" ? 8000 : 5000;
+  const duration = type === "warning" || type === "error" ? 7000 : 4000;
   return toast.custom(
     toastItem => (
       <div

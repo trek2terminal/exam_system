@@ -117,7 +117,7 @@ export default function AdminReports() {
               </Button>
             </div>
           ) : (
-            <EmptyState icon={FileText} heading="No exam selector data" description="Use the classic exams page if the React parser could not read the current exam list." compact />
+            <EmptyState icon={FileText} heading="No exam selector data" description="No exams are available for report exports yet." compact />
           )}
         </Card>
       </div>

@@ -622,6 +622,9 @@ def bootstrap():
             "auth": {
                 "role": role,
                 "user_id": user_id,
+                "username": user.username if user_id and user else None,
+                "email": user.email if user_id and user else None,
+                "profile_picture": _user_payload(user).get("profile_picture") if user_id and user else None,
                 "admin_name": session.get("admin_name"),
                 "teacher_name": session.get("teacher_name"),
                 "student_name": session.get("student_name"),
@@ -641,6 +644,87 @@ def bootstrap():
             },
         }
     )
+
+
+@api_bp.route("/account/profile", methods=["PATCH"])
+@rate_limit("admin_action")
+def account_profile_api():
+    user, error_response = _current_session_user()
+    if error_response:
+        return error_response
+
+    payload = _get_json_payload()
+    name = (payload.get("name") or "").strip()
+    email = (payload.get("email") or "").strip() or None
+
+    if not name:
+        return jsonify({"ok": False, "message": "Full name is required."}), 400
+    if user.role != "student" and email:
+        duplicate_email = User.query.filter(User.email == email, User.id != user.id).first()
+        if duplicate_email:
+            return jsonify({"ok": False, "message": "Email already exists."}), 400
+
+    user.name = name
+    if user.role != "student":
+        user.email = email
+    db.session.commit()
+
+    if user.role == "admin":
+        session["admin_name"] = user.name
+    elif user.role == "teacher":
+        session["teacher_name"] = user.name
+    elif user.role == "student":
+        session["student_name"] = user.name
+    session.modified = True
+
+    AuditLog(
+        user_id=user.id,
+        action="update_account_profile",
+        resource_type="user",
+        resource_id=user.id,
+        status="success",
+        ip_address=get_client_ip(),
+        user_agent=request.headers.get("User-Agent"),
+    ).save()
+    return jsonify({"ok": True, "message": "Profile updated.", "user": _user_payload(user)})
+
+
+@api_bp.route("/account/password", methods=["POST"])
+@rate_limit("admin_action")
+def account_password_api():
+    user, error_response = _current_session_user()
+    if error_response:
+        return error_response
+
+    payload = _get_json_payload()
+    current_password = payload.get("current_password") or ""
+    new_password = payload.get("new_password") or ""
+    confirm_password = payload.get("confirm_password") or ""
+
+    if not user.check_password(current_password):
+        return jsonify({"ok": False, "message": "Current password is incorrect."}), 403
+    if new_password != confirm_password:
+        return jsonify({"ok": False, "message": "New passwords do not match."}), 400
+    if not _strong_password(new_password):
+        return jsonify({"ok": False, "message": "Password must be at least 10 characters and include uppercase, lowercase, and a number."}), 400
+
+    user.set_password(new_password)
+    if user.role == "teacher":
+        user.must_change_password = False
+    session["auth_session_token"] = user.issue_active_session_token()
+    db.session.commit()
+    session.modified = True
+
+    AuditLog(
+        user_id=user.id,
+        action="change_account_password",
+        resource_type="user",
+        resource_id=user.id,
+        status="success",
+        ip_address=get_client_ip(),
+        user_agent=request.headers.get("User-Agent"),
+    ).save()
+    return jsonify({"ok": True, "message": "Password changed successfully."})
 
 
 @api_bp.route("/student/dashboard")

@@ -3,6 +3,8 @@ import { Lock, Save, ShieldCheck, Type, Upload, UserRound } from "lucide-react";
 import { Avatar, Button, Card, Input, Toggle } from "../components/ui";
 import { notify } from "../components/ui/Toast";
 import { roleLabel, userName } from "../components/layout/navigation";
+import { api } from "../services/api";
+import { useAppStore } from "../store/appStore";
 
 function passwordStrength(password) {
   const checks = [
@@ -18,14 +20,8 @@ function passwordStrength(password) {
   return { label: "Strong", color: "bg-success", width: "100%" };
 }
 
-function roleProfileHref(role) {
-  if (role === "admin") return "/admin/account";
-  if (role === "teacher") return "/teacher/change-password";
-  if (role === "student") return "/student/dashboard";
-  return "/";
-}
-
 export default function AccountSettings({ auth }) {
+  const loadBootstrap = useAppStore(state => state.loadBootstrap);
   const [profile, setProfile] = useState({
     name: userName(auth),
     email: auth?.email || "",
@@ -38,6 +34,8 @@ export default function AccountSettings({ auth }) {
   });
   const [fontSize, setFontSize] = useState(() => window.localStorage.getItem("examFontSize") || "medium");
   const [highContrast, setHighContrast] = useState(() => window.localStorage.getItem("examHighContrast") === "true");
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
 
   const strength = useMemo(() => passwordStrength(security.next), [security.next]);
 
@@ -53,6 +51,45 @@ export default function AccountSettings({ auth }) {
   }, [highContrast]);
 
   const canChangePassword = security.next && security.next === security.confirm && security.current;
+
+  const saveProfile = async () => {
+    setSavingProfile(true);
+    try {
+      const { data } = await api.patch("/account/profile", {
+        name: profile.name,
+        email: profile.email
+      });
+      setProfile(current => ({
+        ...current,
+        name: data.user?.name || current.name,
+        email: data.user?.email || current.email
+      }));
+      await loadBootstrap();
+      notify.success(data.message || "Profile updated");
+    } catch (error) {
+      notify.error(error.message || "Could not update profile");
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const changePassword = async () => {
+    if (!canChangePassword) return;
+    setChangingPassword(true);
+    try {
+      const { data } = await api.post("/account/password", {
+        current_password: security.current,
+        new_password: security.next,
+        confirm_password: security.confirm
+      });
+      setSecurity({ current: "", next: "", confirm: "" });
+      notify.success(data.message || "Password changed successfully");
+    } catch (error) {
+      notify.error(error.message || "Could not change password");
+    } finally {
+      setChangingPassword(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -98,14 +135,9 @@ export default function AccountSettings({ auth }) {
             {auth?.role === "student" && (
               <Input label="Roll Number" value={profile.roll} disabled />
             )}
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <Button variant="primary" onClick={() => notify.info("Use the linked Flask account page to save server profile changes.")}>
-                <Save size={17} /> Save Profile
-              </Button>
-              <Button as="a" href={roleProfileHref(auth?.role)} variant="secondary">
-                Open Account Page
-              </Button>
-            </div>
+            <Button variant="primary" onClick={saveProfile} loading={savingProfile} loadingLabel="Saving">
+              <Save size={17} /> Save Profile
+            </Button>
           </div>
         </Card>
 
@@ -134,7 +166,14 @@ export default function AccountSettings({ auth }) {
               onChange={event => setSecurity(current => ({ ...current, confirm: event.target.value }))}
               error={security.confirm && security.confirm !== security.next ? "Passwords do not match" : undefined}
             />
-            <Button as="a" href={roleProfileHref(auth?.role)} variant="primary" aria-disabled={!canChangePassword}>
+            <Button
+              type="button"
+              variant="primary"
+              disabled={!canChangePassword}
+              loading={changingPassword}
+              loadingLabel="Changing"
+              onClick={changePassword}
+            >
               <ShieldCheck size={17} /> Change Password
             </Button>
           </div>

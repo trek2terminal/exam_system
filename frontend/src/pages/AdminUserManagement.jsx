@@ -55,6 +55,9 @@ export default function AdminUserManagement() {
   const [bulkAction, setBulkAction] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
   const [selectedIds, setSelectedIds] = useState([]);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
+  const [resetBusy, setResetBusy] = useState(false);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => setDebouncedSearch(searchTerm), 300);
@@ -112,61 +115,79 @@ export default function AdminUserManagement() {
 
   const runStatusAction = async (target, desiredActive) => {
     if (!target?.id || !adminPassword.trim()) return;
+    setActionBusy(true);
     try {
-      const response = await window.fetch(`/admin/users/${target.id}/toggle-status`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ admin_password: adminPassword })
+      const { data } = await api.patch(`/admin/users/${target.id}`, {
+        name: target.name,
+        username: target.username,
+        email: target.email,
+        roll_number: target.roll_number,
+        is_active: desiredActive,
+        admin_password: adminPassword
       });
-      const data = await response.json();
-      if (!response.ok || data.ok === false) throw new Error(data.message || "Status update failed");
-      setUsers(current => current.map(user => user.id === target.id ? { ...user, is_active: Boolean(data.is_active ?? desiredActive) } : user));
-      notify.success(data.message || "User status updated");
+      setUsers(current => current.map(user => user.id === target.id ? data.user : user));
+      notify.success(desiredActive ? "User activated" : "User deactivated");
       setActionTarget(null);
       setAdminPassword("");
     } catch (error) {
       notify.error(error.message || "Could not update user status");
+    } finally {
+      setActionBusy(false);
     }
   };
 
   const runSoftDelete = async target => {
     if (!target?.id || !adminPassword.trim()) return;
+    setActionBusy(true);
     try {
-      const response = await window.fetch(`/admin/users/${target.id}/delete`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ admin_password: adminPassword })
+      const { data } = await api.patch(`/admin/users/${target.id}`, {
+        name: target.name,
+        username: target.username,
+        email: target.email,
+        roll_number: target.roll_number,
+        is_active: false,
+        admin_password: adminPassword
       });
-      const data = await response.json();
-      if (!response.ok || data.ok === false) throw new Error(data.message || "Deactivate failed");
-      setUsers(current => current.map(user => user.id === target.id ? { ...user, is_active: false } : user));
-      notify.success(data.message || "User deactivated");
+      setUsers(current => current.map(user => user.id === target.id ? data.user : user));
+      notify.success("User deactivated");
       setActionTarget(null);
       setAdminPassword("");
     } catch (error) {
       notify.error(error.message || "Could not deactivate user");
+    } finally {
+      setActionBusy(false);
     }
   };
 
   const runBulkStatus = async desiredActive => {
     if (!adminPassword.trim()) return;
     const targets = selectedUsers.filter(user => user.is_active !== desiredActive);
+    if (targets.length === 0) {
+      notify.info("Selected users already have that status.");
+      setBulkAction("");
+      setAdminPassword("");
+      return;
+    }
+    setActionBusy(true);
     try {
-      await Promise.all(targets.map(user => window.fetch(`/admin/users/${user.id}/toggle-status`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ admin_password: adminPassword })
+      const results = await Promise.all(targets.map(user => api.patch(`/admin/users/${user.id}`, {
+        name: user.name,
+        username: user.username,
+        email: user.email,
+        roll_number: user.roll_number,
+        is_active: desiredActive,
+        admin_password: adminPassword
       })));
-      setUsers(current => current.map(user => selectedIds.includes(String(user.id)) ? { ...user, is_active: desiredActive } : user));
+      const updatedById = new Map(results.map(result => [String(result.data.user.id), result.data.user]));
+      setUsers(current => current.map(user => updatedById.get(String(user.id)) || user));
       notify.success(`${targets.length} user(s) updated`);
       setSelectedIds([]);
       setBulkAction("");
       setAdminPassword("");
-    } catch {
-      notify.error("Bulk status update failed");
+    } catch (error) {
+      notify.error(error.message || "Bulk status update failed");
+    } finally {
+      setActionBusy(false);
     }
   };
 
@@ -183,6 +204,7 @@ export default function AdminUserManagement() {
   const saveUserEdit = async event => {
     event.preventDefault();
     if (!selectedUser?.id) return;
+    setEditSaving(true);
     try {
       const { data } = await api.patch(`/admin/users/${selectedUser.id}`, {
         ...editForm,
@@ -194,7 +216,9 @@ export default function AdminUserManagement() {
       setSelectedUser(null);
       setEditAdminPassword("");
     } catch (error) {
-      notify.error(error.response?.data?.message || error.message || "Could not update user");
+      notify.error(error.message || "Could not update user");
+    } finally {
+      setEditSaving(false);
     }
   };
 
@@ -215,6 +239,7 @@ export default function AdminUserManagement() {
   const resetUserPassword = async event => {
     event.preventDefault();
     if (!resetTarget?.id) return;
+    setResetBusy(true);
     try {
       await api.post(`/admin/users/${resetTarget.id}/reset-password`, {
         new_password: resetPassword,
@@ -225,7 +250,9 @@ export default function AdminUserManagement() {
       setResetPassword("");
       setResetAdminPassword("");
     } catch (error) {
-      notify.error(error.response?.data?.message || error.message || "Could not reset password");
+      notify.error(error.message || "Could not reset password");
+    } finally {
+      setResetBusy(false);
     }
   };
 
@@ -373,11 +400,22 @@ export default function AdminUserManagement() {
       />
 
       <Modal open={showCreateModal} onClose={() => setShowCreateModal(false)} title="Create New Teacher">
-        <CreateTeacherForm />
+        <CreateTeacherForm
+          onCreated={user => {
+            if (user) setUsers(current => [user, ...current]);
+            setShowCreateModal(false);
+          }}
+        />
       </Modal>
 
       <Modal open={showImportModal} onClose={() => setShowImportModal(false)} title="Import Students" className="max-w-3xl">
-        <ImportStudentsForm />
+        <ImportStudentsForm
+          onImported={data => {
+            if (data?.users?.length) {
+              setUsers(current => [...data.users, ...current]);
+            }
+          }}
+        />
       </Modal>
 
       <Modal
@@ -416,7 +454,7 @@ export default function AdminUserManagement() {
               helperText="Required before changing account details."
             />
             <div className="flex flex-col gap-3 sm:flex-row">
-              <Button type="submit" variant="primary">Save User</Button>
+              <Button type="submit" variant="primary" loading={editSaving} loadingLabel="Saving">Save User</Button>
               <Button type="button" variant="secondary" onClick={() => setSelectedUser(null)}>Cancel</Button>
             </div>
           </form>
@@ -484,7 +522,7 @@ export default function AdminUserManagement() {
             autoComplete="current-password"
           />
           <div className="flex flex-col gap-3 sm:flex-row">
-            <Button type="submit" variant="danger">Reset Password</Button>
+            <Button type="submit" variant="danger" loading={resetBusy} loadingLabel="Resetting">Reset Password</Button>
             <Button
               type="button"
               variant="secondary"
@@ -519,6 +557,7 @@ export default function AdminUserManagement() {
         confirmWord={actionTarget?.type === "deactivate" ? "DELETE" : undefined}
         variant={actionTarget?.type === "deactivate" ? "danger" : "success"}
         onConfirm={() => actionTarget?.type === "deactivate" ? runSoftDelete(actionTarget.user) : runStatusAction(actionTarget.user, true)}
+        loading={actionBusy}
         onClose={() => {
           setActionTarget(null);
           setAdminPassword("");
@@ -544,6 +583,7 @@ export default function AdminUserManagement() {
         confirmWord={bulkAction === "deactivate" ? "DELETE" : undefined}
         variant={bulkAction === "deactivate" ? "danger" : "success"}
         onConfirm={() => runBulkStatus(bulkAction === "activate")}
+        loading={actionBusy}
         onClose={() => {
           setBulkAction("");
           setAdminPassword("");
@@ -553,7 +593,7 @@ export default function AdminUserManagement() {
   );
 }
 
-function CreateTeacherForm() {
+function CreateTeacherForm({ onCreated }) {
   const [formData, setFormData] = useState({
     name: "",
     username: "",
@@ -562,22 +602,47 @@ function CreateTeacherForm() {
     designation: "",
     password: ""
   });
+  const [creating, setCreating] = useState(false);
+
+  const handleSubmit = async event => {
+    event.preventDefault();
+    setCreating(true);
+    try {
+      const { data } = await api.post("/admin/users/teachers", formData);
+      notify.success(data.message || "Teacher account created");
+      setFormData({
+        name: "",
+        username: "",
+        email: "",
+        department: "",
+        designation: "",
+        password: ""
+      });
+      onCreated?.(data.user);
+    } catch (error) {
+      notify.error(error.message || "Could not create teacher");
+    } finally {
+      setCreating(false);
+    }
+  };
 
   return (
-    <form method="post" action="/admin/users/create-teacher" className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-4">
       <Input label="Full Name" name="name" value={formData.name} onChange={event => setFormData({ ...formData, name: event.target.value })} required />
       <Input label="Username" name="username" value={formData.username} onChange={event => setFormData({ ...formData, username: event.target.value })} required />
       <Input label="Email" name="email" type="email" value={formData.email} onChange={event => setFormData({ ...formData, email: event.target.value })} required />
       <Input label="Department" name="department" value={formData.department} onChange={event => setFormData({ ...formData, department: event.target.value })} />
       <Input label="Designation" name="designation" value={formData.designation} onChange={event => setFormData({ ...formData, designation: event.target.value })} />
       <Input label="Temporary Password" name="password" type="password" value={formData.password} onChange={event => setFormData({ ...formData, password: event.target.value })} required />
-      <Button type="submit" variant="primary" className="w-full">Create Teacher</Button>
+      <Button type="submit" variant="primary" className="w-full" loading={creating} loadingLabel="Creating">Create Teacher</Button>
     </form>
   );
 }
 
-function ImportStudentsForm() {
+function ImportStudentsForm({ onImported }) {
   const [rows, setRows] = useState([]);
+  const [importing, setImporting] = useState(false);
+  const [result, setResult] = useState(null);
 
   const onFileChange = event => {
     const file = event.target.files?.[0];
@@ -590,8 +655,29 @@ function ImportStudentsForm() {
     reader.readAsText(file);
   };
 
+  const handleSubmit = async event => {
+    event.preventDefault();
+    if (!rows.length) return;
+    setImporting(true);
+    try {
+      const cleanedRows = rows.map(row => {
+        const cleaned = { ...row };
+        delete cleaned.id;
+        return cleaned;
+      });
+      const { data } = await api.post("/admin/users/import-students", { rows: cleanedRows });
+      setResult(data);
+      notify.success(data.message || "Student import finished");
+      onImported?.(data);
+    } catch (error) {
+      notify.error(error.message || "Could not import students");
+    } finally {
+      setImporting(false);
+    }
+  };
+
   return (
-    <form method="post" action="/admin/users/import-students" encType="multipart/form-data" className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-4">
       <label className="block">
         <span className="mb-2 block text-sm font-semibold text-text-secondary">CSV File</span>
         <div className="rounded-lg border-2 border-dashed border-border bg-background-base p-6 text-center">
@@ -624,7 +710,12 @@ function ImportStudentsForm() {
         readOnly
         rows={5}
       />
-      <Button type="submit" variant="primary" className="w-full" disabled={rows.length === 0}>
+      {result && (
+        <Card className="border-success/30 bg-success/5 p-4 text-sm text-text-secondary">
+          Created {result.created || 0}, skipped {result.skipped || 0}, failed {result.failed?.length || 0}.
+        </Card>
+      )}
+      <Button type="submit" variant="primary" className="w-full" disabled={rows.length === 0} loading={importing} loadingLabel="Importing">
         Import {rows.length || ""} Students
       </Button>
     </form>

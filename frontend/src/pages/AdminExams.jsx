@@ -22,6 +22,7 @@ export default function AdminExams() {
   const [search, setSearch] = useState("");
   const [teachers, setTeachers] = useState([]);
   const [pendingAction, setPendingAction] = useState(null);
+  const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -68,22 +69,22 @@ export default function AdminExams() {
 
   const runAction = async () => {
     if (!pendingAction) return;
-    const endpoint = pendingAction.type === "activate"
-      ? `/admin/exams/${pendingAction.exam.id}/activate`
-      : `/admin/exams/${pendingAction.exam.id}/close`;
+    setActionLoading(true);
     try {
-      const response = await window.fetch(endpoint, { method: "POST", credentials: "same-origin" });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok || data.ok === false) throw new Error(data.message || "Action failed");
+      const { data } = await api.post(`/admin/exams/${pendingAction.exam.id}/status`, {
+        action: pendingAction.type
+      });
       notify.success(data.message || "Exam updated");
       setExams(current => current.map(exam => (
         exam.id === pendingAction.exam.id
-          ? { ...exam, status: pendingAction.type === "activate" ? "active" : "closed" }
+          ? (data.exam || { ...exam, status: pendingAction.type === "activate" ? "active" : "closed" })
           : exam
       )));
       setPendingAction(null);
     } catch (error) {
       notify.error(error.message || "Could not update exam");
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -194,6 +195,7 @@ export default function AdminExams() {
         confirmWord={pendingAction?.type === "activate" ? undefined : "DELETE"}
         variant={pendingAction?.type === "activate" ? "success" : "danger"}
         onConfirm={runAction}
+        loading={actionLoading}
         onClose={() => setPendingAction(null)}
       />
     </div>

@@ -334,7 +334,6 @@ function TeacherSessionReview() {
 
       <div className="stickySaveBar">
         <Button variant="secondary" size="sm" as="a" href={data.links.answer_pdf}><Download size={18} /> Answer PDF</Button>
-        <Button variant="ghost" size="sm" as="a" href={data.links.flask_review}>Classic view</Button>
         <Button variant="primary" size="sm" disabled={!locked || saving} onClick={saveReview}>
           <Save size={18} /> {saving ? "Saving..." : "Save marks"}
         </Button>

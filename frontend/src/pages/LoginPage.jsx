@@ -136,7 +136,7 @@ export default function LoginPage({ settings }) {
 
             <div className="mt-6 space-y-3 text-center text-sm">
               <a href={role === "teacher" ? "/teacher/login" : "/student/login"} className="block font-semibold text-brand-primary transition hover:text-brand-hover">
-                Need the classic login page?
+                Need the Flask login page?
               </a>
               <div className="text-text-secondary">
                 Do not have a student account?{" "}

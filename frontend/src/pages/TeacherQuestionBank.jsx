@@ -70,6 +70,7 @@ export default function TeacherQuestionBank() {
   const [editTarget, setEditTarget] = useState(null);
   const [editForm, setEditForm] = useState(emptyForm);
   const [editOptions, setEditOptions] = useState(["", "", "", ""]);
+  const [importingId, setImportingId] = useState(null);
 
   const loadBank = async () => {
     setLoading(true);
@@ -156,6 +157,24 @@ export default function TeacherQuestionBank() {
       setDeleteTarget(null);
     } catch (error) {
       notify.error(error.response?.data?.message || error.message || "Could not delete the bank question");
+    }
+  };
+
+  const importIntoExam = async item => {
+    if (!examId.trim()) {
+      notify.warning("Enter an exam ID before importing.");
+      return;
+    }
+    setImportingId(item.id);
+    try {
+      const { data } = await api.post(`/teacher/exam/${examId.trim()}/question-bank/import`, {
+        bank_item_id: item.id
+      });
+      notify.success(data.message || "Question imported into exam");
+    } catch (error) {
+      notify.error(error.message || "Could not import question into exam");
+    } finally {
+      setImportingId(null);
     }
   };
 
@@ -250,12 +269,17 @@ export default function TeacherQuestionBank() {
                       <Button variant="secondary" size="sm" onClick={() => openEdit(item)}>
                         <Pencil size={16} /> Edit
                       </Button>
-                      <form method="post" action={examId ? `/teacher/exam/${examId}/question-bank/import` : "/teacher/question-bank"} className="contents">
-                        <input type="hidden" name="bank_item_id" value={item.id} />
-                        <Button type="submit" variant="primary" size="sm" disabled={!examId}>
-                          <Upload size={16} /> Import
-                        </Button>
-                      </form>
+                      <Button
+                        type="button"
+                        variant="primary"
+                        size="sm"
+                        disabled={!examId.trim()}
+                        loading={importingId === item.id}
+                        loadingLabel="Importing"
+                        onClick={() => importIntoExam(item)}
+                      >
+                        <Upload size={16} /> Import
+                      </Button>
                     </div>
                   </div>
                 </Card>
