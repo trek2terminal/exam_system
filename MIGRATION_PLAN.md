@@ -576,3 +576,12 @@ Current status:
 - No known lint/build/source-level bugs after this pass.
 - No new package install was required.
 - Runtime-only checks still need a real browser session with authenticated admin/teacher/student accounts for visual QA, realtime multi-browser behavior, and authenticated file-download permission checks.
+
+## Latest Implementation Batch 23 - 2026-05-24
+
+Completed in this batch:
+- Made Admin Settings logo upload functional instead of showing placeholder copy.
+- Added `platform_settings.logo_path` with a recorded schema migration.
+- Added `/api/admin/settings/logo` for authenticated image upload, validation, static storage, audit logging, old-logo cleanup, and updated settings payloads with `logo_url`.
+- Wired the React Admin Settings page to upload, preview, and refresh the saved logo immediately.
+- Displayed the uploaded logo in the React sidebar, mobile drawer, login page, and registration page.

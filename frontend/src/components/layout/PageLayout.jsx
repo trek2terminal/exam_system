@@ -6,15 +6,15 @@ import { TopBar } from "./TopBar";
 import { MobileDrawer } from "./MobileDrawer";
 import { roleNavigation } from "./navigation";
 
-export function PageLayout({ children, auth, platformName, notifications, theme, onToggleTheme, onMarkAllRead }) {
+export function PageLayout({ children, auth, platformName, platformLogoUrl, notifications, theme, onToggleTheme, onMarkAllRead }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const location = useLocation();
   const studentTabs = (roleNavigation.student || []).filter(item => ["Dashboard", "My Exams", "Results"].includes(item.label));
 
   return (
     <div className="appShellSurface min-h-screen text-text-primary">
-      <Sidebar auth={auth} platformName={platformName} />
-      <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} auth={auth} platformName={platformName} />
+      <Sidebar auth={auth} platformName={platformName} platformLogoUrl={platformLogoUrl} />
+      <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} auth={auth} platformName={platformName} platformLogoUrl={platformLogoUrl} />
       <div className="min-h-screen md:pl-16 lg:pl-60">
         <TopBar
           auth={auth}

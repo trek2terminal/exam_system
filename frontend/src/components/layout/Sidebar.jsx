@@ -3,7 +3,7 @@ import { LogOut } from "lucide-react";
 import { Avatar, Badge, Button, Tooltip, cn } from "../ui";
 import { logoutHref, platformIcon as PlatformIcon, roleLabel, roleNavigation, userName, userSubtitle } from "./navigation";
 
-export function Sidebar({ auth, platformName, mobile = false, onNavigate }) {
+export function Sidebar({ auth, platformName, platformLogoUrl, mobile = false, onNavigate }) {
   const location = useLocation();
   const role = auth?.role;
   const items = roleNavigation[role] || [];
@@ -16,9 +16,17 @@ export function Sidebar({ auth, platformName, mobile = false, onNavigate }) {
       )}
     >
       <div className={cn("mb-6 flex items-center gap-3", !mobile && "md:justify-center lg:justify-start")}>
-        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-brand-primary text-white shadow-sm">
-          <PlatformIcon size={22} />
-        </span>
+        {platformLogoUrl ? (
+          <img
+            src={platformLogoUrl}
+            alt={`${platformName || "Exam Platform"} logo`}
+            className="h-11 w-11 shrink-0 rounded-lg border border-border bg-background-base object-contain p-1 shadow-sm"
+          />
+        ) : (
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-brand-primary text-white shadow-sm">
+            <PlatformIcon size={22} />
+          </span>
+        )}
         <div className={cn("min-w-0", !mobile && "hidden lg:block")}>
           <strong className="block truncate text-sm font-bold">{platformName || "Exam Platform"}</strong>
           <span className="block truncate text-xs text-text-muted">Focused assessment</span>

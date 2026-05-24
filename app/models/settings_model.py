@@ -14,6 +14,7 @@ class PlatformSettings(db.Model):
     student_self_registration = db.Column(db.Boolean, default=False, nullable=False)
     max_violations_before_alert = db.Column(db.Integer, default=3, nullable=False)
     quote_pool = db.Column(db.Text, nullable=False, default="")
+    logo_path = db.Column(db.String(255), nullable=True)
 
     updated_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     updater = db.relationship("User")

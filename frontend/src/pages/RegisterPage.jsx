@@ -75,7 +75,11 @@ export default function RegisterPage({ settings }) {
 
           <div className="relative z-10">
             <div className="mb-8 flex items-center gap-3">
-              <span className="grid h-12 w-12 place-items-center rounded-lg bg-white/20 text-xl font-bold">EP</span>
+              {settings?.logo_url ? (
+                <img src={settings.logo_url} alt="Platform logo" className="h-12 w-12 rounded-lg bg-white/20 object-contain p-1" />
+              ) : (
+                <span className="grid h-12 w-12 place-items-center rounded-lg bg-white/20 text-xl font-bold">EP</span>
+              )}
               <h1 className="text-4xl font-bold">{settings?.platform_name || "Exam Platform"}</h1>
             </div>
             <p className="max-w-sm text-lg text-white/90">
@@ -102,7 +106,11 @@ export default function RegisterPage({ settings }) {
         <div className="flex flex-1 flex-col justify-center px-4 py-12 transition-colors sm:px-6 lg:px-8">
           <div className="mx-auto w-full max-w-md rounded-card border border-border bg-background-card p-6 shadow-elevated sm:p-8">
             <div className="mb-8 flex items-center justify-center gap-2 lg:hidden">
-              <span className="grid h-10 w-10 place-items-center rounded-lg bg-brand-primary text-base font-bold text-white">EP</span>
+              {settings?.logo_url ? (
+                <img src={settings.logo_url} alt="Platform logo" className="h-10 w-10 rounded-lg border border-border bg-background-base object-contain p-1" />
+              ) : (
+                <span className="grid h-10 w-10 place-items-center rounded-lg bg-brand-primary text-base font-bold text-white">EP</span>
+              )}
               <h2 className="text-2xl font-bold text-text-primary">{settings?.platform_name || "Exam Platform"}</h2>
             </div>
 

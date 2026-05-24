@@ -8,6 +8,7 @@ from difflib import SequenceMatcher
 
 from flask import Blueprint, current_app, jsonify, request, send_file, session, url_for
 from sqlalchemy import or_
+from werkzeug.utils import secure_filename
 
 from app.models.audit_model import AuditLog, ViolationLog
 from app.models.database import db
@@ -38,8 +39,11 @@ api_bp = Blueprint("api", __name__, url_prefix="/api")
 def _settings_payload(settings):
     if not settings:
         return {}
+    logo_path = getattr(settings, "logo_path", None)
     return {
         "platform_name": settings.platform_name,
+        "logo_path": logo_path,
+        "logo_url": url_for("static", filename=logo_path) if logo_path else None,
         "welcome_message": settings.welcome_message,
         "announcement_message": getattr(settings, "announcement_message", None),
         "student_self_registration": settings.student_self_registration,
@@ -2511,6 +2515,65 @@ def admin_settings_api():
         user_agent=request.headers.get("User-Agent"),
     ).save()
     return jsonify({"ok": True, "message": "Settings saved successfully.", "settings": _settings_payload(settings)})
+
+
+@api_bp.route("/admin/settings/logo", methods=["POST"])
+@rate_limit("admin_action")
+def admin_settings_logo_api():
+    admin, error_response = _require_admin_api()
+    if error_response:
+        return error_response
+
+    upload = request.files.get("logo")
+    if not upload or not upload.filename:
+        return jsonify({"ok": False, "message": "Choose a logo image to upload."}), 400
+
+    max_bytes = 2 * 1024 * 1024
+    if request.content_length and request.content_length > max_bytes + 8192:
+        return jsonify({"ok": False, "message": "Logo must be 2 MB or smaller."}), 400
+
+    filename = secure_filename(upload.filename)
+    extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    allowed_extensions = {"png", "jpg", "jpeg", "webp", "gif"}
+    if extension not in allowed_extensions:
+        return jsonify({"ok": False, "message": "Logo must be PNG, JPG, WEBP, or GIF."}), 400
+
+    upload_root = os.path.join(current_app.static_folder, "uploads", "platform")
+    os.makedirs(upload_root, exist_ok=True)
+    stored_filename = f"logo_{secrets.token_hex(8)}.{extension}"
+    stored_path = os.path.join(upload_root, stored_filename)
+    upload.save(stored_path)
+
+    settings = SettingsService.get_settings()
+    old_logo_path = getattr(settings, "logo_path", None)
+    settings.logo_path = f"uploads/platform/{stored_filename}"
+    settings.updated_by = admin.id
+    settings.updated_at = datetime.utcnow()
+
+    db.session.add(
+        AuditLog(
+            user_id=admin.id,
+            action="upload_platform_logo",
+            resource_type="settings",
+            resource_id=settings.id,
+            changes=f"Updated platform logo to {settings.logo_path}",
+            status="success",
+            ip_address=get_client_ip(),
+            user_agent=request.headers.get("User-Agent"),
+        )
+    )
+    db.session.commit()
+
+    if old_logo_path and old_logo_path.startswith("uploads/platform/"):
+        old_abs_path = os.path.abspath(os.path.join(current_app.static_folder, old_logo_path))
+        upload_abs_root = os.path.abspath(upload_root)
+        if old_abs_path.startswith(upload_abs_root) and os.path.exists(old_abs_path):
+            try:
+                os.remove(old_abs_path)
+            except OSError:
+                current_app.logger.warning("Could not remove old platform logo %s", old_abs_path)
+
+    return jsonify({"ok": True, "message": "Logo uploaded successfully.", "settings": _settings_payload(settings)})
 
 
 @api_bp.route("/admin/settings/backup", methods=["POST"])

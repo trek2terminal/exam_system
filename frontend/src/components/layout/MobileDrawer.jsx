@@ -2,7 +2,7 @@ import { X } from "lucide-react";
 import { Button } from "../ui";
 import { Sidebar } from "./Sidebar";
 
-export function MobileDrawer({ open, onClose, auth, platformName }) {
+export function MobileDrawer({ open, onClose, auth, platformName, platformLogoUrl }) {
   if (!open) return null;
 
   return (
@@ -12,7 +12,7 @@ export function MobileDrawer({ open, onClose, auth, platformName }) {
         <Button variant="ghost" className="absolute right-3 top-3 z-10 h-11 w-11 px-0" onClick={onClose} aria-label="Close menu">
           <X size={20} />
         </Button>
-        <Sidebar auth={auth} platformName={platformName} mobile onNavigate={onClose} />
+        <Sidebar auth={auth} platformName={platformName} platformLogoUrl={platformLogoUrl} mobile onNavigate={onClose} />
       </div>
     </div>
   );

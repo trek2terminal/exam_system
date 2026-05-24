@@ -199,6 +199,10 @@ class MigrationService:
         )
 
     @staticmethod
+    def _migration_platform_logo_path():
+        MigrationService._add_column_if_missing("platform_settings", "logo_path", "VARCHAR(255)")
+
+    @staticmethod
     def _migration_platform_settings_seed():
         if PlatformSettings.query.first():
             return
@@ -296,6 +300,11 @@ class MigrationService:
             "Add one-current-browser session tokens to users",
             _migration_active_login_sessions.__func__,
         ),
+        (
+            "20260524_016_platform_logo_path",
+            "Add uploaded platform logo path to settings",
+            _migration_platform_logo_path.__func__,
+        ),
     ]
 
     @staticmethod
@@ -383,6 +392,8 @@ class MigrationService:
                 and MigrationService._has_column("users", "active_session_started_at")
                 and MigrationService._has_index("users", "ix_users_active_session_token")
             )
+        if version == "20260524_016_platform_logo_path":
+            return MigrationService._has_column("platform_settings", "logo_path")
         return False
 
     @staticmethod

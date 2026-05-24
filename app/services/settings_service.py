@@ -54,6 +54,8 @@ class SettingsService:
         settings.student_self_registration = data.get("student_self_registration") == "on"
         settings.max_violations_before_alert = max_violations
         settings.quote_pool = quote_pool or "\n".join(SettingsService.DEFAULT_QUOTES)
+        if "logo_path" in data:
+            settings.logo_path = (data.get("logo_path") or "").strip() or None
         settings.updated_by = updated_by
         settings.updated_at = datetime.utcnow()
 

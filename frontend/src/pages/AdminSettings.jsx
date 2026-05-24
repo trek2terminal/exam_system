@@ -3,6 +3,7 @@ import { Bell, DatabaseBackup, Download, Megaphone, Save, Settings2, ShieldCheck
 import { Button, Card, Input, Select, Textarea, Toggle } from "../components/ui";
 import { notify } from "../components/ui/Toast";
 import { api } from "../services/api";
+import { useAppStore } from "../store/appStore";
 
 const tabs = [
   { id: "general", label: "General", icon: Settings2 },
@@ -14,8 +15,10 @@ const tabs = [
 ];
 
 export default function AdminSettings() {
+  const loadBootstrap = useAppStore(state => state.loadBootstrap);
   const [activeTab, setActiveTab] = useState("general");
   const [loading, setLoading] = useState(false);
+  const [logoUploading, setLogoUploading] = useState(false);
   const [backupLoading, setBackupLoading] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [backupPassword, setBackupPassword] = useState("");
@@ -54,6 +57,7 @@ export default function AdminSettings() {
         setGeneral(current => ({
           ...current,
           platform_name: settings.platform_name || current.platform_name,
+          logo_url: settings.logo_url || "",
           welcome_message: settings.welcome_message || current.welcome_message
         }));
         setRegistration(current => ({
@@ -118,6 +122,41 @@ export default function AdminSettings() {
     }
   };
 
+  const handleLogoUpload = async event => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    const allowedTypes = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+    const allowedExtensions = ["png", "jpg", "jpeg", "webp", "gif"];
+    const extension = file.name.split(".").pop()?.toLowerCase();
+    if (!allowedTypes.includes(file.type) && !allowedExtensions.includes(extension)) {
+      notify.error("Logo must be PNG, JPG, WEBP, or GIF.");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      notify.error("Logo must be 2 MB or smaller.");
+      return;
+    }
+
+    const formData = new window.FormData();
+    formData.append("logo", file);
+    setLogoUploading(true);
+    try {
+      const { data } = await api.post("/admin/settings/logo", formData, {
+        headers: { "Content-Type": "multipart/form-data" }
+      });
+      const nextLogoUrl = data.settings?.logo_url || "";
+      setGeneral(current => ({ ...current, logo_url: nextLogoUrl }));
+      await loadBootstrap();
+      notify.success(data.message || "Logo uploaded successfully");
+    } catch (error) {
+      notify.error(error.message || "Logo upload failed");
+    } finally {
+      setLogoUploading(false);
+    }
+  };
+
   const handleBackup = async event => {
     event.preventDefault();
     if (!backupPassword.trim()) return;
@@ -163,6 +202,8 @@ export default function AdminSettings() {
       onAddQuote={addQuote}
       onRemoveQuote={removeQuote}
       onBackup={handleBackup}
+      onLogoUpload={handleLogoUpload}
+      logoUploading={logoUploading}
       backupLoading={backupLoading}
     />
   );
@@ -247,6 +288,8 @@ function SettingsSection({
   onAddQuote,
   onRemoveQuote,
   onBackup,
+  onLogoUpload,
+  logoUploading,
   backupLoading
 }) {
   if (sectionId === "general") {
@@ -258,9 +301,16 @@ function SettingsSection({
           <div>
             <label className="mb-3 block font-semibold text-text-primary">Logo</label>
             <div className="rounded-lg border-2 border-dashed border-border bg-background-base p-6 text-center">
-              {general.logo_url ? <img src={general.logo_url} alt="Logo" className="mx-auto mb-3 h-16" /> : <Upload size={32} className="mx-auto mb-3 text-text-muted" />}
-              <p className="mb-3 text-sm text-text-secondary">Logo upload can be enabled when server-side storage is configured.</p>
-              <input type="file" accept="image/*" className="hidden" />
+              {general.logo_url ? (
+                <img src={general.logo_url} alt="Platform logo" className="mx-auto mb-3 max-h-20 max-w-48 rounded-md object-contain" />
+              ) : (
+                <Upload size={32} className="mx-auto mb-3 text-text-muted" />
+              )}
+              <p className="mb-3 text-sm text-text-secondary">Upload a PNG, JPG, WEBP, or GIF logo up to 2 MB.</p>
+              <Button as="label" variant="secondary" loading={logoUploading} loadingLabel="Uploading..." className="cursor-pointer">
+                <Upload size={16} /> Upload Logo
+                <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden" onChange={onLogoUpload} disabled={logoUploading} />
+              </Button>
             </div>
           </div>
           <Textarea label="Welcome Message" value={general.welcome_message} onChange={event => onGeneralChange("welcome_message", event.target.value)} rows={3} />

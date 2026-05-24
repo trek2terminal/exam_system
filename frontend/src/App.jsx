@@ -148,10 +148,10 @@ function toRouterPath(target, fallback = "/") {
   return String(target).replace(/^\/react/, "") || fallback;
 }
 
-function Shell({ children, platformName, auth, notifications, theme, onToggleTheme, onMarkAllRead }) {
+function Shell({ children, platformName, platformLogoUrl, auth, notifications, theme, onToggleTheme, onMarkAllRead }) {
   // layout handled by PageLayout
   return (
-    <PageLayout auth={auth} platformName={platformName} notifications={notifications} theme={theme} onToggleTheme={onToggleTheme} onMarkAllRead={onMarkAllRead}>
+    <PageLayout auth={auth} platformName={platformName} platformLogoUrl={platformLogoUrl} notifications={notifications} theme={theme} onToggleTheme={onToggleTheme} onMarkAllRead={onMarkAllRead}>
       {children}
     </PageLayout>
   );
@@ -1072,6 +1072,7 @@ export default function App() {
   return (
     <Shell
       platformName={bootstrap?.settings?.platform_name}
+      platformLogoUrl={bootstrap?.settings?.logo_url}
       auth={bootstrap?.auth}
       notifications={bootstrap?.notifications}
       theme={theme}
