@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Bell, LogOut, Menu, Moon, Search, Settings, Sun, User } from "lucide-react";
+import { Bell, ChevronDown, LogOut, Menu, Moon, Search, Settings, Sun, User } from "lucide-react";
 import { Avatar, Badge, Button, cn } from "../ui";
 import { breadcrumbFor, logoutHref, normalizeReactHref, roleLabel, userName, userSubtitle } from "./navigation";
+import { formatDate } from "../../utils/dateFormat";
 
-function formatNotificationTime(value) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString([], { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+function humanizeLabel(value) {
+  if (!value) return "Notice";
+  const text = String(value).replaceAll("_", " ");
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 export function TopBar({ auth, notifications, theme, onToggleTheme, onMarkAllRead, onOpenDrawer }) {
@@ -55,7 +55,7 @@ export function TopBar({ auth, notifications, theme, onToggleTheme, onMarkAllRea
 
       <div className="ml-auto flex items-center gap-2" ref={containerRef}>
         {searchOpen && (
-          <label className="hidden h-11 w-64 items-center gap-2 rounded-md border border-border bg-background-card px-3 text-sm text-text-secondary shadow-sm md:flex">
+          <label className="hidden h-9 w-64 items-center gap-2 rounded-md border border-border bg-background-card px-3 text-sm text-text-secondary shadow-sm md:flex">
             <Search size={17} />
             <input
               className="min-w-0 flex-1 bg-transparent text-text-primary outline-none placeholder:text-text-muted"
@@ -64,40 +64,49 @@ export function TopBar({ auth, notifications, theme, onToggleTheme, onMarkAllRea
             />
           </label>
         )}
-        <Button
-          variant="ghost"
-          className={cn("h-11 w-11 px-0", searchOpen && "bg-background-elevated")}
-          aria-label="Search"
-          onClick={() => setSearchOpen(current => !current)}
-        >
-          <Search size={19} />
-        </Button>
-
-        <Button className="h-11 w-11 px-0" variant="secondary" aria-label="Toggle theme" onClick={onToggleTheme}>
-          {theme === "dark" ? <Moon size={19} /> : <Sun size={19} />}
-        </Button>
-
-        <div className="relative">
+        <div className="flex items-center gap-1">
           <Button
-            className="relative h-11 w-11 px-0"
-            variant="secondary"
-            aria-label="Notifications"
-            aria-expanded={showNotifications}
-            onClick={() => {
-              setShowNotifications(current => !current);
-              setShowUserMenu(false);
-            }}
-          >
-            <Bell size={19} />
-            {unreadCount > 0 && (
-              <span className="absolute -right-1 -top-1 grid min-h-5 min-w-5 place-items-center rounded-pill bg-danger px-1 text-[11px] font-bold text-white">
-                {unreadCount > 99 ? "99+" : unreadCount}
-              </span>
+            variant="ghost"
+            className={cn(
+              "h-10 w-10 rounded-lg px-0 transition duration-150 hover:bg-black/[0.08] dark:hover:bg-white/10",
+              searchOpen && "bg-background-elevated dark:bg-white/10"
             )}
+            aria-label="Search"
+            onClick={() => setSearchOpen(current => !current)}
+          >
+            <Search size={20} />
           </Button>
 
-          {showNotifications && (
-            <div className="absolute right-0 top-full z-50 mt-2 w-[min(360px,calc(100vw-2rem))] origin-top-right overflow-hidden rounded-card border border-border bg-background-card shadow-elevated animate-modal-in">
+          <Button
+            className="h-10 w-10 rounded-lg px-0 transition duration-150 hover:bg-black/[0.08] dark:hover:bg-white/10"
+            variant="ghost"
+            aria-label="Toggle theme"
+            onClick={onToggleTheme}
+          >
+            {theme === "dark" ? <Moon size={20} /> : <Sun size={20} />}
+          </Button>
+
+          <div className="relative">
+            <Button
+              className="relative h-10 w-10 rounded-lg px-0 transition duration-150 hover:bg-black/[0.08] dark:hover:bg-white/10"
+              variant="ghost"
+              aria-label="Notifications"
+              aria-expanded={showNotifications}
+              onClick={() => {
+                setShowNotifications(current => !current);
+                setShowUserMenu(false);
+              }}
+            >
+              <Bell size={20} />
+              {unreadCount > 0 && (
+                <span className="absolute -right-1 -top-1 grid min-h-5 min-w-5 place-items-center rounded-pill bg-danger px-1 text-[11px] font-bold text-white">
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </span>
+              )}
+            </Button>
+
+            {showNotifications && (
+              <div className="absolute right-0 top-full z-50 mt-2 w-[min(360px,calc(100vw-2rem))] origin-top-right overflow-hidden rounded-card border border-border bg-background-card shadow-elevated animate-modal-in">
               <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
                 <div>
                   <strong className="block text-sm text-text-primary">Notifications</strong>
@@ -124,10 +133,10 @@ export function TopBar({ auth, notifications, theme, onToggleTheme, onMarkAllRea
                       key={item.id || item.message}
                     >
                       <div className="flex items-start gap-3">
-                        <Badge variant={item.type === "result_published" ? "success" : "info"} dot>{item.type || "notice"}</Badge>
+                        <Badge variant={item.type === "result_published" ? "success" : "info"} dot>{humanizeLabel(item.type)}</Badge>
                         <div className="min-w-0">
                           <p className="mb-1 text-sm font-semibold text-text-primary">{item.title || item.message}</p>
-                          <span className="text-xs text-text-muted">{item.summary || formatNotificationTime(item.created_at)}</span>
+                          <span className="text-xs text-text-muted">{item.summary || formatDate(item.created_at)}</span>
                         </div>
                       </div>
                     </a>
@@ -139,14 +148,17 @@ export function TopBar({ auth, notifications, theme, onToggleTheme, onMarkAllRea
               <Link className="block border-t border-border px-4 py-3 text-center text-sm font-semibold text-brand-primary hover:bg-background-elevated" to="/notifications">
                 View all notifications
               </Link>
-            </div>
-          )}
+              </div>
+            )}
+          </div>
         </div>
+
+        <div className="h-8 w-px bg-text-muted/20" />
 
         <div className="relative">
           <Button
             variant="ghost"
-            className="h-11 gap-2 px-2"
+            className="h-9 gap-2 rounded-pill border border-transparent px-2 hover:border-border hover:bg-background-elevated"
             aria-label="User menu"
             aria-expanded={showUserMenu}
             onClick={() => {
@@ -156,6 +168,7 @@ export function TopBar({ auth, notifications, theme, onToggleTheme, onMarkAllRea
           >
             <Avatar name={userName(auth)} src={auth?.profile_picture} size="md" />
             <span className="hidden max-w-32 truncate text-sm font-semibold md:inline">{userName(auth)}</span>
+            <ChevronDown size={16} className="hidden text-text-muted md:block" />
           </Button>
 
           {showUserMenu && (

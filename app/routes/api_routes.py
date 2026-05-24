@@ -1,6 +1,7 @@
 import json
 import os
 import random
+import re
 import secrets
 import shutil
 import subprocess
@@ -74,6 +75,111 @@ def _settings_payload(settings):
         "max_violations_before_alert": settings.max_violations_before_alert,
         "admin_lockout_count": getattr(settings, "admin_lockout_count", 3),
         "admin_idle_timeout_minutes": getattr(settings, "admin_idle_timeout_minutes", 120),
+    }
+
+
+def _clean_audit_fragment(value):
+    if not value:
+        return None
+    text_value = re.sub(r"\s+", " ", str(value).strip())
+    if not text_value:
+        return None
+    path_like = (
+        re.search(r"[A-Za-z]:\\", text_value)
+        or "uploads/" in text_value
+        or "static/" in text_value
+        or re.search(r"\.(db|sqlite|csv|pdf|png|jpg|jpeg|webp|gif)(\b|$)", text_value, re.IGNORECASE)
+    )
+    if path_like:
+        return None
+    for separator in (":", ";"):
+        if separator in text_value:
+            text_value = text_value.split(separator, 1)[1 if separator == ":" else 0].strip()
+    return text_value[:140] or None
+
+
+def _audit_subject(item):
+    if item.resource_type == "user" and item.resource_id:
+        user = User.query.get(item.resource_id)
+        if user:
+            return user.name or user.username or user.email
+    if item.resource_type in {"exam", "exam_set"} and item.resource_id:
+        exam = ExamSet.query.get(item.resource_id)
+        if exam:
+            return exam.exam_name
+    if item.resource_type in {"student_session", "session"} and item.resource_id:
+        student_session = StudentSession.query.get(item.resource_id)
+        if student_session:
+            return student_session.student_name or student_session.roll_no or student_session.session_code
+    return _clean_audit_fragment(item.changes)
+
+
+def _audit_exam_title(item):
+    if item.resource_type in {"exam", "exam_set"} and item.resource_id:
+        exam = ExamSet.query.get(item.resource_id)
+        return exam.exam_name if exam else None
+    if item.resource_type in {"student_session", "session"} and item.resource_id:
+        student_session = StudentSession.query.get(item.resource_id)
+        if student_session and student_session.exam_set:
+            return student_session.exam_set.exam_name
+    return _clean_audit_fragment(item.changes)
+
+
+def _humanize_audit_action(action):
+    clean_action = (action or "activity").replace("_api", "").replace("_", " ").strip()
+    return clean_action[:1].upper() + clean_action[1:]
+
+
+def _audit_formatted_message(item):
+    action = item.action or ""
+    subject = _audit_subject(item)
+    exam_title = _audit_exam_title(item)
+
+    if action in {"update_platform_logo", "upload_platform_logo"}:
+        return "Platform logo was updated"
+    if action in {"remove_platform_logo", "delete_platform_logo"}:
+        return "Platform logo was removed"
+    if action in {"create_teacher", "create_user", "create_user_api"}:
+        return f"New teacher account created: {subject}" if subject else "New teacher account created"
+    if action in {"deactivate_user", "delete_user", "toggle_user_status", "soft_delete_user_api"}:
+        return f"User account deactivated: {subject}" if subject else "User account deactivated"
+    if action in {"terminate_exam", "terminate_exam_session"}:
+        return f"Exam terminated for student: {subject}" if subject else "Exam was terminated for a student"
+    if action in {"second_chance", "grant_second_chance"}:
+        return f"Second chance granted to: {subject}" if subject else "Second chance was granted"
+    if action in {"reduce_time", "reduce_exam_time"}:
+        return f"Exam time reduced for: {subject}" if subject else "Exam time was reduced"
+    if action in {"backup_database", "backup_database_api"}:
+        return "Database backup was downloaded"
+    if action == "update_admin_account":
+        return "Admin account details updated"
+    if action in {"publish_results", "publish_results_api"}:
+        return f"Results published for exam: {exam_title}" if exam_title else "Results were published"
+    if action in {"student_submit", "submit_exam_session"}:
+        return f"Student submitted exam: {exam_title}" if exam_title else "Student submitted an exam"
+    if action in {"code_execution", "run_python_code"}:
+        return f"Code executed by: {subject}" if subject else "Code was executed"
+    if action in {"update_platform_settings", "update_platform_settings_api"}:
+        return "Platform settings were updated"
+    return _humanize_audit_action(action)
+
+
+def _audit_payload(item):
+    actor_name = item.user.name if item.user else "System"
+    formatted_message = _audit_formatted_message(item)
+    return {
+        "id": item.id,
+        "action": item.action,
+        "action_type": item.action,
+        "formatted_message": formatted_message,
+        "description": formatted_message,
+        "resource_type": item.resource_type,
+        "resource_id": item.resource_id,
+        "status": item.status,
+        "user": actor_name,
+        "actor_name": actor_name,
+        "timestamp": _iso_datetime(item.created_at),
+        "ip_address": item.ip_address,
     }
 
 
@@ -2655,19 +2761,7 @@ def admin_dashboard_api():
                 "closed": ExamSet.query.filter_by(status="closed").count(),
                 "archived": ExamSet.query.filter_by(status="archived").count(),
             },
-            "recent_activity": [
-                {
-                    "id": item.id,
-                    "action": item.action,
-                    "description": item.changes or item.action,
-                    "resource_type": item.resource_type,
-                    "resource_id": item.resource_id,
-                    "status": item.status,
-                    "user": item.user.name if item.user else "System",
-                    "timestamp": _iso_datetime(item.created_at),
-                }
-                for item in recent_activity
-            ],
+            "recent_activity": [_audit_payload(item) for item in recent_activity],
             "suspicious_students": suspicious_students[:10],
         }
     )
@@ -2772,6 +2866,45 @@ def admin_settings_logo_api():
                 current_app.logger.warning("Could not remove old platform logo %s", old_abs_path)
 
     return jsonify({"ok": True, "message": "Logo uploaded successfully.", "settings": _settings_payload(settings)})
+
+
+@api_bp.route("/admin/settings/logo", methods=["DELETE"])
+@rate_limit("admin_action")
+def admin_settings_logo_delete_api():
+    admin, error_response = _require_admin_api()
+    if error_response:
+        return error_response
+
+    settings = SettingsService.get_settings()
+    old_logo_path = getattr(settings, "logo_path", None)
+    settings.logo_path = None
+    settings.updated_by = admin.id
+    settings.updated_at = datetime.utcnow()
+
+    db.session.add(
+        AuditLog(
+            user_id=admin.id,
+            action="remove_platform_logo",
+            resource_type="settings",
+            resource_id=settings.id,
+            changes="Removed platform logo",
+            status="success",
+            ip_address=get_client_ip(),
+            user_agent=request.headers.get("User-Agent"),
+        )
+    )
+    db.session.commit()
+
+    if old_logo_path and old_logo_path.startswith("uploads/platform/"):
+        upload_root = os.path.abspath(os.path.join(current_app.static_folder, "uploads", "platform"))
+        old_abs_path = os.path.abspath(os.path.join(current_app.static_folder, old_logo_path))
+        if old_abs_path.startswith(upload_root) and os.path.exists(old_abs_path):
+            try:
+                os.remove(old_abs_path)
+            except OSError:
+                current_app.logger.warning("Could not remove platform logo %s", old_abs_path)
+
+    return jsonify({"ok": True, "message": "Logo removed successfully.", "settings": _settings_payload(settings)})
 
 
 @api_bp.route("/admin/settings/backup", methods=["POST"])
@@ -3350,16 +3483,9 @@ def admin_audit_log_api():
             "ok": True,
             "items": [
                 {
-                    "id": item.id,
-                    "timestamp": _iso_datetime(item.created_at),
+                    **_audit_payload(item),
                     "admin_user": item.user.name if item.user else "System",
-                    "action_type": item.action,
                     "target_user": item.resource_id if item.resource_type == "user" else None,
-                    "resource_type": item.resource_type,
-                    "resource_id": item.resource_id,
-                    "ip_address": item.ip_address,
-                    "status": item.status,
-                    "changes": item.changes,
                 }
                 for item in pagination.items
             ],

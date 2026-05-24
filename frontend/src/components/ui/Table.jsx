@@ -13,6 +13,7 @@ export function Table({
   rowKey = "id",
   rowsPerPageOptions = [5, 10, 20],
   renderRowActions,
+  tableClassName,
   className
 }) {
   const [sort, setSort] = useState(null);
@@ -59,7 +60,7 @@ export function Table({
   return (
     <section className={cn("overflow-hidden rounded-card border border-border bg-background-card shadow-card", className)}>
       <div className="overflow-auto">
-        <table className="min-w-full border-collapse text-left text-sm">
+        <table className={cn("min-w-full border-collapse text-left text-sm", tableClassName)}>
           <thead className="sticky top-0 z-10 bg-background-surface text-text-secondary">
             <tr>
               {columns.map(column => {
@@ -67,7 +68,7 @@ export function Table({
                 const ariaSort = isSorted ? (sort.direction === "asc" ? "ascending" : "descending") : "none";
                 return (
                   <th
-                    className="whitespace-nowrap px-4 py-3 font-semibold"
+                    className={cn("whitespace-nowrap px-4 py-3 font-semibold", column.headerClassName)}
                     key={column.key}
                     role="columnheader"
                     scope="col"
@@ -94,7 +95,7 @@ export function Table({
                 );
               })}
               {renderRowActions && (
-                <th className="whitespace-nowrap px-4 py-3 text-right font-semibold" scope="col">
+                <th className="w-[220px] whitespace-nowrap px-4 py-3 text-right font-semibold" scope="col">
                   Actions
                 </th>
               )}
@@ -108,12 +109,12 @@ export function Table({
             ) : visibleRows.map((row, index) => (
               <tr className="group bg-background-card transition hover:bg-background-surface" key={row[rowKey] || index} role="row">
                 {columns.map(column => (
-                  <td className="px-4 py-3 text-text-primary" key={column.key} role="cell">
+                  <td className={cn("px-4 py-3 text-text-primary", column.cellClassName)} key={column.key} role="cell">
                     {column.render ? column.render(row) : row[column.key]}
                   </td>
                 ))}
                 {renderRowActions && (
-                  <td className="px-4 py-3 text-right" role="cell">
+                  <td className="w-[220px] min-w-[220px] px-4 py-3 text-right" role="cell">
                     <div className="inline-flex min-h-11 items-center justify-end gap-2 opacity-100 transition md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
                       {renderRowActions(row)}
                     </div>
@@ -125,7 +126,7 @@ export function Table({
         </table>
       </div>
       {!loading && data.length === 0 && (
-        <EmptyState icon={Inbox} heading={emptyMessage} description="The table will update as soon as data is available." compact className="rounded-none border-0" />
+        <EmptyState icon={Inbox} heading={emptyMessage} description="New records will appear here when available." compact className="rounded-none border-0" />
       )}
       <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-3 text-sm text-text-secondary">
         <span>Page {page} of {pageCount}</span>

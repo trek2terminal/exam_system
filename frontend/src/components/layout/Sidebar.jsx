@@ -1,7 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
 import { LogOut } from "lucide-react";
 import { Avatar, Badge, Button, PlatformLogo, Tooltip, cn } from "../ui";
-import { logoutHref, roleLabel, roleNavigation, userName, userSubtitle } from "./navigation";
+import { logoutHref, roleLabel, roleNavigation, userName } from "./navigation";
 
 export function Sidebar({ auth, platformName, platformLogoUrl, mobile = false, onNavigate }) {
   const location = useLocation();
@@ -16,7 +16,14 @@ export function Sidebar({ auth, platformName, platformLogoUrl, mobile = false, o
       )}
     >
       <div className={cn("mb-6 flex items-center gap-3", !mobile && "md:justify-center lg:justify-start")}>
-        <PlatformLogo src={platformLogoUrl} name={platformName || "Exam Platform"} size="md" />
+        <PlatformLogo
+          src={platformLogoUrl}
+          name={platformName || "Exam Platform"}
+          size="xs"
+          fallbackRounded="full"
+          className="border-0 shadow-none"
+          imageClassName="max-h-9 max-w-9 p-0"
+        />
         <div className={cn("min-w-0", !mobile && "hidden lg:block")}>
           <strong className="block truncate text-sm font-bold">{platformName || "Exam Platform"}</strong>
           <span className="block truncate text-xs text-text-muted">Focused assessment</span>
@@ -50,21 +57,21 @@ export function Sidebar({ auth, platformName, platformLogoUrl, mobile = false, o
       </nav>
 
       <div className="mt-auto border-t border-border pt-4">
-        <div className={cn("mb-3 flex items-center gap-3", !mobile && "md:justify-center lg:justify-start")}>
-          <Avatar name={userName(auth)} src={auth?.profile_picture} size="lg" />
-          <div className={cn("min-w-0", !mobile && "hidden lg:block")}>
-            <strong className="block truncate text-sm">{userName(auth)}</strong>
-            <div className="mt-1 flex items-center gap-2">
-              <Badge variant="purple">{roleLabel(role)}</Badge>
-              <span className="truncate text-xs text-text-muted">{userSubtitle(auth)}</span>
-            </div>
+        <div className={cn("mb-3 flex min-h-11 items-center gap-3", !mobile && "md:justify-center lg:justify-start")}>
+          <Avatar name={userName(auth)} src={auth?.profile_picture} size="md" />
+          <div className={cn("min-w-0 flex-1 items-center gap-2", !mobile && "hidden lg:flex", mobile && "flex")}>
+            <strong className="min-w-0 flex-1 truncate text-sm">{userName(auth)}</strong>
+            <Badge variant="purple" size="sm">{roleLabel(role)}</Badge>
           </div>
         </div>
         <Button
           as="a"
           href={logoutHref(role)}
           variant="ghost"
-          className={cn("w-full justify-start", !mobile && "md:justify-center lg:justify-start")}
+          className={cn(
+            "w-full justify-start text-text-secondary hover:bg-danger/10 hover:text-danger",
+            !mobile && "md:justify-center lg:justify-start"
+          )}
         >
           <LogOut size={18} />
           <span className={cn(!mobile && "hidden lg:inline")}>Logout</span>

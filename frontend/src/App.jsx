@@ -24,6 +24,7 @@ import { useAppStore } from "./store/appStore";
 import { api } from "./services/api";
 import { notify } from "./components/ui/Toast";
 import { useSessionWatcher } from "./hooks/useSessionWatcher";
+import { formatDate } from "./utils/dateFormat";
 
 const ExamInterface = lazy(() => import("./ExamInterface.jsx"));
 const TeacherReview = lazy(() => import("./TeacherReview.jsx"));
@@ -108,15 +109,8 @@ function FlipCountdown({ totalSeconds }) {
 }
 
 function formatDateTime(value) {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleString([], {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit"
-  });
+  const formatted = formatDate(value);
+  return formatted === "-" ? null : formatted;
 }
 
 function examTone(exam) {
@@ -194,20 +188,19 @@ function StudentDashboard({ dashboard }) {
         <div className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-brand-primary/5 blur-3xl" />
         <div className="absolute -bottom-8 -left-8 h-24 w-24 rounded-full bg-info/5 blur-3xl" />
         <div className="relative z-10">
-          <p className="text-sm font-semibold uppercase text-text-muted">Your exam space</p>
-          <h1 className="mt-2 text-3xl font-bold text-text-primary md:text-4xl">
-            {getTimeBasedGreeting()}, {student.name || "Student"}
-          </h1>
-          <p className="mt-2 text-lg text-text-secondary italic">{dashboard?.quote?.text || dashboard?.quote || "One calm question at a time."}</p>
+          <h1 className="text-3xl font-bold text-text-primary md:text-4xl">Student Workspace</h1>
+          <p className="mt-2 text-lg text-text-secondary">
+            {getTimeBasedGreeting()}, {student.name || "Student"}. {dashboard?.quote?.text || dashboard?.quote || "One calm question at a time."}
+          </p>
           <div className="mt-4 flex items-center gap-6">
             <div>
-              <p className="text-xs font-semibold text-text-muted">ROLL NUMBER</p>
+              <p className="text-xs font-semibold text-text-muted">Roll number</p>
               <p className="text-xl font-bold text-text-primary">{student.roll_no || "-"}</p>
             </div>
             <div className="h-12 border-l border-border" />
             <div>
-              <p className="text-xs font-semibold text-text-muted">ASSIGNED EXAMS</p>
-              <p className="text-xl font-bold text-text-primary">{stats.assigned || 0}</p>
+              <p className="text-xs font-semibold text-text-muted">Assigned exams</p>
+              <p className="text-xl font-bold text-text-primary">{Number(stats.assigned || 0).toLocaleString()}</p>
             </div>
           </div>
         </div>
@@ -243,8 +236,8 @@ function StudentDashboard({ dashboard }) {
       <div>
         <div className="mb-5 flex items-center justify-between gap-4">
           <div>
-            <p className="text-sm font-semibold text-text-muted">EXAMS</p>
             <h2 className="text-2xl font-bold text-text-primary">Assigned exams</h2>
+            <p className="mt-1 text-text-secondary">Start available exams, resume active sessions, and review published results.</p>
           </div>
           <div className="flex gap-2">
             <Button variant="secondary" size="sm" as={Link} to={dashboard?.links?.results || "/student/results"}>
@@ -338,16 +331,16 @@ function StudentExamCard({ exam, elapsedSeconds }) {
         </div>
         <div>
           <p className="text-xs font-semibold text-text-muted">Questions</p>
-          <p className="mt-1 font-semibold text-text-primary">{exam.question_count}</p>
+          <p className="mt-1 font-semibold text-text-primary">{Number(exam.question_count || 0).toLocaleString()}</p>
         </div>
         <div>
           <p className="text-xs font-semibold text-text-muted">Total Marks</p>
-          <p className="mt-1 font-semibold text-text-primary">{exam.total_marks}</p>
+          <p className="mt-1 font-semibold text-text-primary">{Number(exam.total_marks || 0).toLocaleString()}</p>
         </div>
         <div>
           <p className="text-xs font-semibold text-text-muted">Attempts</p>
           <p className="mt-1 font-semibold text-text-primary">
-            {exam.attempt_count}
+            {Number(exam.attempt_count || 0).toLocaleString()}
             {exam.attempt_limit > 0 ? `/${exam.attempt_limit}` : "/unlimited"}
           </p>
         </div>
@@ -454,8 +447,7 @@ function TeacherDashboard({ dashboard }) {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <span className="eyebrow">Teacher workspace</span>
-          <h2 className="text-3xl font-bold text-text-primary">My Exams</h2>
+          <h1 className="text-3xl font-bold text-text-primary">Teacher Workspace</h1>
           <p className="text-text-secondary">Create, review, and monitor your assessments.</p>
         </div>
         <Button variant="primary" as={Link} to="/teacher/exam/new">
@@ -473,7 +465,7 @@ function TeacherDashboard({ dashboard }) {
       <section className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
-            <h3 className="text-2xl font-bold text-text-primary">Exam Library</h3>
+            <h2 className="text-2xl font-bold text-text-primary">My Exams</h2>
             <Badge variant="purple" size="md">{exams.length}</Badge>
           </div>
           <Button variant="secondary" size="sm" as={Link} to="/teacher/proctoring">
@@ -526,18 +518,18 @@ function TeacherExamCard({ exam, index }) {
         </div>
 
         <div className="grid grid-cols-2 gap-2 text-sm">
-          <Badge variant="info">{exam.question_count || 0} questions</Badge>
-          <Badge variant="purple">{enrolled} enrolled</Badge>
+          <Badge variant="info">{Number(exam.question_count || 0).toLocaleString()} questions</Badge>
+          <Badge variant="purple">{Number(enrolled || 0).toLocaleString()} enrolled</Badge>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div className="rounded-md border border-border bg-background-base p-3">
             <span className="text-xs font-semibold text-text-muted">Submitted</span>
-            <strong className="block text-xl text-text-primary">{submitted}</strong>
+            <strong className="block text-xl text-text-primary">{Number(submitted || 0).toLocaleString()}</strong>
           </div>
           <div className="rounded-md border border-border bg-background-base p-3">
             <span className="text-xs font-semibold text-text-muted">Pending Review</span>
-            <strong className="block text-xl text-text-primary">{pending}</strong>
+            <strong className="block text-xl text-text-primary">{Number(pending || 0).toLocaleString()}</strong>
           </div>
         </div>
 
@@ -559,20 +551,31 @@ function TeacherExamCard({ exam, index }) {
 
 function AdminOverview({ dashboard }) {
   const stats = dashboard?.stats || {};
+  const labels = {
+    total_users: "Total Users",
+    total_students: "Students",
+    total_teachers: "Teachers",
+    total_exams: "Total Exams",
+    active_exams: "Active Exams",
+    submitted_sessions: "Submitted Sessions",
+    published_results: "Published Results",
+    violations_today: "Violations Today",
+    pending_reviews: "Pending Reviews"
+  };
   return (
     <div className="cardList">
       <div className="rowBetween">
         <div>
-          <span className="eyebrow">Admin overview</span>
-          <h2>Platform health</h2>
+          <h2>Admin Workspace</h2>
+          <p>Monitor users, exams, reviews, and live proctoring activity.</p>
         </div>
         <Button variant="primary" size="sm" as={Link} to="/admin/proctoring"><Radio size={18} /> Live proctoring</Button>
       </div>
       <section className="statsGrid">
         {Object.entries(stats).map(([key, value]) => (
           <Card key={key} className="statCard">
-            <span>{key.replaceAll("_", " ")}</span>
-            <strong>{value}</strong>
+            <span>{labels[key] || key.replaceAll("_", " ")}</span>
+            <strong>{Number(value || 0).toLocaleString()}</strong>
           </Card>
         ))}
       </section>
@@ -658,11 +661,10 @@ export default function App() {
   const [theme, setTheme] = useState(() => {
     try {
       const stored = window.localStorage.getItem("examTheme");
-      if (stored) return stored;
-      const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-      return prefersDark ? 'dark' : 'light';
+      if (stored === "light" || stored === "dark") return stored;
+      return "dark";
     } catch {
-      return 'light';
+      return "dark";
     }
   });
 

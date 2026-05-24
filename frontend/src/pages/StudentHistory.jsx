@@ -2,13 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Eye, History } from "lucide-react";
 import { Badge, Button, Card, EmptyState, Skeleton, Table } from "../components/ui";
 import { api } from "../services/api";
-
-function formatDate(value) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleString([], { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
-}
+import { formatDate } from "../utils/dateFormat";
 
 function resultStatus(result, passingPercentage = 40) {
   if (!result) return { label: "-", variant: "secondary" };

@@ -13,18 +13,7 @@ import {
 import { Badge, Button, Card, EmptyState, Input, Modal, Textarea } from "./components/ui";
 import { api } from "./services/api";
 import { notify } from "./components/ui/Toast";
-
-function formatDate(value) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleString([], {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit"
-  });
-}
+import { formatDate } from "./utils/dateFormat";
 
 function scoreLabel(result) {
   if (!result) return "-";

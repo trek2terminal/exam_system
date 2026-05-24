@@ -2,16 +2,22 @@ import { useEffect, useState } from "react";
 import { cn } from "./utils";
 
 const sizeClasses = {
+  xs: "h-9 w-9 text-sm",
   sm: "h-10 w-10 text-base",
   md: "h-11 w-11 text-lg",
   lg: "h-12 w-12 text-xl",
 };
+
+function roundedClassFor(value) {
+  return value === "full" ? "rounded-full" : "rounded-lg";
+}
 
 export function PlatformLogo({
   src,
   name = "Exam Platform",
   size = "md",
   rounded = "lg",
+  fallbackRounded,
   className = "",
   imageClassName = "",
   fallbackClassName = "",
@@ -19,7 +25,8 @@ export function PlatformLogo({
 }) {
   const [failed, setFailed] = useState(false);
   const initial = (name || "Exam Platform").trim().charAt(0).toUpperCase() || "E";
-  const roundedClass = rounded === "full" ? "rounded-full" : "rounded-lg";
+  const imageRoundedClass = roundedClassFor(rounded);
+  const fallbackRoundedClass = roundedClassFor(fallbackRounded || rounded);
   const dimensions = sizeClasses[size] || sizeClasses.md;
 
   useEffect(() => {
@@ -32,7 +39,7 @@ export function PlatformLogo({
         className={cn(
           "grid shrink-0 place-items-center overflow-hidden border border-border bg-background-base shadow-sm",
           dimensions,
-          roundedClass,
+          imageRoundedClass,
           className
         )}
       >
@@ -51,7 +58,7 @@ export function PlatformLogo({
       className={cn(
         "grid shrink-0 place-items-center bg-brand-primary font-bold text-white shadow-sm",
         dimensions,
-        roundedClass,
+        fallbackRoundedClass,
         className,
         fallbackClassName
       )}

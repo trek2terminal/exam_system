@@ -4,19 +4,13 @@ import { Badge, Button, Card, EmptyState } from "../components/ui";
 import { api } from "../services/api";
 import { notify } from "../components/ui/Toast";
 import { normalizeReactHref } from "../components/layout/navigation";
+import { timeAgo } from "../utils/dateFormat";
 
 function notificationIcon(type) {
   if (String(type).includes("warning") || String(type).includes("violation")) return AlertTriangle;
   if (String(type).includes("result") || String(type).includes("success")) return CheckCircle2;
   if (String(type).includes("system")) return Info;
   return Bell;
-}
-
-function timeLabel(value) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString([], { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
 function notificationHref(item) {
@@ -138,7 +132,7 @@ export default function NotificationsPage({ notifications, auth, onMarkAllRead }
                     </span>
                     {item.summary && <span className="block text-sm text-text-secondary">{item.summary}</span>}
                     {item.message && item.title && <span className="block text-sm text-text-secondary">{item.message}</span>}
-                    <span className="mt-2 block text-xs text-text-muted">{timeLabel(item.created_at)}</span>
+                    <span className="mt-2 block text-xs text-text-muted">{timeAgo(item.created_at)}</span>
                   </span>
                   <span className="flex shrink-0 flex-col gap-2 sm:flex-row">
                     {!unread ? null : (

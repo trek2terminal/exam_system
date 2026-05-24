@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ArrowDown, ArrowUp, Bell, CheckCircle2, DatabaseBackup, Download, Megaphone, Plus, Save, Settings2, ShieldCheck, Trash2, Upload, UserPlus, X } from "lucide-react";
-import { Badge, Button, Card, Input, PlatformLogo, Textarea, Toggle } from "../components/ui";
+import { Badge, Button, Card, CropModal, Input, PlatformLogo, Textarea, Toggle } from "../components/ui";
 import { notify } from "../components/ui/Toast";
 import { api } from "../services/api";
 import { useAppStore } from "../store/appStore";
@@ -32,10 +32,13 @@ export default function AdminSettings() {
   const [activeTab, setActiveTab] = useState("general");
   const [loading, setLoading] = useState(false);
   const [logoUploading, setLogoUploading] = useState(false);
+  const [logoRemoving, setLogoRemoving] = useState(false);
   const [backupLoading, setBackupLoading] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [backupPassword, setBackupPassword] = useState("");
   const [quoteDraft, setQuoteDraft] = useState("");
+  const [logoCropSrc, setLogoCropSrc] = useState("");
+  const [logoFileName, setLogoFileName] = useState("platform-logo.png");
 
   const [general, setGeneral] = useState({
     platform_name: "Exam Platform",
@@ -102,6 +105,10 @@ export default function AdminSettings() {
     }
     loadSettings();
   }, []);
+
+  useEffect(() => () => {
+    if (logoCropSrc) window.URL.revokeObjectURL(logoCropSrc);
+  }, [logoCropSrc]);
 
   const markChanged = setter => (field, value) => {
     setter(prev => ({ ...prev, [field]: value }));
@@ -191,6 +198,13 @@ export default function AdminSettings() {
     }
   };
 
+  const clearLogoCrop = () => {
+    setLogoCropSrc(current => {
+      if (current) window.URL.revokeObjectURL(current);
+      return "";
+    });
+  };
+
   const handleLogoUpload = async event => {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -208,8 +222,16 @@ export default function AdminSettings() {
       return;
     }
 
+    setLogoFileName(file.name.replace(/\.[^.]+$/, ".png") || "platform-logo.png");
+    setLogoCropSrc(current => {
+      if (current) window.URL.revokeObjectURL(current);
+      return window.URL.createObjectURL(file);
+    });
+  };
+
+  const handleLogoCropConfirm = async blob => {
     const formData = new window.FormData();
-    formData.append("logo", file);
+    formData.append("logo", blob, logoFileName);
     setLogoUploading(true);
     try {
       const { data } = await api.post("/admin/settings/logo", formData, {
@@ -219,10 +241,26 @@ export default function AdminSettings() {
       setGeneral(current => ({ ...current, logo_url: nextLogoUrl }));
       await loadBootstrap();
       notify.success(data.message || "Logo uploaded successfully");
+      clearLogoCrop();
     } catch (error) {
       notify.error(error.message || "Logo upload failed");
     } finally {
       setLogoUploading(false);
+    }
+  };
+
+  const handleLogoRemove = async () => {
+    if (!general.logo_url) return;
+    setLogoRemoving(true);
+    try {
+      const { data } = await api.delete("/admin/settings/logo");
+      setGeneral(current => ({ ...current, logo_url: data.settings?.logo_url || "" }));
+      await loadBootstrap();
+      notify.success(data.message || "Logo removed successfully");
+    } catch (error) {
+      notify.error(error.message || "Logo removal failed");
+    } finally {
+      setLogoRemoving(false);
     }
   };
 
@@ -276,7 +314,9 @@ export default function AdminSettings() {
       onMoveLoginFeature={moveLoginFeature}
       onBackup={handleBackup}
       onLogoUpload={handleLogoUpload}
+      onLogoRemove={handleLogoRemove}
       logoUploading={logoUploading}
+      logoRemoving={logoRemoving}
       backupLoading={backupLoading}
     />
   );
@@ -340,6 +380,12 @@ export default function AdminSettings() {
           })}
         </div>
       </div>
+      <CropModal
+        imageSrc={logoCropSrc}
+        aspectRatio={1}
+        onConfirm={handleLogoCropConfirm}
+        onCancel={clearLogoCrop}
+      />
     </div>
   );
 }
@@ -366,7 +412,9 @@ function SettingsSection({
   onMoveLoginFeature,
   onBackup,
   onLogoUpload,
+  onLogoRemove,
   logoUploading,
+  logoRemoving,
   backupLoading
 }) {
   if (sectionId === "general") {
@@ -386,10 +434,17 @@ function SettingsSection({
                 fallbackClassName="bg-brand-primary"
               />
               <p className="mb-3 text-sm text-text-secondary">Upload a PNG, JPG, WEBP, or GIF logo up to 2 MB.</p>
-              <Button as="label" variant="secondary" loading={logoUploading} loadingLabel="Uploading..." className="cursor-pointer">
-                <Upload size={16} /> Upload Logo
-                <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden" onChange={onLogoUpload} disabled={logoUploading} />
-              </Button>
+              <div className="flex flex-col justify-center gap-2 sm:flex-row">
+                <Button as="label" variant="secondary" loading={logoUploading} loadingLabel="Uploading..." className="cursor-pointer">
+                  <Upload size={16} /> Upload Logo
+                  <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden" onChange={onLogoUpload} disabled={logoUploading || logoRemoving} />
+                </Button>
+                {general.logo_url && (
+                  <Button type="button" variant="danger" onClick={onLogoRemove} loading={logoRemoving} loadingLabel="Removing..." disabled={logoUploading}>
+                    <Trash2 size={16} /> Remove Logo
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
           <Textarea label="Welcome Message" value={general.welcome_message} onChange={event => onGeneralChange("welcome_message", event.target.value)} rows={3} />
@@ -586,7 +641,7 @@ function SettingsSection({
         <div className="space-y-5">
           <h2 className="text-xl font-semibold text-text-primary">Backup</h2>
           <div className="rounded-lg border border-border bg-background-base p-4">
-            <p className="mb-0 text-sm text-text-secondary">Last backup timestamp is recorded by the server after a download is generated.</p>
+            <p className="mb-0 text-sm text-text-secondary">Download a fresh backup whenever you need an offline copy.</p>
           </div>
           <form onSubmit={onBackup} className="space-y-3 rounded-lg border border-border bg-background-base p-4">
             <Input label="Admin Password" name="admin_password" type="password" value={backupPassword} onChange={event => onBackupPasswordChange(event.target.value)} autoComplete="current-password" required />

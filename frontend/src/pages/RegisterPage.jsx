@@ -130,7 +130,7 @@ export default function RegisterPage({ settings }) {
 
             <div className="mb-8 text-center">
               <h1 className="text-3xl font-bold text-text-primary">Create student account</h1>
-              <p className="mt-2 text-text-secondary">Registration opens your React student workspace immediately</p>
+              <p className="mt-2 text-text-secondary">Create your account to access assigned exams and results.</p>
             </div>
 
             <form className="space-y-5" onSubmit={handleSubmit}>

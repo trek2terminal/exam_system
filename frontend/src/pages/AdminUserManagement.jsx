@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Download, Edit2, Eye, RotateCcw, Upload, Plus, ShieldCheck, UserX } from "lucide-react";
-import { Avatar, Badge, Button, Card, ConfirmationDialog, Input, Modal, Select, Table, Textarea } from "../components/ui";
+import { Avatar, Badge, Button, Card, ConfirmationDialog, Input, Modal, Select, Table, Textarea, Tooltip } from "../components/ui";
 import { api } from "../services/api";
 import { notify } from "../components/ui/Toast";
+import { formatDate, formatDateShort } from "../utils/dateFormat";
 
 function parseCsv(text) {
   const lines = text.split(/\r?\n/).filter(Boolean);
@@ -267,6 +268,8 @@ export default function AdminUserManagement() {
           aria-label="Select all visible users"
         />
       ),
+      headerClassName: "w-12 min-w-12",
+      cellClassName: "w-12 min-w-12",
       render: row => (
         <input
           type="checkbox"
@@ -280,21 +283,30 @@ export default function AdminUserManagement() {
       key: "name",
       header: "User",
       sortable: true,
+      headerClassName: "min-w-[200px]",
+      cellClassName: "min-w-[200px]",
       render: row => (
         <div className="flex items-center gap-3">
           <Avatar name={row.name} size="md" />
-          <div>
+          <div className="min-w-0">
             <p className="mb-0 font-semibold text-text-primary">{row.name}</p>
             <p className="mb-0 text-xs text-text-muted">@{row.username || "unknown"}</p>
           </div>
         </div>
       )
     },
-    { key: "email", header: "Email", sortable: true, render: row => row.email || "-" },
-    { key: "role", header: "Role", sortable: true, render: row => <Badge variant={row.role === "student" ? "info" : row.role === "teacher" ? "purple" : "warning"}>{row.role}</Badge> },
-    { key: "roll_number", header: "Roll", sortable: true, render: row => row.roll_number || "-" },
-    { key: "is_active", header: "Status", sortable: true, render: row => <Badge variant={row.is_active ? "success" : "danger"}>{statusLabel(row)}</Badge> },
-    { key: "created_at", header: "Joined", sortable: true, render: row => row.created_at || "-" }
+    {
+      key: "email",
+      header: "Email",
+      sortable: true,
+      headerClassName: "min-w-[200px]",
+      cellClassName: "min-w-[200px]",
+      render: row => <span className="block max-w-[200px] truncate">{row.email || "-"}</span>
+    },
+    { key: "role", header: "Role", sortable: true, headerClassName: "w-[100px] min-w-[100px]", cellClassName: "w-[100px] min-w-[100px]", render: row => <Badge variant={row.role === "student" ? "info" : row.role === "teacher" ? "purple" : "warning"}>{row.role}</Badge> },
+    { key: "roll_number", header: "Roll", sortable: true, headerClassName: "w-20 min-w-20", cellClassName: "w-20 min-w-20", render: row => row.roll_number || "-" },
+    { key: "is_active", header: "Status", sortable: true, headerClassName: "w-[100px] min-w-[100px]", cellClassName: "w-[100px] min-w-[100px]", render: row => <Badge variant={row.is_active ? "success" : "danger"}>{statusLabel(row)}</Badge> },
+    { key: "created_at", header: "Joined", sortable: true, headerClassName: "w-[140px] min-w-[140px]", cellClassName: "w-[140px] min-w-[140px]", render: row => formatDateShort(row.created_at) }
   ];
 
   if (loading) return <Card className="p-8 text-center text-text-muted">Loading users...</Card>;
@@ -305,7 +317,7 @@ export default function AdminUserManagement() {
         <div>
           <p className="text-sm font-semibold uppercase text-text-muted">User management</p>
           <h1 className="text-3xl font-bold text-text-primary">Manage Users</h1>
-          <p className="mt-1 text-text-secondary">Search, create, import, deactivate, and export accounts without leaving the React admin shell.</p>
+          <p className="mt-1 text-text-secondary">Manage student and teacher accounts across the platform.</p>
         </div>
         <div className="flex flex-wrap gap-3">
           <Button variant="primary" size="sm" onClick={() => setShowCreateModal(true)}>
@@ -376,25 +388,35 @@ export default function AdminUserManagement() {
         data={filteredUsers}
         rowsPerPageOptions={[10, 20, 50]}
         emptyMessage="No users found"
+        tableClassName="min-w-[1080px]"
         renderRowActions={row => (
           <>
-            <Button variant="ghost" size="sm" onClick={() => openEdit(row)} title="Edit">
-              <Edit2 size={16} /> Edit
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => openSessions(row)} title="View sessions">
-              <Eye size={16} /> Sessions
-            </Button>
-            <Button variant="secondary" size="sm" onClick={() => setResetTarget(row)} title="Reset password">
-              <RotateCcw size={16} /> Reset
-            </Button>
-            <Button
-              variant={row.is_active ? "danger" : "success"}
-              size="sm"
-              onClick={() => setActionTarget({ type: row.is_active ? "deactivate" : "activate", user: row })}
-            >
-              {row.is_active ? <UserX size={16} /> : <ShieldCheck size={16} />}
-              {row.is_active ? "Deactivate" : "Activate"}
-            </Button>
+            <Tooltip label="Edit">
+              <Button variant="ghost" size="sm" className="h-10 w-10 px-0" onClick={() => openEdit(row)} aria-label="Edit user">
+                <Edit2 size={17} />
+              </Button>
+            </Tooltip>
+            <Tooltip label="Sessions">
+              <Button variant="ghost" size="sm" className="h-10 w-10 px-0" onClick={() => openSessions(row)} aria-label="View sessions">
+                <Eye size={17} />
+              </Button>
+            </Tooltip>
+            <Tooltip label="Reset password">
+              <Button variant="ghost" size="sm" className="h-10 w-10 px-0 text-info hover:bg-info/10" onClick={() => setResetTarget(row)} aria-label="Reset password">
+                <RotateCcw size={17} />
+              </Button>
+            </Tooltip>
+            <Tooltip label={row.is_active ? "Deactivate" : "Activate"}>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={row.is_active ? "h-10 w-10 border border-danger/40 px-0 text-danger hover:bg-danger/10" : "h-10 w-10 border border-success/40 px-0 text-success hover:bg-success/10"}
+                onClick={() => setActionTarget({ type: row.is_active ? "deactivate" : "activate", user: row })}
+                aria-label={row.is_active ? "Deactivate user" : "Activate user"}
+              >
+                {row.is_active ? <UserX size={17} /> : <ShieldCheck size={17} />}
+              </Button>
+            </Tooltip>
           </>
         )}
       />
@@ -480,7 +502,7 @@ export default function AdminUserManagement() {
                   {sessionRows.map(row => (
                     <tr key={row.id}>
                       <td className="px-3 py-2 text-text-primary">{row.exam_name || "-"}</td>
-                      <td className="px-3 py-2 text-text-secondary">{row.start_time ? new Date(row.start_time).toLocaleString() : "-"}</td>
+                      <td className="px-3 py-2 text-text-secondary">{formatDate(row.start_time)}</td>
                       <td className="px-3 py-2"><Badge variant={row.status === "active" ? "success" : "secondary"}>{row.status}</Badge></td>
                       <td className="px-3 py-2 text-text-primary">{row.score == null ? "-" : `${row.score}/${row.total_marks}`}</td>
                     </tr>

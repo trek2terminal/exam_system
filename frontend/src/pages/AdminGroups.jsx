@@ -85,7 +85,7 @@ export default function AdminGroups() {
         <div>
           <p className="text-sm font-semibold uppercase text-text-muted">Admin workspace</p>
           <h1 className="text-3xl font-bold text-text-primary">Groups</h1>
-          <p className="mt-1 text-text-secondary">Create batches, add students, remove members, and delete groups through JSON APIs.</p>
+          <p className="mt-1 text-text-secondary">Organise students into batches for easy exam assignment.</p>
         </div>
       </div>
 
@@ -97,7 +97,6 @@ export default function AdminGroups() {
             </span>
             <div>
               <h2 className="text-xl font-semibold text-text-primary">Create Group</h2>
-              <p className="text-sm text-text-secondary">Saved directly through `/api/admin/groups`.</p>
             </div>
           </div>
           <form onSubmit={createGroup} className="space-y-4">

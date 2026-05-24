@@ -26,6 +26,8 @@ import { Badge } from "./components/ui/Badge";
 import { Input } from "./components/ui/Input";
 import { Textarea } from "./components/ui/Textarea";
 import { Select } from "./components/ui/Select";
+import { cn } from "./components/ui/utils";
+import { formatDate } from "./utils/dateFormat";
 
 function formatSeconds(value) {
   const total = Math.max(Number(value || 0), 0);
@@ -33,18 +35,6 @@ function formatSeconds(value) {
   const minutes = Math.floor((total % 3600) / 60);
   const seconds = total % 60;
   return [hours, minutes, seconds].map(part => String(part).padStart(2, "0")).join(":");
-}
-
-function formatDateTime(value) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleString([], {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit"
-  });
 }
 
 function violationTone(count) {
@@ -275,6 +265,7 @@ export default function Proctoring({ mode }) {
   }, [data, selectedExamId]);
 
   const selectedSession = sortedSessions.find(item => item.id === selectedId) || sortedSessions[0] || null;
+  const counts = data?.counts || {};
 
   if (loading) return <div className="loadingScreen">Loading proctoring workspace...</div>;
 
@@ -282,23 +273,27 @@ export default function Proctoring({ mode }) {
     <section className="proctorWorkspace">
       <Card className="reviewHeader">
         <div>
-          <span className="eyebrow">{isAdmin ? "Admin control room" : "Teacher proctoring"}</span>
           <h2>Live Proctoring</h2>
           <p>{isAdmin ? "Monitor active attempts and take audited security actions." : "Read-only view of your active exam attempts."}</p>
         </div>
         <div className="actionRow">
           <span className="proctorUpdated">
             <Radio size={16} />
-            Updated {formatDateTime(data?.updated_at)}
+            Updated {formatDate(data?.updated_at)}
           </span>
           <Badge className={`realtimePill ${realtimeStatus}`} variant={realtimeStatus === "connected" ? "success" : realtimeStatus === "reconnecting" ? "warning" : "secondary"}>
             {realtimeStatus}
           </Badge>
           {isAdmin && (
             <Button
-              variant={soundEnabled ? "primary" : "secondary"}
+              variant="ghost"
               size="sm"
-              className="h-11 w-11 px-0"
+              className={cn(
+                "h-11 w-11 border px-0 transition duration-150",
+                soundEnabled
+                  ? "border-brand-primary bg-brand-primary text-white hover:bg-brand-hover"
+                  : "border-border bg-transparent text-text-muted hover:border-brand-primary/60 hover:text-brand-primary"
+              )}
               onClick={() => setSoundEnabled(current => !current)}
               aria-label={soundEnabled ? "Disable violation sound" : "Enable violation sound"}
             >
@@ -315,10 +310,10 @@ export default function Proctoring({ mode }) {
       {message && <div className="successBanner">{message}</div>}
 
       <section className="studentStats">
-        <Card className="statsCard"><PlayCircle size={18} /><span>Active</span><strong>{data?.counts?.active_sessions || 0}</strong></Card>
-        <Card className="statsCard"><Clock3 size={18} /><span>Waiting</span><strong>{data?.counts?.waiting_sessions || 0}</strong></Card>
-        <Card className="statsCard"><PauseCircle size={18} /><span>Paused</span><strong>{data?.counts?.paused_sessions || 0}</strong></Card>
-        <Card className="statsCard"><ShieldAlert size={18} /><span>Flagged</span><strong>{data?.counts?.flagged_sessions || 0}</strong></Card>
+        <Card className="statsCard border-success/30 bg-success/5"><PlayCircle size={18} className="text-success" /><span>Active</span><strong>{counts.active_sessions || 0}</strong></Card>
+        <Card className="statsCard border-warning/30 bg-warning/5"><Clock3 size={18} className="text-warning" /><span>Waiting</span><strong>{counts.waiting_sessions || 0}</strong></Card>
+        <Card className={cn("statsCard border-orange-300/30 bg-orange-500/5", Number(counts.paused_sessions || 0) > 0 && "border-orange-400/70 bg-orange-500/10")}><PauseCircle size={18} className="text-orange-500" /><span>Paused</span><strong>{counts.paused_sessions || 0}</strong></Card>
+        <Card className={cn("statsCard border-danger/30 bg-danger/5", Number(counts.flagged_sessions || 0) > 0 && "border-danger/70 bg-danger/10")}><ShieldAlert size={18} className="text-danger" /><span>Flagged</span><strong>{counts.flagged_sessions || 0}</strong></Card>
       </section>
 
       <Card className="p-4">
@@ -422,7 +417,7 @@ export default function Proctoring({ mode }) {
               <AlertTriangle size={17} />
               <div>
                 <strong>{item.student_name} | {item.type}</strong>
-                <p>{item.exam_name} | {formatDateTime(item.occurred_at)}{item.detail ? ` | ${item.detail}` : ""}</p>
+                <p>{item.exam_name} | {formatDate(item.occurred_at)}{item.detail ? ` | ${item.detail}` : ""}</p>
               </div>
             </article>
           ))}

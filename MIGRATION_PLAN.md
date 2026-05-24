@@ -660,3 +660,42 @@ Current status:
 - No known lint/build/source-level bugs after this pass.
 - No new package install was required.
 - Runtime browser check is still recommended after uploading a fresh logo and editing login copy from Admin Settings.
+
+## Latest Implementation Batch 28 - 2026-05-24
+
+Completed in this batch:
+- Added a functional Remove Logo action in Admin Settings with loading state, toast feedback, bootstrap refresh, static-file cleanup, and audit logging.
+- Added `DELETE /api/admin/settings/logo` for authenticated logo removal.
+- Tightened sidebar branding: logo display is 36x36 with contain-fit rendering, and failed/missing logos fall back to a single indigo initial circle.
+- Cleaned the sidebar user footer to one row with avatar, name, and one role badge, with logout separated below.
+- Polished the top bar controls into a consistent icon group with divider, 36x36 buttons, and a user pill/dropdown.
+- Added audit `formatted_message` generation in Flask and removed raw `changes` exposure from dashboard/report activity payloads.
+- Rebuilt Admin Dashboard quick actions, stat-card tone differentiation, chart empty state, activity feed formatting, and readable relative times.
+- Updated Admin Reports audit table to use readable activity messages and readable timestamps.
+- Applied dashboard polish to student/teacher workspace titles, readable dates, and locale-formatted number displays.
+- Verified `python -B -m py_compile app/routes/api_routes.py`, `npm.cmd run lint`, and `npm.cmd run build`.
+
+Current status:
+- No known lint/build/source-level bugs after this pass.
+- No new package install was required.
+- Runtime browser QA is still recommended for top-bar/dropdown spacing and uploaded-logo remove behavior.
+
+## Latest Implementation Batch 29 - 2026-05-24
+
+Completed in this batch:
+- Changed React theme initialization so dark mode is the first-visit default; localStorage still wins after the user chooses a theme.
+- Enlarged top-bar search/theme/notification icon targets to 40x40, increased icons to 20px, tightened icon spacing, and added a subtle divider before the user menu.
+- Installed `react-image-crop` and added reusable `CropModal` plus cropped upload flows for Admin Settings logo upload and Account Settings avatar upload.
+- Removed all "No trend data" stat-card labels; trend badges now appear only when real trend values exist.
+- Replaced remaining developer-facing copy in React pages with user-facing wording and removed technical helper text from visible UI.
+- Added shared date helpers in `frontend/src/utils/dateFormat.js` and applied readable date/time formatting across dashboards, reports, history, results, notifications, review, and user session tables.
+- Added a reusable `DateInput` with consistent design-system styling and calendar icon, then applied it to Admin Exams and Admin Reports date filters.
+- Updated proctoring stat cards with distinct active/waiting/paused/flagged colors and changed the sound toggle to a true on/off outline style.
+- Polished Admin Reports: violation CSV export is neutral, audit-log duplicate mini stats were removed, and empty suspicious activity now shows an all-clear state.
+- Fixed Admin Users table minimum widths, horizontal scrolling, readable joined dates, and icon-only row actions with tooltips.
+- Verified `npm.cmd run lint` and `npm.cmd run build`.
+
+Current status:
+- No known lint/build/source-level bugs after this pass.
+- New package installed: `react-image-crop`.
+- Runtime browser QA is still recommended for crop drag behavior, mobile table scrolling, and the proctoring sound toggle in a real browser session.

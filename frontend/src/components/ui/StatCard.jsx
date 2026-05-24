@@ -3,6 +3,16 @@ import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import { Card } from "./Card";
 import { cn } from "./utils";
 
+const iconTones = {
+  default: "bg-brand-primary/10 text-brand-primary",
+  indigo: "bg-brand-primary/10 text-brand-primary",
+  info: "bg-info/10 text-info",
+  success: "bg-success/10 text-success",
+  purple: "bg-purple-500/10 text-purple-500 dark:text-purple-300",
+  warning: "bg-warning/10 text-warning",
+  danger: "bg-danger/10 text-danger"
+};
+
 export function StatCard({ icon: Icon, label, value = 0, trend, variant = "default", className }) {
   const [displayValue, setDisplayValue] = useState(0);
   const numericValue = Number(value || 0);
@@ -24,22 +34,26 @@ export function StatCard({ icon: Icon, label, value = 0, trend, variant = "defau
     };
   }, [numericValue]);
 
+  const hasTrend = trend != null && trend !== "";
   const trendUp = Number(trend || 0) >= 0;
 
   return (
     <Card
       interactive
-      className={cn("grid gap-4 p-5 animate-fade-in-up", className)}
+      className={cn(
+        "grid gap-4 p-5 animate-fade-in-up hover:border-brand-primary/35 hover:shadow-elevated",
+        className
+      )}
       style={{ animationDelay: "var(--stagger-delay, 0ms)" }}
     >
       <div className="flex items-start justify-between gap-4">
         <span className={cn(
           "grid h-11 w-11 place-items-center rounded-lg",
-          variant === "danger" ? "bg-danger/10 text-danger" : "bg-brand-primary/10 text-brand-primary"
+          iconTones[variant] || iconTones.default
         )}>
           {Icon && <Icon size={22} />}
         </span>
-        {trend != null && (
+        {hasTrend && (
           <span className={cn("inline-flex items-center gap-1 rounded-pill px-2 py-1 text-xs font-semibold", trendUp ? "bg-success/10 text-success" : "bg-danger/10 text-danger")}>
             {trendUp ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
             {Math.abs(Number(trend))}%

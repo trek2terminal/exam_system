@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Download, FileBarChart, FileText, ShieldAlert } from "lucide-react";
-import { Badge, Button, Card, EmptyState, Input, Select, Table } from "../components/ui";
+import { AlertTriangle, CheckCircle2, Download, FileBarChart, FileText, ShieldAlert } from "lucide-react";
+import { Badge, Button, Card, DateInput, EmptyState, Select, Table } from "../components/ui";
 import { api } from "../services/api";
 import { notify } from "../components/ui/Toast";
+import { formatDate } from "../utils/dateFormat";
 
 function exportAuditRows(rows) {
-  const header = ["timestamp", "admin_user", "action_type", "resource_type", "resource_id", "ip_address", "status"];
+  const header = ["timestamp", "admin_user", "formatted_message", "resource_type", "resource_id", "ip_address", "status"];
   const body = rows.map(row => header.map(key => `"${String(row[key] ?? "").replaceAll('"', '""')}"`).join(","));
   const blob = new window.Blob([[header.join(","), ...body].join("\n")], { type: "text/csv;charset=utf-8" });
   const url = window.URL.createObjectURL(blob);
@@ -14,6 +15,12 @@ function exportAuditRows(rows) {
   link.download = "audit-log.csv";
   link.click();
   window.URL.revokeObjectURL(url);
+}
+
+function humanize(value) {
+  if (!value) return "-";
+  const text = String(value).replaceAll("_", " ");
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 export default function AdminReports() {
@@ -59,12 +66,11 @@ export default function AdminReports() {
   }, [fromDate, toDate]);
 
   const suspicious = dashboard?.suspicious_students || [];
-  const stats = dashboard?.stats || {};
   const auditColumns = [
-    { key: "timestamp", header: "Timestamp", sortable: true, render: row => row.timestamp ? new Date(row.timestamp).toLocaleString() : "-" },
-    { key: "admin_user", header: "Admin", sortable: true },
-    { key: "action_type", header: "Action", sortable: true },
-    { key: "resource_type", header: "Target", sortable: true, render: row => [row.resource_type, row.resource_id].filter(Boolean).join(" #") || "-" },
+    { key: "timestamp", header: "Timestamp", sortable: true, render: row => formatDate(row.timestamp) },
+    { key: "admin_user", header: "Actor", sortable: true },
+    { key: "formatted_message", header: "Activity", sortable: true, render: row => row.formatted_message || humanize(row.action_type) },
+    { key: "resource_type", header: "Target", sortable: true, render: row => row.resource_type ? `${humanize(row.resource_type)}${row.resource_id ? ` #${row.resource_id}` : ""}` : "-" },
     { key: "ip_address", header: "IP Address", sortable: true, render: row => row.ip_address || "-" },
     { key: "status", header: "Status", sortable: true, render: row => <Badge variant={row.status === "success" ? "success" : row.status === "warning" ? "warning" : "secondary"}>{row.status || "logged"}</Badge> }
   ];
@@ -73,7 +79,6 @@ export default function AdminReports() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="text-sm font-semibold uppercase text-text-muted">Admin workspace</p>
           <h1 className="text-3xl font-bold text-text-primary">Reports</h1>
           <p className="mt-1 text-text-secondary">Violation exports, exam PDFs, audit logs, and suspicious activity review.</p>
         </div>
@@ -87,14 +92,14 @@ export default function AdminReports() {
             </span>
             <div>
               <h2 className="text-xl font-semibold text-text-primary">Violation Log Export</h2>
-              <p className="text-sm text-text-secondary">Download the current violation CSV from Flask.</p>
+              <p className="text-sm text-text-secondary">Download the current violation CSV for the selected date range.</p>
             </div>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Input label="From" type="date" value={fromDate} onChange={event => setFromDate(event.target.value)} />
-            <Input label="To" type="date" value={toDate} onChange={event => setToDate(event.target.value)} />
+            <DateInput label="From" value={fromDate} onChange={event => setFromDate(event.target.value)} />
+            <DateInput label="To" value={toDate} onChange={event => setToDate(event.target.value)} />
           </div>
-          <Button as="a" href={violationExportHref} variant="danger" className="mt-4 w-full">
+          <Button as="a" href={violationExportHref} variant="secondary" className="mt-4 w-full border-slate-300 text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800">
             <Download size={18} /> Export Violation CSV
           </Button>
         </Card>
@@ -112,7 +117,7 @@ export default function AdminReports() {
           {examOptions.length > 0 ? (
             <div className="space-y-4">
               <Select label="Exam" value={selectedExamId} onChange={setSelectedExamId} options={examOptions} />
-              <Button as="a" href={`/admin/exams/${selectedExamId}/report.pdf`} variant="primary" className="w-full">
+              <Button as="a" href={`/api/admin/exams/${selectedExamId}/report.pdf`} variant="primary" className="w-full">
                 <Download size={18} /> Download PDF
               </Button>
             </div>
@@ -127,25 +132,11 @@ export default function AdminReports() {
           <div className="mb-4 flex items-center justify-between gap-4">
             <div>
               <h2 className="text-xl font-semibold text-text-primary">Audit Log Viewer</h2>
-              <p className="text-sm text-text-secondary">Recent admin and system audit events from the JSON audit endpoint.</p>
+              <p className="text-sm text-text-secondary">Recent admin and system activity.</p>
             </div>
             <Button variant="secondary" onClick={() => exportAuditRows(auditRows)} disabled={auditRows.length === 0}>
               <Download size={18} /> Export CSV
             </Button>
-          </div>
-          <div className="mb-4 grid gap-3 sm:grid-cols-3">
-            <div className="rounded-lg border border-border bg-background-base p-4">
-              <span className="text-xs font-semibold uppercase text-text-muted">Users</span>
-              <strong className="mt-1 block text-2xl text-text-primary">{stats.total_users || 0}</strong>
-            </div>
-            <div className="rounded-lg border border-border bg-background-base p-4">
-              <span className="text-xs font-semibold uppercase text-text-muted">Active Exams</span>
-              <strong className="mt-1 block text-2xl text-text-primary">{stats.active_exams || 0}</strong>
-            </div>
-            <div className="rounded-lg border border-border bg-background-base p-4">
-              <span className="text-xs font-semibold uppercase text-text-muted">Violations Today</span>
-              <strong className="mt-1 block text-2xl text-danger">{stats.violations_today || 0}</strong>
-            </div>
           </div>
           {auditRows.length > 0 ? (
             <Table columns={auditColumns} data={auditRows} rowsPerPageOptions={[10, 20, 50]} className="shadow-none" />
@@ -172,9 +163,13 @@ export default function AdminReports() {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-text-muted">No cross-exam suspicious activity returned by the current dashboard API.</p>
+            <div className="rounded-lg border border-success/20 bg-success/5 p-5 text-center">
+              <CheckCircle2 size={34} className="mx-auto mb-3 text-success" />
+              <p className="font-semibold text-text-primary">All clear</p>
+              <p className="mt-1 text-sm text-text-muted">No cross-exam suspicious activity found.</p>
+            </div>
           )}
-          <Button as="a" href="/react/admin/users" variant="secondary" className="mt-4 w-full">
+          <Button as="a" href="/react/admin/users" variant="secondary" className="mt-4 w-full border border-brand-primary/40 bg-transparent text-brand-primary hover:bg-brand-primary/10">
             Review Users
           </Button>
         </Card>

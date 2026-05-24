@@ -3,6 +3,8 @@ export { Badge } from "./Badge";
 export { Button } from "./Button";
 export { Card, CardBody, CardFooter, CardHeader } from "./Card";
 export { ConfirmationDialog } from "./ConfirmationDialog";
+export { CropModal } from "./CropModal";
+export { DateInput } from "./DateInput";
 export { EmptyState } from "./EmptyState";
 export { Input } from "./Input";
 export { Modal } from "./Modal";

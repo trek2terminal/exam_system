@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Archive, BookOpenCheck, CheckCircle2, Eye, FileText, Search, Trash2, XCircle } from "lucide-react";
-import { Badge, Button, Card, ConfirmationDialog, EmptyState, Input, Select, SkeletonCard, StatCard, Table } from "../components/ui";
+import { Badge, Button, Card, ConfirmationDialog, DateInput, EmptyState, Input, Select, SkeletonCard, StatCard, Table } from "../components/ui";
 import { api } from "../services/api";
 import { notify } from "../components/ui/Toast";
+import { formatDateShort } from "../utils/dateFormat";
 
 function statusVariant(status) {
   if (status === "active" || status === "published") return "success";
@@ -131,7 +132,7 @@ export default function AdminExams() {
     { key: "question_count", header: "Questions", sortable: true },
     { key: "enrolled_count", header: "Enrolled", sortable: true },
     { key: "submitted_count", header: "Submitted", sortable: true },
-    { key: "created_at", header: "Created", sortable: true, render: row => row.created_at ? new Date(row.created_at).toLocaleDateString() : "-" }
+    { key: "created_at", header: "Created", sortable: true, render: row => formatDateShort(row.created_at) }
   ];
 
   return (
@@ -140,7 +141,7 @@ export default function AdminExams() {
         <div>
           <p className="text-sm font-semibold uppercase text-text-muted">Admin workspace</p>
           <h1 className="text-3xl font-bold text-text-primary">Exams Overview</h1>
-          <p className="mt-1 text-text-secondary">Cross-teacher exam visibility with safe admin actions routed through Flask.</p>
+          <p className="mt-1 text-text-secondary">View and manage all exams created across the platform.</p>
         </div>
       </div>
 
@@ -174,8 +175,8 @@ export default function AdminExams() {
               ...teachers.map(teacher => ({ value: String(teacher.id), label: teacher.name || teacher.username }))
             ]}
           />
-          <Input label="From" type="date" value={fromDate} onChange={event => setFromDate(event.target.value)} />
-          <Input label="To" type="date" value={toDate} onChange={event => setToDate(event.target.value)} />
+          <DateInput label="From" value={fromDate} onChange={event => setFromDate(event.target.value)} />
+          <DateInput label="To" value={toDate} onChange={event => setToDate(event.target.value)} />
         </div>
       </Card>
 

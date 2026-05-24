@@ -8,8 +8,7 @@ import "./styles.css";
 function applyInitialTheme() {
   try {
     const stored = window.localStorage.getItem("examTheme");
-    const prefersDark = window.matchMedia?.("(prefers-color-scheme: dark)").matches;
-    const theme = stored || (prefersDark ? "dark" : "light");
+    const theme = stored === "light" || stored === "dark" ? stored : "dark";
     const fontSize = window.localStorage.getItem("examFontSize") || "medium";
     const highContrast = window.localStorage.getItem("examHighContrast") === "true";
     document.documentElement.classList.toggle("dark", theme === "dark");
@@ -17,7 +16,8 @@ function applyInitialTheme() {
     document.documentElement.classList.toggle("high-contrast", highContrast);
     document.documentElement.style.colorScheme = theme;
   } catch {
-    document.documentElement.style.colorScheme = "light";
+    document.documentElement.classList.add("dark");
+    document.documentElement.style.colorScheme = "dark";
   }
 }
 

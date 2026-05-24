@@ -3,6 +3,7 @@ import { ChevronDown, ChevronUp, Download, CheckCircle2, XCircle, FileText, Mess
 import Editor from "@monaco-editor/react";
 import { Badge, Button, Card, Skeleton } from "../components/ui";
 import { api } from "../services/api";
+import { formatDateShort } from "../utils/dateFormat";
 
 export default function StudentResults() {
   const [results, setResults] = useState([]);
@@ -106,7 +107,7 @@ function ResultCard({ result, expanded, onToggle, onImageClick }) {
         <div className="flex-1 min-w-0">
           <h3 className="text-lg font-semibold text-text-primary">{result.exam_name}</h3>
           <p className="text-sm text-text-secondary">
-              {result.submitted_at ? `Submitted on ${new Date(result.submitted_at).toLocaleDateString()}` : "Submission date unavailable"}
+              {result.submitted_at ? `Submitted on ${formatDateShort(result.submitted_at)}` : "Submission date unavailable"}
               {result.teacher_name ? ` by ${result.teacher_name}` : ""}
             </p>
         </div>
@@ -142,7 +143,7 @@ function ResultCard({ result, expanded, onToggle, onImageClick }) {
             </div>
             <div>
               <p className="text-xs font-semibold text-text-muted">DURATION</p>
-              <p className="text-lg font-bold text-text-primary">{result.time_taken ? `${result.time_taken} min` : result.published_at ? new Date(result.published_at).toLocaleDateString() : "-"}</p>
+              <p className="text-lg font-bold text-text-primary">{result.time_taken ? `${result.time_taken} min` : formatDateShort(result.published_at)}</p>
             </div>
           </div>
 

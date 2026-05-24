@@ -189,7 +189,7 @@ export default function TeacherQuestionBank() {
         <div>
           <p className="text-sm font-semibold uppercase text-text-muted">Teacher workspace</p>
           <h1 className="text-3xl font-bold text-text-primary">Question Bank</h1>
-          <p className="mt-1 text-text-secondary">Create reusable questions, import them into exams, and keep everything synced through the JSON API.</p>
+          <p className="mt-1 text-text-secondary">Create reusable questions and import them into exams quickly.</p>
         </div>
       </div>
 

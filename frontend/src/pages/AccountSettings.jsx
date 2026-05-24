@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Lock, Save, ShieldCheck, Type, Upload, UserRound } from "lucide-react";
-import { Avatar, Button, Card, Input, Toggle } from "../components/ui";
+import { Avatar, Button, Card, CropModal, Input, Toggle } from "../components/ui";
 import { notify } from "../components/ui/Toast";
 import { roleLabel, userName } from "../components/layout/navigation";
 import { api } from "../services/api";
@@ -38,6 +38,8 @@ export default function AccountSettings({ auth }) {
   const [savingProfile, setSavingProfile] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
+  const [avatarCropSrc, setAvatarCropSrc] = useState("");
+  const [avatarFileName, setAvatarFileName] = useState("profile-avatar.png");
 
   const strength = useMemo(() => passwordStrength(security.next), [security.next]);
 
@@ -51,6 +53,10 @@ export default function AccountSettings({ auth }) {
     document.documentElement.classList.toggle("high-contrast", highContrast);
     window.localStorage.setItem("examHighContrast", String(highContrast));
   }, [highContrast]);
+
+  useEffect(() => () => {
+    if (avatarCropSrc) window.URL.revokeObjectURL(avatarCropSrc);
+  }, [avatarCropSrc]);
 
   const canChangePassword = security.next && security.next === security.confirm && security.current;
 
@@ -75,6 +81,13 @@ export default function AccountSettings({ auth }) {
     }
   };
 
+  const clearAvatarCrop = () => {
+    setAvatarCropSrc(current => {
+      if (current) window.URL.revokeObjectURL(current);
+      return "";
+    });
+  };
+
   const uploadAvatar = async event => {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -92,8 +105,16 @@ export default function AccountSettings({ auth }) {
       return;
     }
 
+    setAvatarFileName(file.name.replace(/\.[^.]+$/, ".png") || "profile-avatar.png");
+    setAvatarCropSrc(current => {
+      if (current) window.URL.revokeObjectURL(current);
+      return window.URL.createObjectURL(file);
+    });
+  };
+
+  const uploadCroppedAvatar = async blob => {
     const formData = new window.FormData();
-    formData.append("avatar", file);
+    formData.append("avatar", blob, avatarFileName);
     setUploadingAvatar(true);
     try {
       const { data } = await api.post("/account/avatar", formData, {
@@ -102,6 +123,7 @@ export default function AccountSettings({ auth }) {
       setProfile(current => ({ ...current, avatar_url: data.user?.profile_picture || current.avatar_url }));
       await loadBootstrap();
       notify.success(data.message || "Profile image uploaded");
+      clearAvatarCrop();
     } catch (error) {
       notify.error(error.message || "Could not upload profile image");
     } finally {
@@ -185,7 +207,7 @@ export default function AccountSettings({ auth }) {
             </span>
             <div>
               <h2 className="text-xl font-semibold text-text-primary">Security</h2>
-              <p className="text-sm text-text-secondary">Check password strength before using the protected Flask password forms.</p>
+              <p className="text-sm text-text-secondary">Use a strong password to keep your account secure.</p>
             </div>
           </div>
 
@@ -251,6 +273,12 @@ export default function AccountSettings({ auth }) {
           </div>
         </Card>
       )}
+      <CropModal
+        imageSrc={avatarCropSrc}
+        aspectRatio={1}
+        onConfirm={uploadCroppedAvatar}
+        onCancel={clearAvatarCrop}
+      />
     </div>
   );
 }
