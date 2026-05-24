@@ -82,6 +82,7 @@ export default function ExamEditor() {
       formData.append("attempt_limit", String(exam.attempt_limit ?? 1));
       formData.append("random_question_count", String(exam.random_question_count || 0));
       if (exam.shuffle_questions) formData.append("shuffle_questions", "on");
+      if (exam.shuffle_options) formData.append("shuffle_options", "on");
       if (exam.start_time) formData.append("start_time", exam.start_time);
       if (exam.end_time) formData.append("end_time", exam.end_time);
       if (exam.access_code) formData.append("access_code", exam.access_code);
@@ -100,6 +101,7 @@ export default function ExamEditor() {
         formData.append("code_snippet", question.code_snippet || "");
         formData.append("code_language", question.code_language || "python");
         formData.append("time_limit_seconds", String(question.time_limit_seconds || 0));
+        formData.append("execution_time_limit_seconds", String(question.execution_time_limit_seconds || 10));
         (question.image_files || []).forEach(file => {
           formData.append(`question_images_${index}`, file);
         });
@@ -130,7 +132,10 @@ export default function ExamEditor() {
   const addQuestion = () => {
     setExam(prev => ({
       ...prev,
-      questions: [...(prev.questions || []), { id: Date.now(), text: "", type: "mcq", options: [], max_marks: 1 }]
+      questions: [
+        ...(prev.questions || []),
+        { id: Date.now(), text: "", type: "mcq", options: [], max_marks: 1, time_limit_seconds: 0, execution_time_limit_seconds: 10 }
+      ]
     }));
   };
 
@@ -482,7 +487,7 @@ function QuestionEditor({ question, onUpdate, onDelete }) {
             min="1"
             value={question?.execution_time_limit_seconds || 10}
             onChange={event => onUpdate("execution_time_limit_seconds", Number(event.target.value || 10))}
-            helperText="Seconds. Stored in editor state; backend currently uses server config."
+            helperText="Seconds. Used when students run code for this question."
           />
         )}
       </div>
@@ -900,7 +905,7 @@ function SettingsStep({ exam, onUpdate }) {
             onChange={checked => onUpdate("shuffle_options", checked)}
             label="Shuffle MCQ Options"
           />
-          <p className="mt-2 text-xs text-text-muted">Kept in editor state; backend randomizes question order now and can accept option shuffle later.</p>
+          <p className="mt-2 text-xs text-text-muted">Answer choices are shuffled per attempt and remain stable throughout the session.</p>
         </div>
         <div className="rounded-lg border border-border bg-background-base p-4">
           <Toggle

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Bell, DatabaseBackup, Download, Megaphone, Save, Settings2, ShieldCheck, Upload, UserPlus, X } from "lucide-react";
-import { Button, Card, Input, Select, Textarea, Toggle } from "../components/ui";
+import { Button, Card, Input, Textarea, Toggle } from "../components/ui";
 import { notify } from "../components/ui/Toast";
 import { api } from "../services/api";
 import { useAppStore } from "../store/appStore";
@@ -62,11 +62,15 @@ export default function AdminSettings() {
         }));
         setRegistration(current => ({
           ...current,
-          self_registration_enabled: Boolean(settings.student_self_registration)
+          self_registration_enabled: Boolean(settings.student_self_registration),
+          registration_code_required: Boolean(settings.registration_code_required),
+          registration_code: settings.registration_code || ""
         }));
         setSecurity(current => ({
           ...current,
-          violation_threshold: Number(settings.max_violations_before_alert || current.violation_threshold)
+          violation_threshold: Number(settings.max_violations_before_alert || current.violation_threshold),
+          admin_lockout_count: Number(settings.admin_lockout_count || current.admin_lockout_count),
+          admin_idle_timeout: Number(settings.admin_idle_timeout_minutes || current.admin_idle_timeout)
         }));
         setAnnouncement({
           enabled: Boolean(settings.announcement_message),
@@ -111,7 +115,11 @@ export default function AdminSettings() {
         announcement_message: announcement.enabled ? announcement.message : "",
         quote_pool: general.quote_pool.join("\n"),
         max_violations_before_alert: security.violation_threshold,
-        student_self_registration: registration.self_registration_enabled
+        student_self_registration: registration.self_registration_enabled,
+        registration_code_required: registration.registration_code_required,
+        registration_code: registration.registration_code,
+        admin_lockout_count: security.admin_lockout_count,
+        admin_idle_timeout_minutes: security.admin_idle_timeout
       });
       notify.success("Settings saved successfully");
       setHasChanges(false);
@@ -365,8 +373,8 @@ function SettingsSection({
         <div className="space-y-5">
           <h2 className="text-xl font-semibold text-text-primary">Security</h2>
           <Input label="Violation Threshold" type="number" min="1" value={security.violation_threshold} onChange={event => onSecurityChange("violation_threshold", Number(event.target.value || 1))} />
-          <Input label="Admin Lockout Count" type="number" min="1" value={security.admin_lockout_count} onChange={event => onSecurityChange("admin_lockout_count", Number(event.target.value || 1))} helperText="This is runtime/env governed in the current Flask app." />
-          <Input label="Admin Idle Timeout" type="number" min="5" value={security.admin_idle_timeout} onChange={event => onSecurityChange("admin_idle_timeout", Number(event.target.value || 5))} helperText="Minutes. This is runtime/env governed in the current Flask app." />
+          <Input label="Admin Lockout Count" type="number" min="1" max="10" value={security.admin_lockout_count} onChange={event => onSecurityChange("admin_lockout_count", Number(event.target.value || 1))} helperText="Failed admin attempts before a 30-minute lockout." />
+          <Input label="Admin Idle Timeout" type="number" min="5" max="1440" value={security.admin_idle_timeout} onChange={event => onSecurityChange("admin_idle_timeout", Number(event.target.value || 5))} helperText="Minutes before an inactive admin session expires." />
         </div>
       </Card>
     );
@@ -408,13 +416,6 @@ function SettingsSection({
               <Download size={16} /> Download Backup
             </Button>
           </form>
-          <Select
-            label="Backup Frequency"
-            value="manual"
-            options={[{ value: "manual", label: "Manual" }]}
-            disabled
-            helperText="Scheduled backup frequency is not exposed by the current Flask settings endpoint."
-          />
         </div>
       </Card>
     );
@@ -424,7 +425,7 @@ function SettingsSection({
     <Card className="p-6">
       <div className="space-y-4">
         <h2 className="text-xl font-semibold text-text-primary">Notifications</h2>
-        <p className="text-sm text-text-secondary">In-app notification records are enabled. Email transport settings are not exposed by the current Flask settings endpoint.</p>
+        <p className="text-sm text-text-secondary">In-app notifications are active for account, exam, result, and proctoring events.</p>
       </div>
     </Card>
   );

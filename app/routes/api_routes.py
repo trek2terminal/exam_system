@@ -1,5 +1,6 @@
 import json
 import os
+import random
 import secrets
 import shutil
 import subprocess
@@ -47,7 +48,11 @@ def _settings_payload(settings):
         "welcome_message": settings.welcome_message,
         "announcement_message": getattr(settings, "announcement_message", None),
         "student_self_registration": settings.student_self_registration,
+        "registration_code_required": bool(getattr(settings, "registration_code_required", False)),
+        "registration_code": getattr(settings, "registration_code", None),
         "max_violations_before_alert": settings.max_violations_before_alert,
+        "admin_lockout_count": getattr(settings, "admin_lockout_count", 3),
+        "admin_idle_timeout_minutes": getattr(settings, "admin_idle_timeout_minutes", 120),
     }
 
 
@@ -172,6 +177,21 @@ def _valid_username(username):
     return 4 <= len(username) <= 50 and all(char in allowed for char in username)
 
 
+def _admin_lockout_limit():
+    try:
+        return min(max(int(getattr(SettingsService.get_settings(), "admin_lockout_count", 3) or 3), 1), 10)
+    except Exception:
+        return 3
+
+
+def _admin_idle_timeout_seconds():
+    try:
+        minutes = int(getattr(SettingsService.get_settings(), "admin_idle_timeout_minutes", 120) or 120)
+    except Exception:
+        minutes = 120
+    return min(max(minutes, 5), 24 * 60) * 60
+
+
 def _row_payload_value(row, *names):
     lowered = {str(key).strip().lower(): value for key, value in (row or {}).items()}
     for name in names:
@@ -249,9 +269,24 @@ def _question_bank_payload(item):
         "code_snippet": item.code_snippet,
         "code_language": item.code_language or "python",
         "time_limit_seconds": item.time_limit_seconds,
+        "execution_time_limit_seconds": item.execution_time_limit_seconds,
         "created_at": _iso_datetime(item.created_at),
         "updated_at": _iso_datetime(item.updated_at),
     }
+
+
+def _question_options_for_attempt(question, student_session=None):
+    options = question.options_as_list()
+    if (
+        student_session
+        and question.question_type == "mcq"
+        and getattr(student_session.exam_set, "shuffle_options", False)
+        and len(options) > 1
+    ):
+        shuffled_options = list(options)
+        random.Random(f"{student_session.session_code}:{question.id}:options").shuffle(shuffled_options)
+        return shuffled_options
+    return options
 
 
 def _group_payload(group):
@@ -423,7 +458,7 @@ def _exam_editor_payload(exam):
         "random_question_count": exam.random_question_count,
         "randomize_delivery": bool(exam.random_question_count),
         "shuffle_questions": bool(exam.shuffle_questions),
-        "shuffle_options": False,
+        "shuffle_options": bool(exam.shuffle_options),
         "access_mode": "access_code" if exam.access_code else "open",
         "access_code": exam.access_code,
         "start_time": exam.start_time.strftime("%Y-%m-%dT%H:%M") if exam.start_time else "",
@@ -443,6 +478,7 @@ def _exam_editor_payload(exam):
                 "has_code_snippet": bool(question.code_snippet),
                 "code_language": question.code_language or "python",
                 "time_limit_seconds": question.time_limit_seconds or 0,
+                "execution_time_limit_seconds": question.execution_time_limit_seconds or 10,
             }
             for question in questions
         ],
@@ -823,7 +859,7 @@ def _require_admin_api():
         session.clear()
         return None, _role_error("This admin account is active in another browser. Please log in again here.", 401)
 
-    idle_timeout = int(current_app.config.get("ADMIN_IDLE_TIMEOUT_SECONDS", 2 * 60 * 60))
+    idle_timeout = _admin_idle_timeout_seconds()
     last_activity = session.get("admin_last_activity")
     if last_activity:
         try:
@@ -1057,11 +1093,12 @@ def react_admin_login_api():
         )
         return jsonify({"ok": False, "message": message, **_admin_lockout_payload(admin)}), 423
 
+    lockout_limit = _admin_lockout_limit()
     if not admin.check_password(password):
         admin.failed_login_attempts += 1
-        if admin.failed_login_attempts >= 3:
-            admin.locked_until = datetime.utcnow() + timedelta(days=3650)
-            message = "Admin account is locked. Unlock it from the server CLI."
+        if admin.failed_login_attempts >= lockout_limit:
+            admin.locked_until = datetime.utcnow() + timedelta(minutes=30)
+            message = "Account locked. Try again in 30 minutes."
         else:
             message = "Invalid credentials."
         db.session.commit()
@@ -1078,9 +1115,9 @@ def react_admin_login_api():
             "ok": False,
             "message": message,
             "failed_attempts": admin.failed_login_attempts,
-            "attempts_remaining": max(3 - admin.failed_login_attempts, 0),
+            "attempts_remaining": max(lockout_limit - admin.failed_login_attempts, 0),
             **_admin_lockout_payload(admin),
-        }), 423 if admin.failed_login_attempts >= 3 else 401
+        }), 423 if admin.failed_login_attempts >= lockout_limit else 401
 
     admin.reset_failed_attempts()
     auth_session_token = admin.issue_active_session_token()
@@ -1262,9 +1299,14 @@ def react_register_api():
     roll_no = (payload.get("roll_no") or payload.get("roll_number") or "").strip().upper()
     password = (payload.get("password") or "").strip()
     confirm_password = (payload.get("confirm_password") or "").strip()
+    registration_code = (payload.get("registration_code") or "").strip()
 
     if not name or not username or not roll_no or not password or not confirm_password:
         return jsonify({"ok": False, "message": "Name, username, roll number, password, and confirmation are required."}), 400
+    if getattr(settings, "registration_code_required", False):
+        expected_code = (getattr(settings, "registration_code", None) or "").strip()
+        if not expected_code or registration_code != expected_code:
+            return jsonify({"ok": False, "message": "A valid registration code is required."}), 403
     if len(username) < 4:
         return jsonify({"ok": False, "message": "Username must be at least 4 characters."}), 400
     if password != confirm_password:
@@ -1362,6 +1404,60 @@ def account_profile_api():
         user_agent=request.headers.get("User-Agent"),
     ).save()
     return jsonify({"ok": True, "message": "Profile updated.", "user": _user_payload(user)})
+
+
+@api_bp.route("/account/avatar", methods=["POST"])
+@rate_limit("admin_action")
+def account_avatar_api():
+    user, error_response = _current_session_user()
+    if error_response:
+        return error_response
+
+    upload = request.files.get("avatar")
+    if not upload or not upload.filename:
+        return jsonify({"ok": False, "message": "Choose a profile image to upload."}), 400
+
+    max_bytes = 2 * 1024 * 1024
+    if request.content_length and request.content_length > max_bytes + 8192:
+        return jsonify({"ok": False, "message": "Profile image must be 2 MB or smaller."}), 400
+
+    filename = secure_filename(upload.filename)
+    extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    allowed_extensions = {"png", "jpg", "jpeg", "webp", "gif"}
+    if extension not in allowed_extensions:
+        return jsonify({"ok": False, "message": "Profile image must be PNG, JPG, WEBP, or GIF."}), 400
+
+    upload_root = os.path.join(current_app.static_folder, "uploads", "profiles")
+    os.makedirs(upload_root, exist_ok=True)
+    stored_filename = f"user_{user.id}_{secrets.token_hex(8)}.{extension}"
+    stored_path = os.path.join(upload_root, stored_filename)
+    upload.save(stored_path)
+
+    old_picture = user.profile_picture
+    user.profile_picture = f"uploads/profiles/{stored_filename}"
+    db.session.add(
+        AuditLog(
+            user_id=user.id,
+            action="upload_account_avatar",
+            resource_type="user",
+            resource_id=user.id,
+            status="success",
+            ip_address=get_client_ip(),
+            user_agent=request.headers.get("User-Agent"),
+        )
+    )
+    db.session.commit()
+
+    if old_picture and old_picture.startswith("uploads/profiles/"):
+        old_abs_path = os.path.abspath(os.path.join(current_app.static_folder, old_picture))
+        upload_abs_root = os.path.abspath(upload_root)
+        if old_abs_path.startswith(upload_abs_root) and os.path.exists(old_abs_path):
+            try:
+                os.remove(old_abs_path)
+            except OSError:
+                current_app.logger.warning("Could not remove old profile image %s", old_abs_path)
+
+    return jsonify({"ok": True, "message": "Profile image uploaded.", "user": _user_payload(user)})
 
 
 @api_bp.route("/account/password", methods=["POST"])
@@ -1901,6 +1997,7 @@ def _json_exam_question_rows(payload):
                 "code_snippet": (question.get("code_snippet") or "").strip(),
                 "code_language": (question.get("code_language") or "").strip() or None,
                 "time_limit_seconds": max(int(question.get("time_limit_seconds") or 0), 0),
+                "execution_time_limit_seconds": min(max(int(question.get("execution_time_limit_seconds") or 10), 1), 60),
             }
         )
     return rows
@@ -1918,6 +2015,7 @@ def _multipart_exam_question_rows():
     q_code_snippets = request.form.getlist("code_snippet")
     q_code_languages = request.form.getlist("code_language")
     q_time_limits = request.form.getlist("time_limit_seconds")
+    q_execution_time_limits = request.form.getlist("execution_time_limit_seconds")
 
     rows = []
     for index, raw_text in enumerate(q_texts):
@@ -1947,6 +2045,14 @@ def _multipart_exam_question_rows():
             time_limit_seconds = int(q_time_limits[index]) if index < len(q_time_limits) and q_time_limits[index].strip() else 0
         except ValueError:
             time_limit_seconds = 0
+        try:
+            execution_time_limit_seconds = (
+                int(q_execution_time_limits[index])
+                if index < len(q_execution_time_limits) and q_execution_time_limits[index].strip()
+                else 10
+            )
+        except ValueError:
+            execution_time_limit_seconds = 10
         rows.append(
             {
                 "number": number,
@@ -1960,6 +2066,7 @@ def _multipart_exam_question_rows():
                 "code_snippet": (q_code_snippets[index] if index < len(q_code_snippets) else "").strip(),
                 "code_language": (q_code_languages[index] if index < len(q_code_languages) else "").strip() or None,
                 "time_limit_seconds": max(time_limit_seconds, 0),
+                "execution_time_limit_seconds": min(max(execution_time_limit_seconds, 1), 60),
             }
         )
     return rows
@@ -1980,6 +2087,7 @@ def _save_teacher_exam_from_request(teacher, exam=None):
     start_time = _parse_datetime_local_value(request.form.get("start_time") if is_multipart else payload.get("start_time"))
     end_time = _parse_datetime_local_value(request.form.get("end_time") if is_multipart else payload.get("end_time"))
     shuffle_questions = request.form.get("shuffle_questions") == "on" if is_multipart else bool(payload.get("shuffle_questions"))
+    shuffle_options = request.form.get("shuffle_options") == "on" if is_multipart else bool(payload.get("shuffle_options"))
     attempt_limit = _parse_int_field(request.form if is_multipart else payload, "attempt_limit")
     random_question_count = _parse_int_field(request.form if is_multipart else payload, "random_question_count")
 
@@ -2014,6 +2122,7 @@ def _save_teacher_exam_from_request(teacher, exam=None):
         exam.start_time = start_time
         exam.end_time = end_time
         exam.shuffle_questions = shuffle_questions
+        exam.shuffle_options = shuffle_options
         exam.random_question_count = max(random_question_count or 0, 0)
         exam.attempt_limit = max(attempt_limit if attempt_limit is not None else 1, 0)
         if access_code:
@@ -2031,6 +2140,7 @@ def _save_teacher_exam_from_request(teacher, exam=None):
             start_time=start_time,
             end_time=end_time,
             shuffle_questions=shuffle_questions,
+            shuffle_options=shuffle_options,
             random_question_count=max(random_question_count or 0, 0),
             attempt_limit=max(attempt_limit if attempt_limit is not None else 1, 0),
         )
@@ -2049,6 +2159,7 @@ def _save_teacher_exam_from_request(teacher, exam=None):
             code_snippet=row["code_snippet"],
             code_language=row["code_language"],
             time_limit_seconds=row["time_limit_seconds"],
+            execution_time_limit_seconds=row["execution_time_limit_seconds"],
         )
         question.set_options(row["options"])
         question.set_image_paths(row["image_paths"])
@@ -2495,6 +2606,8 @@ def admin_settings_api():
         return error_response
 
     payload = _get_json_payload()
+    if payload.get("registration_code_required") and not (payload.get("registration_code") or "").strip():
+        return jsonify({"ok": False, "message": "Enter a registration code before requiring one."}), 400
     settings_payload = {
         "platform_name": payload.get("platform_name"),
         "welcome_message": payload.get("welcome_message"),
@@ -2502,6 +2615,10 @@ def admin_settings_api():
         "quote_pool": payload.get("quote_pool"),
         "max_violations_before_alert": payload.get("max_violations_before_alert"),
         "student_self_registration": "on" if payload.get("student_self_registration") else "",
+        "registration_code_required": "on" if payload.get("registration_code_required") else "",
+        "registration_code": payload.get("registration_code"),
+        "admin_lockout_count": payload.get("admin_lockout_count"),
+        "admin_idle_timeout_minutes": payload.get("admin_idle_timeout_minutes"),
     }
     settings = SettingsService.update_settings(settings_payload, updated_by=admin.id)
     AuditLog(
@@ -3008,6 +3125,133 @@ def admin_exam_status_api(exam_id):
     return jsonify({"ok": True, "message": message, "exam": _admin_exam_payload(exam)})
 
 
+@api_bp.route("/admin/exams/<int:exam_id>", methods=["DELETE"])
+@rate_limit("admin_action")
+def admin_exam_delete_api(exam_id):
+    admin, error_response = _require_admin_api()
+    if error_response:
+        return error_response
+
+    payload = _get_json_payload()
+    if payload.get("confirm_word") != "DELETE":
+        return jsonify({"ok": False, "message": "Type DELETE to delete this exam."}), 400
+
+    exam = ExamSet.query.get_or_404(exam_id)
+    exam_name = exam.exam_name
+    session_ids = [item.id for item in StudentSession.query.filter_by(exam_set_id=exam.id).all()]
+    result_ids = []
+    if session_ids:
+        result_ids = [item.id for item in Result.query.filter(Result.session_id.in_(session_ids)).all()]
+        if result_ids:
+            QuestionMark.query.filter(QuestionMark.result_id.in_(result_ids)).delete(synchronize_session=False)
+            Result.query.filter(Result.id.in_(result_ids)).delete(synchronize_session=False)
+        Answer.query.filter(Answer.session_id.in_(session_ids)).delete(synchronize_session=False)
+        ViolationLog.query.filter(ViolationLog.session_id.in_(session_ids)).delete(synchronize_session=False)
+        Notification.query.filter(Notification.session_id.in_(session_ids)).delete(synchronize_session=False)
+        StudentSession.query.filter(StudentSession.id.in_(session_ids)).delete(synchronize_session=False)
+
+    ExamEnrollment.query.filter_by(exam_set_id=exam.id).delete(synchronize_session=False)
+    Question.query.filter_by(exam_set_id=exam.id).delete(synchronize_session=False)
+    db.session.delete(exam)
+    db.session.add(
+        AuditLog(
+            user_id=admin.id,
+            action="delete_exam_api",
+            resource_type="exam",
+            resource_id=exam_id,
+            changes=f"Deleted exam {exam_name}; sessions={len(session_ids)}; results={len(result_ids)}",
+            status="success",
+            ip_address=get_client_ip(),
+            user_agent=request.headers.get("User-Agent"),
+        )
+    )
+    db.session.commit()
+    return jsonify({"ok": True, "message": f"Exam '{exam_name}' deleted."})
+
+
+@api_bp.route("/admin/exams/<int:exam_id>/report.pdf")
+def admin_exam_report_pdf_api(exam_id):
+    admin, error_response = _require_admin_api()
+    if error_response:
+        return error_response
+
+    exam = ExamSet.query.get_or_404(exam_id)
+    sessions = (
+        StudentSession.query.filter_by(exam_set_id=exam.id)
+        .order_by(StudentSession.created_at.asc())
+        .all()
+    )
+    questions = Question.query.filter_by(exam_set_id=exam.id).order_by(Question.question_number.asc()).all()
+
+    import io
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    from reportlab.lib.utils import simpleSplit
+    from reportlab.pdfgen import canvas
+
+    buffer = io.BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+    left = 16 * mm
+    y = height - 18 * mm
+    usable_width = width - (2 * left)
+
+    def page_break(required=20 * mm):
+        nonlocal y
+        if y < required:
+            pdf.showPage()
+            y = height - 18 * mm
+
+    def line(text, font="Helvetica", size=10, leading=6 * mm):
+        nonlocal y
+        pdf.setFont(font, size)
+        for part in simpleSplit(str(text or "-"), font, size, usable_width):
+            page_break()
+            pdf.drawString(left, y, part)
+            y -= leading
+
+    pdf.setFont("Helvetica-Bold", 17)
+    pdf.drawString(left, y, f"Exam Report: {exam.exam_name}")
+    y -= 10 * mm
+    line(f"Subject: {exam.subject} | Set: {exam.set_code} | Status: {exam.status}", size=10)
+    line(f"Duration: {exam.duration_minutes} minutes | Total Marks: {exam.total_marks} | Access Code: {exam.access_code}", size=10)
+    if exam.start_time or exam.end_time:
+        line(f"Window: {format_datetime(exam.start_time) if exam.start_time else 'Open'} to {format_datetime(exam.end_time) if exam.end_time else 'No end'}", size=10)
+    y -= 4 * mm
+
+    total_sessions = len(sessions)
+    submitted = sum(1 for item in sessions if item.status in LOCKED_SESSION_STATUSES)
+    active = sum(1 for item in sessions if item.status == "active")
+    violations = sum(item.focus_violations for item in sessions)
+    line("Summary", font="Helvetica-Bold", size=13)
+    line(f"Sessions: {total_sessions} | Submitted/Locked: {submitted} | Active: {active} | Total Violations: {violations}")
+    y -= 4 * mm
+
+    line("Questions", font="Helvetica-Bold", size=13)
+    for question in questions:
+        page_break(35 * mm)
+        line(f"Q{question.question_number}. [{question.question_type.upper()}] {question.marks} marks", font="Helvetica-Bold")
+        line(question.question_text, size=9, leading=5 * mm)
+    y -= 4 * mm
+
+    line("Student Sessions", font="Helvetica-Bold", size=13)
+    for student_session in sessions:
+        result = student_session.result
+        score = f"{result.total_marks_obtained}/{result.total_marks} ({result.percentage}%)" if result else "Not evaluated"
+        page_break(20 * mm)
+        line(
+            f"{student_session.student_name} | Roll {student_session.roll_no} | {student_session.status} | Score: {score} | Violations: {student_session.focus_violations}",
+            size=9,
+            leading=5 * mm,
+        )
+
+    pdf.showPage()
+    pdf.save()
+    buffer.seek(0)
+    safe_code = "".join(ch if ch.isalnum() else "_" for ch in (exam.set_code or str(exam.id)))
+    return send_file(buffer, as_attachment=True, download_name=f"exam_report_{safe_code}.pdf", mimetype="application/pdf")
+
+
 @api_bp.route("/admin/audit-log")
 def admin_audit_log_api():
     admin, error_response = _require_admin_api()
@@ -3182,6 +3426,10 @@ def teacher_question_bank_api():
             code_snippet=(payload.get("code_snippet") or "").strip(),
             code_language=(payload.get("code_language") or "").strip() or None,
             time_limit_seconds=max(_parse_int_field(payload, "time_limit_seconds") or 0, 0),
+            execution_time_limit_seconds=min(
+                max(_parse_int_field(payload, "execution_time_limit_seconds") or 10, 1),
+                60,
+            ),
         )
         item.set_options(options)
         item.set_image_paths(image_paths)
@@ -3221,6 +3469,11 @@ def teacher_question_bank_item_api(item_id):
             setattr(item, field, (payload.get(field) or "").strip() or None)
     if "time_limit_seconds" in payload:
         item.time_limit_seconds = max(_parse_int_field(payload, "time_limit_seconds") or 0, 0)
+    if "execution_time_limit_seconds" in payload:
+        item.execution_time_limit_seconds = min(
+            max(_parse_int_field(payload, "execution_time_limit_seconds") or 10, 1),
+            60,
+        )
     db.session.commit()
     return jsonify({"ok": True, "item": _question_bank_payload(item)})
 
@@ -3275,6 +3528,7 @@ def teacher_import_question_bank_api(exam_id):
             code_snippet=item.code_snippet,
             code_language=item.code_language,
             time_limit_seconds=item.time_limit_seconds,
+            execution_time_limit_seconds=item.execution_time_limit_seconds,
         )
         question.set_options(item.options_as_list())
         question.set_image_paths(item.image_paths_as_list())
@@ -3788,11 +4042,12 @@ def exam_state(session_code):
                 "question_text": question.question_text,
                 "question_type": question.question_type,
                 "marks": question.marks,
-                "options": question.options_as_list(),
+                "options": _question_options_for_attempt(question, student_session),
                 "image_urls": [url_for("static", filename=path) for path in question.image_paths_as_list()],
                 "code_snippet": question.code_snippet,
                 "code_language": question.code_language or "python",
                 "time_limit_seconds": question.time_limit_seconds or 0,
+                "execution_time_limit_seconds": question.execution_time_limit_seconds or 10,
                 "answer": {
                     "answer_text": answer.answer_text if answer else "",
                     "code_output": answer.code_output if answer else "",
@@ -4000,10 +4255,17 @@ def execute_code(session_code):
     if answer.question_time_expired:
         return jsonify({"ok": False, "message": "This question's time limit has expired."}), 403
 
+    default_timeout = current_app.config.get("CODE_EXECUTION_TIMEOUT_SECONDS", 10)
+    try:
+        timeout_seconds = int(question.execution_time_limit_seconds or default_timeout or 10)
+    except (TypeError, ValueError):
+        timeout_seconds = int(default_timeout or 10)
+    timeout_seconds = min(max(timeout_seconds, 1), 60)
+
     result = CodeExecutionService.run_python(
         code=code,
         stdin_text=stdin_text,
-        timeout_seconds=current_app.config.get("CODE_EXECUTION_TIMEOUT_SECONDS", 10),
+        timeout_seconds=timeout_seconds,
         max_chars=current_app.config.get("CODE_EXECUTION_MAX_CHARS", 12000),
         stdin_max_chars=current_app.config.get("CODE_EXECUTION_STDIN_MAX_CHARS", 4000),
         output_max_chars=current_app.config.get("CODE_EXECUTION_OUTPUT_MAX_CHARS", 8000),

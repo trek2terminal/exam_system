@@ -203,6 +203,39 @@ class MigrationService:
         MigrationService._add_column_if_missing("platform_settings", "logo_path", "VARCHAR(255)")
 
     @staticmethod
+    def _migration_admin_settings_controls():
+        MigrationService._add_column_if_missing(
+            "platform_settings",
+            "registration_code_required",
+            "BOOLEAN NOT NULL DEFAULT 0",
+        )
+        MigrationService._add_column_if_missing("platform_settings", "registration_code", "VARCHAR(80)")
+        MigrationService._add_column_if_missing(
+            "platform_settings",
+            "admin_lockout_count",
+            "INTEGER NOT NULL DEFAULT 3",
+        )
+        MigrationService._add_column_if_missing(
+            "platform_settings",
+            "admin_idle_timeout_minutes",
+            "INTEGER NOT NULL DEFAULT 120",
+        )
+
+    @staticmethod
+    def _migration_exam_shuffle_options_and_code_timeout():
+        MigrationService._add_column_if_missing(
+            "exam_sets",
+            "shuffle_options",
+            "BOOLEAN NOT NULL DEFAULT 0",
+        )
+        for table_name in ("questions", "question_bank_items"):
+            MigrationService._add_column_if_missing(
+                table_name,
+                "execution_time_limit_seconds",
+                "INTEGER NOT NULL DEFAULT 10",
+            )
+
+    @staticmethod
     def _migration_platform_settings_seed():
         if PlatformSettings.query.first():
             return
@@ -305,6 +338,16 @@ class MigrationService:
             "Add uploaded platform logo path to settings",
             _migration_platform_logo_path.__func__,
         ),
+        (
+            "20260524_017_admin_settings_controls",
+            "Add registration code and admin security controls",
+            _migration_admin_settings_controls.__func__,
+        ),
+        (
+            "20260524_018_exam_shuffle_options_code_timeout",
+            "Add MCQ option shuffle and per-code-question execution timeout",
+            _migration_exam_shuffle_options_and_code_timeout.__func__,
+        ),
     ]
 
     @staticmethod
@@ -394,6 +437,19 @@ class MigrationService:
             )
         if version == "20260524_016_platform_logo_path":
             return MigrationService._has_column("platform_settings", "logo_path")
+        if version == "20260524_017_admin_settings_controls":
+            return (
+                MigrationService._has_column("platform_settings", "registration_code_required")
+                and MigrationService._has_column("platform_settings", "registration_code")
+                and MigrationService._has_column("platform_settings", "admin_lockout_count")
+                and MigrationService._has_column("platform_settings", "admin_idle_timeout_minutes")
+            )
+        if version == "20260524_018_exam_shuffle_options_code_timeout":
+            return (
+                MigrationService._has_column("exam_sets", "shuffle_options")
+                and MigrationService._has_column("questions", "execution_time_limit_seconds")
+                and MigrationService._has_column("question_bank_items", "execution_time_limit_seconds")
+            )
         return False
 
     @staticmethod

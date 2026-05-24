@@ -73,6 +73,13 @@ def _lockout_payload(user):
     }
 
 
+def _admin_lockout_limit():
+    try:
+        return min(max(int(getattr(SettingsService.get_settings(), "admin_lockout_count", 3) or 3), 1), 10)
+    except Exception:
+        return 3
+
+
 @auth_bp.route("/")
 def root():
     """Redirect to appropriate login based on user role"""
@@ -194,11 +201,12 @@ def admin_login():
                 **_lockout_payload(admin),
             )
 
+        lockout_limit = _admin_lockout_limit()
         if not admin.check_password(password):
             admin.failed_login_attempts += 1
-            if admin.failed_login_attempts >= 3:
-                admin.locked_until = datetime.utcnow() + timedelta(days=3650)
-                message = "Admin account is locked. Unlock it from the server CLI."
+            if admin.failed_login_attempts >= lockout_limit:
+                admin.locked_until = datetime.utcnow() + timedelta(minutes=30)
+                message = "Account locked. Try again in 30 minutes."
             else:
                 message = "Invalid credentials."
             db.session.commit()
@@ -212,9 +220,9 @@ def admin_login():
             ).save()
             return _admin_login_failure(
                 message,
-                423 if admin.failed_login_attempts >= 3 else 401,
+                423 if admin.failed_login_attempts >= lockout_limit else 401,
                 failed_attempts=admin.failed_login_attempts,
-                attempts_remaining=max(3 - admin.failed_login_attempts, 0),
+                attempts_remaining=max(lockout_limit - admin.failed_login_attempts, 0),
                 **_lockout_payload(admin),
             )
 
@@ -528,10 +536,17 @@ def student_register():
         roll_no = request.form.get("roll_no", "").strip().upper()
         password = request.form.get("password", "").strip()
         confirm_password = request.form.get("confirm_password", "").strip()
+        registration_code = request.form.get("registration_code", "").strip()
 
         if not name or not username or not roll_no or not password or not confirm_password:
             flash("Name, username, roll number, password, and confirmation are required.", "danger")
             return redirect(url_for("auth.student_register"))
+
+        if getattr(platform_settings, "registration_code_required", False):
+            expected_code = (getattr(platform_settings, "registration_code", None) or "").strip()
+            if not expected_code or registration_code != expected_code:
+                flash("A valid registration code is required.", "danger")
+                return redirect(url_for("auth.student_register"))
 
         if len(username) < 4:
             flash("Username must be at least 4 characters.", "danger")

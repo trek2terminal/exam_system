@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Archive, BookOpenCheck, CheckCircle2, Eye, FileText, Search, XCircle } from "lucide-react";
-import { Badge, Button, Card, ConfirmationDialog, EmptyState, Input, Select, StatCard, Table } from "../components/ui";
+import { Archive, BookOpenCheck, CheckCircle2, Eye, FileText, Search, Trash2, XCircle } from "lucide-react";
+import { Badge, Button, Card, ConfirmationDialog, EmptyState, Input, Select, SkeletonCard, StatCard, Table } from "../components/ui";
 import { api } from "../services/api";
 import { notify } from "../components/ui/Toast";
 
@@ -9,6 +9,16 @@ function statusVariant(status) {
   if (status === "closed" || status === "archived") return "danger";
   if (status === "draft") return "warning";
   return "secondary";
+}
+
+function statsFromExams(exams) {
+  return {
+    total: exams.length,
+    published: exams.filter(exam => exam.status === "active" || exam.status === "published").length,
+    closed: exams.filter(exam => exam.status === "closed").length,
+    draft: exams.filter(exam => exam.status === "draft").length,
+    archived: exams.filter(exam => exam.status === "archived").length
+  };
 }
 
 export default function AdminExams() {
@@ -71,15 +81,31 @@ export default function AdminExams() {
     if (!pendingAction) return;
     setActionLoading(true);
     try {
-      const { data } = await api.post(`/admin/exams/${pendingAction.exam.id}/status`, {
-        action: pendingAction.type
-      });
-      notify.success(data.message || "Exam updated");
-      setExams(current => current.map(exam => (
-        exam.id === pendingAction.exam.id
-          ? (data.exam || { ...exam, status: pendingAction.type === "activate" ? "active" : "closed" })
-          : exam
-      )));
+      if (pendingAction.type === "delete") {
+        const { data } = await api.delete(`/admin/exams/${pendingAction.exam.id}`, {
+          data: { confirm_word: "DELETE" }
+        });
+        notify.success(data.message || "Exam deleted");
+        setExams(current => {
+          const next = current.filter(exam => exam.id !== pendingAction.exam.id);
+          setStats(statsFromExams(next));
+          return next;
+        });
+      } else {
+        const { data } = await api.post(`/admin/exams/${pendingAction.exam.id}/status`, {
+          action: pendingAction.type
+        });
+        notify.success(data.message || "Exam updated");
+        setExams(current => {
+          const next = current.map(exam => (
+            exam.id === pendingAction.exam.id
+              ? (data.exam || { ...exam, status: pendingAction.type === "activate" ? "active" : "closed" })
+              : exam
+          ));
+          setStats(statsFromExams(next));
+          return next;
+        });
+      }
       setPendingAction(null);
     } catch (error) {
       notify.error(error.message || "Could not update exam");
@@ -154,44 +180,61 @@ export default function AdminExams() {
       </Card>
 
       {loading ? (
-        <Card className="p-8 text-center text-text-muted">Loading exams...</Card>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {[0, 1, 2, 3, 4, 5].map(item => <SkeletonCard key={item} />)}
+        </div>
       ) : filteredExams.length > 0 ? (
-        <Table
-          columns={columns}
-          data={filteredExams}
-          rowsPerPageOptions={[10, 20, 50]}
-          renderRowActions={row => (
-            <>
-              <Button as="a" href={`/react/admin/reports?exam=${row.id}`} variant="ghost" size="sm">
-                <Eye size={16} /> View
-              </Button>
-              {row.status === "draft" && (
-                <Button variant="success" size="sm" onClick={() => setPendingAction({ type: "activate", exam: row })}>
-                  <CheckCircle2 size={16} /> Publish
-                </Button>
+        <>
+          <div className="grid gap-4 md:hidden">
+            {filteredExams.map((exam, index) => (
+              <ExamMobileCard
+                key={exam.id}
+                exam={exam}
+                index={index}
+                onAction={setPendingAction}
+              />
+            ))}
+          </div>
+          <div className="hidden md:block">
+            <Table
+              columns={columns}
+              data={filteredExams}
+              rowsPerPageOptions={[10, 20, 50]}
+              renderRowActions={row => (
+                <>
+                  <Button as="a" href={`/react/admin/reports?exam=${row.id}`} variant="ghost" size="sm">
+                    <Eye size={16} /> View
+                  </Button>
+                  {row.status === "draft" && (
+                    <Button variant="success" size="sm" onClick={() => setPendingAction({ type: "activate", exam: row })}>
+                      <CheckCircle2 size={16} /> Publish
+                    </Button>
+                  )}
+                  {row.status === "active" && (
+                    <Button variant="warning" size="sm" onClick={() => setPendingAction({ type: "close", exam: row })}>
+                      <Archive size={16} /> Archive
+                    </Button>
+                  )}
+                  <Button as="a" href={`/api/admin/exams/${row.id}/report.pdf`} variant="secondary" size="sm">
+                    <FileText size={16} /> PDF
+                  </Button>
+                  <Button variant="danger" size="sm" onClick={() => setPendingAction({ type: "delete", exam: row })}>
+                    <Trash2 size={16} /> Delete
+                  </Button>
+                </>
               )}
-              {row.status === "active" && (
-                <Button variant="danger" size="sm" onClick={() => setPendingAction({ type: "close", exam: row })}>
-                  <Archive size={16} /> Archive
-                </Button>
-              )}
-              <Button as="a" href={`/admin/exams/${row.id}/report.pdf`} variant="secondary" size="sm">
-                <FileText size={16} /> PDF
-              </Button>
-            </>
-          )}
-        />
+            />
+          </div>
+        </>
       ) : (
         <EmptyState icon={Search} heading="No exams found" description="Try another search or status filter." />
       )}
 
       <ConfirmationDialog
         open={!!pendingAction}
-        title={pendingAction?.type === "activate" ? "Publish Exam?" : "Archive Exam?"}
-        description={pendingAction?.type === "activate"
-          ? "Students will be able to join this draft exam if the normal access rules allow it."
-          : "Students will no longer be able to join this exam."}
-        confirmLabel={pendingAction?.type === "activate" ? "Publish" : "Archive"}
+        title={pendingAction?.type === "activate" ? "Publish Exam?" : pendingAction?.type === "delete" ? "Delete Exam?" : "Archive Exam?"}
+        description={confirmationDescription(pendingAction)}
+        confirmLabel={pendingAction?.type === "activate" ? "Publish" : pendingAction?.type === "delete" ? "Delete Exam" : "Archive"}
         confirmWord={pendingAction?.type === "activate" ? undefined : "DELETE"}
         variant={pendingAction?.type === "activate" ? "success" : "danger"}
         onConfirm={runAction}
@@ -199,5 +242,78 @@ export default function AdminExams() {
         onClose={() => setPendingAction(null)}
       />
     </div>
+  );
+}
+
+function confirmationDescription(pendingAction) {
+  if (!pendingAction) return "";
+  if (pendingAction.type === "activate") {
+    return "Students will be able to join this draft exam if the normal access rules allow it.";
+  }
+  if (pendingAction.type === "delete") {
+    return (
+      <div className="space-y-2">
+        <p>This permanently deletes the exam, its questions, enrollments, sessions, answers, results, and violation logs.</p>
+        <p className="font-semibold text-danger">This cannot be undone.</p>
+      </div>
+    );
+  }
+  return "Students will no longer be able to join this exam.";
+}
+
+function ExamMobileCard({ exam, index, onAction }) {
+  return (
+    <Card
+      className="animate-fade-in-up p-4"
+      style={{ animationDelay: `${Math.min(index, 8) * 40}ms` }}
+    >
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="truncate text-lg font-semibold text-text-primary">{exam.exam_name}</h2>
+          <p className="text-sm text-text-secondary">{exam.subject || exam.set_code || "No subject"}</p>
+          <p className="mt-1 text-xs text-text-muted">{exam.teacher_name || "Unknown teacher"}</p>
+        </div>
+        <Badge variant={statusVariant(exam.status)}>{exam.status}</Badge>
+      </div>
+
+      <div className="grid grid-cols-3 gap-2 text-center">
+        <div className="rounded-lg bg-background-base p-3">
+          <p className="text-xs text-text-muted">Questions</p>
+          <p className="font-semibold text-text-primary">{exam.question_count || 0}</p>
+        </div>
+        <div className="rounded-lg bg-background-base p-3">
+          <p className="text-xs text-text-muted">Enrolled</p>
+          <p className="font-semibold text-text-primary">{exam.enrolled_count || 0}</p>
+        </div>
+        <div className="rounded-lg bg-background-base p-3">
+          <p className="text-xs text-text-muted">Submitted</p>
+          <p className="font-semibold text-text-primary">{exam.submitted_count || 0}</p>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-2">
+        <Button as="a" href={`/react/admin/reports?exam=${exam.id}`} variant="secondary" className="w-full">
+          <Eye size={16} /> View Results
+        </Button>
+        {exam.status === "draft" && (
+          <Button variant="success" className="w-full" onClick={() => onAction({ type: "activate", exam })}>
+            <CheckCircle2 size={16} /> Publish
+          </Button>
+        )}
+        {exam.status === "active" && (
+          <Button variant="warning" className="w-full" onClick={() => onAction({ type: "close", exam })}>
+            <Archive size={16} /> Archive
+          </Button>
+        )}
+        <div className="grid grid-cols-2 gap-2">
+          <Button as="a" href={`/api/admin/exams/${exam.id}/report.pdf`} variant="ghost" className="w-full">
+            <FileText size={16} /> PDF
+          </Button>
+          <Button variant="danger" className="w-full" onClick={() => onAction({ type: "delete", exam })}>
+            <Trash2 size={16} /> Delete
+          </Button>
+        </div>
+      </div>
+    </Card>
   );
 }

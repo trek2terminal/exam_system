@@ -79,7 +79,7 @@ export default function TeacherReports() {
                 <Button as="a" href="/api/teacher/reports/results.csv" variant="secondary" className="flex-1">
                   <Download size={18} /> Export All CSV
                 </Button>
-                <Button as="a" href={selectedExamId ? `/api/teacher/reports/exams/${selectedExamId}/results.csv` : "#"} variant="primary" className="flex-1" aria-disabled={!selectedExamId}>
+                <Button as="a" href={selectedExamId ? `/api/teacher/reports/exams/${selectedExamId}/results.csv` : "#"} variant="primary" className="flex-1" disabled={!selectedExamId}>
                   <Download size={18} /> Export Exam CSV
                 </Button>
               </div>
@@ -98,7 +98,7 @@ export default function TeacherReports() {
             </div>
             <div className="space-y-4">
               <Input label="Session ID" value={sessionId} onChange={event => setSessionId(event.target.value)} placeholder="e.g. 42" />
-              <Button as="a" href={sessionId ? `/api/teacher/reports/sessions/${sessionId}/answer.pdf` : "#"} variant="primary" className="w-full" aria-disabled={!sessionId}>
+              <Button as="a" href={sessionId ? `/api/teacher/reports/sessions/${sessionId}/answer.pdf` : "#"} variant="primary" className="w-full" disabled={!sessionId}>
                 <Download size={18} /> Download PDF
               </Button>
               <p className="text-sm text-text-muted">Session IDs are visible from the exam review list.</p>

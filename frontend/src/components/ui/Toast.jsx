@@ -23,6 +23,13 @@ export function ToastViewport() {
   return (
     <Toaster
       position="top-right"
+      gutter={10}
+      containerStyle={{
+        top: 16,
+        right: 16,
+        left: 16,
+        zIndex: 9999
+      }}
       toastOptions={{
         duration: 4000,
         className: "toastFrame"
@@ -49,7 +56,7 @@ function show(type, message, options = {}) {
         </button>
       </div>
     ),
-    { duration, ...options }
+    { duration, removeDelay: 220, ...options }
   );
 }
 

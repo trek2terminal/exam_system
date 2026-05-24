@@ -26,7 +26,11 @@ class SettingsService:
             welcome_message="Calm assessment space",
             announcement_message="",
             student_self_registration=False,
+            registration_code_required=False,
+            registration_code=None,
             max_violations_before_alert=current_app.config.get("MAX_VIOLATIONS_ALLOWED", 3),
+            admin_lockout_count=3,
+            admin_idle_timeout_minutes=120,
             quote_pool="\n".join(SettingsService.DEFAULT_QUOTES),
         )
         db.session.add(settings)
@@ -41,6 +45,7 @@ class SettingsService:
         welcome_message = (data.get("welcome_message") or "Calm assessment space").strip()
         announcement_message = (data.get("announcement_message") or "").strip()
         quote_pool = (data.get("quote_pool") or "").strip()
+        registration_code = (data.get("registration_code") or "").strip()
 
         try:
             max_violations = int(data.get("max_violations_before_alert") or 3)
@@ -48,11 +53,27 @@ class SettingsService:
             max_violations = 3
         max_violations = min(max(max_violations, 1), 10)
 
+        try:
+            admin_lockout_count = int(data.get("admin_lockout_count") or 3)
+        except (TypeError, ValueError):
+            admin_lockout_count = 3
+        admin_lockout_count = min(max(admin_lockout_count, 1), 10)
+
+        try:
+            admin_idle_timeout_minutes = int(data.get("admin_idle_timeout_minutes") or 120)
+        except (TypeError, ValueError):
+            admin_idle_timeout_minutes = 120
+        admin_idle_timeout_minutes = min(max(admin_idle_timeout_minutes, 5), 24 * 60)
+
         settings.platform_name = platform_name[:120]
         settings.welcome_message = welcome_message[:255]
         settings.announcement_message = announcement_message[:600]
         settings.student_self_registration = data.get("student_self_registration") == "on"
+        settings.registration_code_required = data.get("registration_code_required") == "on"
+        settings.registration_code = registration_code[:80] or None
         settings.max_violations_before_alert = max_violations
+        settings.admin_lockout_count = admin_lockout_count
+        settings.admin_idle_timeout_minutes = admin_idle_timeout_minutes
         settings.quote_pool = quote_pool or "\n".join(SettingsService.DEFAULT_QUOTES)
         if "logo_path" in data:
             settings.logo_path = (data.get("logo_path") or "").strip() or None

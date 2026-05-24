@@ -154,14 +154,14 @@ export function TopBar({ auth, notifications, theme, onToggleTheme, onMarkAllRea
               setShowNotifications(false);
             }}
           >
-            <Avatar name={userName(auth)} size="md" />
+            <Avatar name={userName(auth)} src={auth?.profile_picture} size="md" />
             <span className="hidden max-w-32 truncate text-sm font-semibold md:inline">{userName(auth)}</span>
           </Button>
 
           {showUserMenu && (
             <div className="absolute right-0 top-full z-50 mt-2 w-64 origin-top-right overflow-hidden rounded-card border border-border bg-background-card shadow-elevated animate-modal-in">
               <div className="flex items-center gap-3 border-b border-border px-4 py-3">
-                <Avatar name={userName(auth)} size="lg" />
+                <Avatar name={userName(auth)} src={auth?.profile_picture} size="lg" />
                 <div className="min-w-0">
                   <strong className="block truncate text-sm text-text-primary">{userName(auth)}</strong>
                   <span className="block truncate text-xs text-text-muted">{userSubtitle(auth)}</span>

@@ -12,7 +12,11 @@ class PlatformSettings(db.Model):
     welcome_message = db.Column(db.String(255), nullable=False, default="Calm assessment space")
     announcement_message = db.Column(db.Text, nullable=True)
     student_self_registration = db.Column(db.Boolean, default=False, nullable=False)
+    registration_code_required = db.Column(db.Boolean, default=False, nullable=False)
+    registration_code = db.Column(db.String(80), nullable=True)
     max_violations_before_alert = db.Column(db.Integer, default=3, nullable=False)
+    admin_lockout_count = db.Column(db.Integer, default=3, nullable=False)
+    admin_idle_timeout_minutes = db.Column(db.Integer, default=120, nullable=False)
     quote_pool = db.Column(db.Text, nullable=False, default="")
     logo_path = db.Column(db.String(255), nullable=True)
 

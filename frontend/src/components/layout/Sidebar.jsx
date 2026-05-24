@@ -61,7 +61,7 @@ export function Sidebar({ auth, platformName, platformLogoUrl, mobile = false, o
 
       <div className="mt-auto border-t border-border pt-4">
         <div className={cn("mb-3 flex items-center gap-3", !mobile && "md:justify-center lg:justify-start")}>
-          <Avatar name={userName(auth)} size="lg" />
+          <Avatar name={userName(auth)} src={auth?.profile_picture} size="lg" />
           <div className={cn("min-w-0", !mobile && "hidden lg:block")}>
             <strong className="block truncate text-sm">{userName(auth)}</strong>
             <div className="mt-1 flex items-center gap-2">

@@ -15,6 +15,7 @@ export default function RegisterPage({ settings }) {
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [rollNumber, setRollNumber] = useState("");
+  const [registrationCode, setRegistrationCode] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -37,7 +38,20 @@ export default function RegisterPage({ settings }) {
   }, [validations]);
 
   const passwordsMatch = password.length > 0 && password === confirmPassword;
-  const isFormValid = Boolean(fullName && username && rollNumber && password && confirmPassword && passwordsMatch && validations.length && validations.uppercase && validations.number && validations.special);
+  const needsRegistrationCode = Boolean(settings?.registration_code_required);
+  const isFormValid = Boolean(
+    fullName
+    && username
+    && rollNumber
+    && (!needsRegistrationCode || registrationCode.trim())
+    && password
+    && confirmPassword
+    && passwordsMatch
+    && validations.length
+    && validations.uppercase
+    && validations.number
+    && validations.special
+  );
 
   const handleSubmit = async event => {
     event.preventDefault();
@@ -49,6 +63,7 @@ export default function RegisterPage({ settings }) {
         username,
         email,
         roll_no: rollNumber,
+        registration_code: registrationCode,
         password,
         confirm_password: confirmPassword
       });
@@ -160,6 +175,17 @@ export default function RegisterPage({ settings }) {
                 onChange={event => setRollNumber(event.target.value.toUpperCase())}
                 required
               />
+
+              {needsRegistrationCode && (
+                <Input
+                  label="Registration Code"
+                  name="registration_code"
+                  placeholder="Enter the code from your school"
+                  value={registrationCode}
+                  onChange={event => setRegistrationCode(event.target.value)}
+                  required
+                />
+              )}
 
               <PasswordField
                 label="Password"

@@ -23,7 +23,8 @@ const emptyForm = {
   explanation: "",
   code_snippet: "",
   code_language: "python",
-  time_limit_seconds: "0"
+  time_limit_seconds: "0",
+  execution_time_limit_seconds: "10"
 };
 
 function normalizeItem(item) {
@@ -39,6 +40,7 @@ function normalizeItem(item) {
     codeSnippet: item.code_snippet || "",
     code_language: item.code_language || "python",
     time_limit_seconds: item.time_limit_seconds || 0,
+    execution_time_limit_seconds: item.execution_time_limit_seconds || 10,
     image_urls: item.image_urls || []
   };
 }
@@ -53,7 +55,8 @@ function formFromItem(item) {
     explanation: item.explanation || "",
     code_snippet: item.codeSnippet || "",
     code_language: item.code_language || "python",
-    time_limit_seconds: String(item.time_limit_seconds || 0)
+    time_limit_seconds: String(item.time_limit_seconds || 0),
+    execution_time_limit_seconds: String(item.execution_time_limit_seconds || 10)
   };
 }
 
@@ -135,6 +138,7 @@ export default function TeacherQuestionBank() {
         ...editForm,
         marks: Number(editForm.marks || 1),
         time_limit_seconds: Number(editForm.time_limit_seconds || 0),
+        execution_time_limit_seconds: Number(editForm.execution_time_limit_seconds || 10),
         options: editForm.question_type === "mcq" ? editOptions.filter(Boolean) : []
       };
       const { data } = await api.patch(`/teacher/question-bank/${editTarget.id}`, payload);
@@ -196,7 +200,7 @@ export default function TeacherQuestionBank() {
             </span>
             <div>
               <h2 className="text-xl font-semibold text-text-primary">Add Question</h2>
-              <p className="text-sm text-text-secondary">Reusable items can be edited and imported later.</p>
+              <p className="text-sm text-text-secondary">Reusable items can be edited here and imported directly into an exam.</p>
             </div>
           </div>
 
@@ -362,6 +366,17 @@ function QuestionForm({ formData, setFormData, options, setOptions, onSubmit, sa
       <Textarea label="Read-only Code Snippet" rows={4} value={formData.code_snippet} onChange={event => update({ code_snippet: event.target.value })} className="font-mono text-sm" />
       <Input label="Snippet Language" value={formData.code_language} onChange={event => update({ code_language: event.target.value })} placeholder="python" />
       <Input label="Per-question Time Limit" type="number" min="0" value={formData.time_limit_seconds} onChange={event => update({ time_limit_seconds: event.target.value })} helperText="Seconds. 0 means no limit." />
+      {formData.question_type === "coding" && (
+        <Input
+          label="Execution Time Limit"
+          type="number"
+          min="1"
+          max="60"
+          value={formData.execution_time_limit_seconds}
+          onChange={event => update({ execution_time_limit_seconds: event.target.value })}
+          helperText="Seconds allowed for each student code run."
+        />
+      )}
       <Button type="submit" variant="primary" className="w-full" loading={saving} loadingLabel="Saving...">
         <Upload size={18} /> {submitLabel}
       </Button>

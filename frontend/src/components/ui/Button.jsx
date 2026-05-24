@@ -43,6 +43,7 @@ export const Button = forwardRef(function Button(
         "inline-flex items-center justify-center gap-2 rounded-md border font-semibold transition duration-150 ease-out",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background-base",
         "active:scale-[0.97] disabled:pointer-events-none disabled:opacity-60",
+        !isButton && (disabled || loading) && "pointer-events-none opacity-60",
         variants[variant] || variants.primary,
         sizes[size] || sizes.md,
         className

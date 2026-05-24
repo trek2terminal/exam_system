@@ -62,7 +62,7 @@ This project should follow that same practical model.
 - Code execution output stored with answers and shown to teacher/student/PDF review surfaces.
 - Pre-exam checklist/start gate for active exams. Timed sessions now start only after the student confirms readiness and rules.
 - CSV exports for teacher all-results, per-exam results with per-question marks/remarks, and admin violation logs.
-- Platform settings table with admin-managed platform name, student welcome message, quote pool, self-registration toggle placeholder, and violation warning threshold.
+- Platform settings table with admin-managed platform name, student welcome message, quote pool, self-registration controls, registration codes, admin security controls, logo upload, and violation warning threshold.
 - Student self-registration controlled by admin settings, plus account-based student login alongside local quick entry.
 - Admin user management now includes student accounts and roll number editing.
 - Recorded schema migration runner with `schema_migrations` table plus `python run.py migrate` and `python run.py migrations` commands.
@@ -86,7 +86,7 @@ This project should follow that same practical model.
 - Admin student groups/batches and teacher one-click group assignment to exams.
 - Admin database backup download from settings for SQLite, with PostgreSQL `pg_dump` support when hosted.
 - Admin suspicious activity report across repeated violation-heavy exam sessions.
-- Admin login hidden from the common role selector, harder admin lockout after 3 failed attempts, and `python run.py unlock-admin` recovery.
+- Admin login hidden from the common role selector, configurable admin lockout controls, and `python run.py unlock-admin` recovery.
 - Forced teacher password change after admin-created temporary credentials.
 - Notification bell with unread count for logged-in users, plus admin/teacher/student notification records.
 - Private admin-to-student messages from live proctoring, delivered to the student's exam screen through heartbeat.
@@ -585,3 +585,25 @@ Completed in this batch:
 - Added `/api/admin/settings/logo` for authenticated image upload, validation, static storage, audit logging, old-logo cleanup, and updated settings payloads with `logo_url`.
 - Wired the React Admin Settings page to upload, preview, and refresh the saved logo immediately.
 - Displayed the uploaded logo in the React sidebar, mobile drawer, login page, and registration page.
+
+## Latest Implementation Batch 24 - 2026-05-24
+
+Completed in this batch:
+- Removed remaining live UI "disabled promise" copy from React pages; the scan no longer finds `not exposed`, `backend currently`, `can be enabled`, `window.confirm`, or similar markers in `frontend/src`/`app`.
+- Made account avatar upload functional with `/api/account/avatar`, image validation, static storage, old-avatar cleanup, audit logging, and immediate React profile/sidebar/topbar refresh.
+- Made Admin Settings security and registration controls functional: registration code requirement, admin failed-attempt lockout count, and admin idle timeout now persist through `platform_settings` and are enforced by auth/session APIs.
+- Added `platform_settings.registration_code_required`, `platform_settings.registration_code`, `platform_settings.admin_lockout_count`, `platform_settings.admin_idle_timeout_minutes`, `exam_sets.shuffle_options`, and per-question `execution_time_limit_seconds` with recorded migrations.
+- Wired student registration to require the admin registration code when enabled.
+- Wired teacher Exam Editor MCQ option shuffle end to end; options now shuffle per student attempt and remain stable during the session.
+- Wired coding-question execution time limits end to end; teacher-entered limits are saved and used by the student code-run endpoint.
+- Added authenticated admin exam deletion from the React Admin Exams page with a destructive `DELETE` confirmation word, loading state, success/error toast, and server-side cascading cleanup of sessions, answers, results, marks, enrollments, questions, violations, and notifications.
+- Added `/api/admin/exams/<exam_id>/report.pdf` so React admin exam PDF links stay inside API/file routes rather than old styled page routes.
+- Improved Admin Exams mobile responsiveness with card-based mobile rows, skeleton loaders, staggered entry animation, full-width touch actions, and desktop table preservation.
+- Improved toast motion and polish with desktop/mobile-specific enter/exit animations, accent bars, blur, spacing, and capped visible stack behavior.
+- Fixed non-button disabled `Button` rendering so disabled links are visually muted and non-interactive.
+- Verified `python -B -m py_compile` on changed backend files, `npm.cmd run lint`, and `npm.cmd run build`.
+
+Current status:
+- No known lint/build/source-level bugs after this pass.
+- No new package install was required.
+- Runtime-only checks still need a real authenticated browser pass for destructive admin deletion, avatar/logo upload file storage, and multi-role visual QA at 375px, 768px, and 1280px.

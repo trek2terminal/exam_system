@@ -25,7 +25,8 @@ export default function AccountSettings({ auth }) {
   const [profile, setProfile] = useState({
     name: userName(auth),
     email: auth?.email || "",
-    roll: auth?.roll_no || ""
+    roll: auth?.roll_no || "",
+    avatar_url: auth?.profile_picture || ""
   });
   const [security, setSecurity] = useState({
     current: "",
@@ -35,6 +36,7 @@ export default function AccountSettings({ auth }) {
   const [fontSize, setFontSize] = useState(() => window.localStorage.getItem("examFontSize") || "medium");
   const [highContrast, setHighContrast] = useState(() => window.localStorage.getItem("examHighContrast") === "true");
   const [savingProfile, setSavingProfile] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
 
   const strength = useMemo(() => passwordStrength(security.next), [security.next]);
@@ -73,6 +75,40 @@ export default function AccountSettings({ auth }) {
     }
   };
 
+  const uploadAvatar = async event => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    const allowedTypes = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+    const allowedExtensions = ["png", "jpg", "jpeg", "webp", "gif"];
+    const extension = file.name.split(".").pop()?.toLowerCase();
+    if (!allowedTypes.includes(file.type) && !allowedExtensions.includes(extension)) {
+      notify.error("Profile image must be PNG, JPG, WEBP, or GIF.");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      notify.error("Profile image must be 2 MB or smaller.");
+      return;
+    }
+
+    const formData = new window.FormData();
+    formData.append("avatar", file);
+    setUploadingAvatar(true);
+    try {
+      const { data } = await api.post("/account/avatar", formData, {
+        headers: { "Content-Type": "multipart/form-data" }
+      });
+      setProfile(current => ({ ...current, avatar_url: data.user?.profile_picture || current.avatar_url }));
+      await loadBootstrap();
+      notify.success(data.message || "Profile image uploaded");
+    } catch (error) {
+      notify.error(error.message || "Could not upload profile image");
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
   const changePassword = async () => {
     if (!canChangePassword) return;
     setChangingPassword(true);
@@ -107,18 +143,19 @@ export default function AccountSettings({ auth }) {
             </span>
             <div>
               <h2 className="text-xl font-semibold text-text-primary">Profile</h2>
-              <p className="text-sm text-text-secondary">Identity fields are kept aligned with the current Flask role session.</p>
+              <p className="text-sm text-text-secondary">Identity fields stay aligned with your current role session.</p>
             </div>
           </div>
 
           <div className="mb-5 flex flex-col items-center gap-3 rounded-lg border border-border bg-background-base p-5 sm:flex-row sm:items-center">
-            <Avatar name={profile.name} size="xl" />
+            <Avatar name={profile.name} src={profile.avatar_url} size="xl" />
             <div className="flex-1 text-center sm:text-left">
               <strong className="block text-text-primary">{profile.name}</strong>
               <span className="text-sm text-text-muted">{roleLabel(auth?.role)}</span>
             </div>
-            <Button variant="secondary" disabled>
+            <Button as="label" variant="secondary" loading={uploadingAvatar} loadingLabel="Uploading" className="cursor-pointer">
               <Upload size={17} /> Upload
+              <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden" onChange={uploadAvatar} disabled={uploadingAvatar} />
             </Button>
           </div>
 

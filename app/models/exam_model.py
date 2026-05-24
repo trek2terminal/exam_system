@@ -23,6 +23,7 @@ class ExamSet(db.Model):
     total_marks = db.Column(db.Integer, nullable=False, default=0)
     random_question_count = db.Column(db.Integer, default=0, nullable=False)
     shuffle_questions = db.Column(db.Boolean, default=False, nullable=False)
+    shuffle_options = db.Column(db.Boolean, default=False, nullable=False)
     attempt_limit = db.Column(db.Integer, default=1, nullable=False)
 
     # Access & Status
@@ -127,6 +128,7 @@ class Question(db.Model):
     code_snippet = db.Column(db.Text, nullable=True)
     code_language = db.Column(db.String(40), nullable=True)
     time_limit_seconds = db.Column(db.Integer, default=0, nullable=False)
+    execution_time_limit_seconds = db.Column(db.Integer, default=10, nullable=False)
 
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
@@ -176,6 +178,7 @@ class QuestionBankItem(db.Model):
     code_snippet = db.Column(db.Text, nullable=True)
     code_language = db.Column(db.String(40), nullable=True)
     time_limit_seconds = db.Column(db.Integer, default=0, nullable=False)
+    execution_time_limit_seconds = db.Column(db.Integer, default=10, nullable=False)
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
@@ -211,6 +214,7 @@ class QuestionBankItem(db.Model):
             code_snippet=question.code_snippet,
             code_language=question.code_language,
             time_limit_seconds=question.time_limit_seconds,
+            execution_time_limit_seconds=question.execution_time_limit_seconds,
         )
         item.set_options(question.options_as_list())
         item.set_image_paths(question.image_paths_as_list())
