@@ -85,6 +85,8 @@ export default function ExamEditor() {
       if (exam.start_time) formData.append("start_time", exam.start_time);
       if (exam.end_time) formData.append("end_time", exam.end_time);
       if (exam.access_code) formData.append("access_code", exam.access_code);
+      if (exam.enrollment_lines) formData.append("enrollment_lines", exam.enrollment_lines);
+      if (exam.group_id) formData.append("group_id", exam.group_id);
 
       (exam.questions || []).forEach((question, index) => {
         formData.append("question_number", String(index + 1));
@@ -516,28 +518,366 @@ function QuestionEditor({ question, onUpdate, onDelete }) {
 }
 
 function EnrollmentStep({ exam, examId, onUpdate }) {
+  const [loading, setLoading] = useState(Boolean(examId));
+  const [saving, setSaving] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [query, setQuery] = useState("");
+  const [students, setStudents] = useState([]);
+  const [groups, setGroups] = useState([]);
+  const [enrollments, setEnrollments] = useState([]);
+  const [bulkText, setBulkText] = useState(exam?.enrollment_lines || "");
+  const [selectedGroup, setSelectedGroup] = useState(exam?.group_id || "");
+  const [manual, setManual] = useState({ roll_no: "", student_name: "", extra_time_minutes: 0 });
+  const [pendingRemove, setPendingRemove] = useState(null);
+
+  const loadEnrollments = useCallback(async () => {
+    if (!examId) return;
+    setLoading(true);
+    try {
+      const { data } = await api.get(`/teacher/exams/${examId}/enrollments`);
+      setEnrollments(data.enrollments || []);
+      setGroups(data.groups || []);
+    } catch (error) {
+      notify.error(error.message || "Failed to load exam enrollments");
+    } finally {
+      setLoading(false);
+    }
+  }, [examId]);
+
+  const loadGroups = useCallback(async () => {
+    try {
+      const { data } = await api.get("/teacher/groups");
+      setGroups(data.groups || []);
+    } catch {
+      setGroups([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadGroups();
+    if (examId) {
+      loadEnrollments();
+    } else {
+      setLoading(false);
+    }
+  }, [examId, loadEnrollments, loadGroups]);
+
+  useEffect(() => {
+    if (!query.trim() || query.trim().length < 2) {
+      setStudents([]);
+      return undefined;
+    }
+    const timer = window.setTimeout(async () => {
+      setSearching(true);
+      try {
+        const { data } = await api.get("/teacher/students/search", { params: { q: query.trim() } });
+        setStudents(data.students || []);
+      } catch {
+        setStudents([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+
+  const addDraftLine = (line) => {
+    const next = [bulkText, line].filter(Boolean).join("\n");
+    setBulkText(next);
+    onUpdate("enrollment_lines", next);
+    notify.success("Student added to the roster that will be applied when this exam is saved.");
+  };
+
+  const postEnrollment = async (payload, successMessage) => {
+    if (!examId) {
+      if (payload.group_id) {
+        setSelectedGroup(String(payload.group_id));
+        onUpdate("group_id", String(payload.group_id));
+        notify.success("Group assignment will be applied when this exam is saved.");
+        return;
+      }
+      if (payload.enrollments) {
+        onUpdate("enrollment_lines", payload.enrollments);
+        notify.success("Roster will be applied when this exam is saved.");
+        return;
+      }
+      if (payload.roll_no) {
+        addDraftLine(
+          [
+            payload.roll_no,
+            payload.student_name,
+            payload.extra_time_minutes || 0
+          ].filter(value => value !== undefined && value !== "").join(", ")
+        );
+        return;
+      }
+      if (payload.student_id && payload.student) {
+        addDraftLine(`${payload.student.roll_number || payload.student.username}, ${payload.student.name}, 0`);
+      }
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const { data } = await api.post(`/teacher/exams/${examId}/enrollments`, payload);
+      setEnrollments(data.enrollments || []);
+      setGroups(data.groups || groups);
+      notify.success(successMessage || data.message || "Enrollment updated");
+    } catch (error) {
+      notify.error(error.message || "Failed to update enrollment");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const addStudent = (student) => {
+    setQuery("");
+    setStudents([]);
+    postEnrollment({ student_id: student.id, student }, `${student.name} added to the exam`);
+  };
+
+  const addManualStudent = () => {
+    if (!manual.roll_no.trim()) {
+      notify.error("Enter a roll number before adding the student.");
+      return;
+    }
+    postEnrollment(manual, "Student added to the exam");
+    setManual({ roll_no: "", student_name: "", extra_time_minutes: 0 });
+  };
+
+  const applyBulkRoster = () => {
+    const cleanText = bulkText.trim();
+    if (!cleanText) {
+      notify.error("Paste at least one roster line first.");
+      return;
+    }
+    onUpdate("enrollment_lines", cleanText);
+    postEnrollment({ enrollments: cleanText }, "Roster applied to the exam");
+  };
+
+  const applyGroup = () => {
+    if (!selectedGroup) {
+      notify.error("Choose a group first.");
+      return;
+    }
+    onUpdate("group_id", selectedGroup);
+    postEnrollment({ group_id: selectedGroup }, "Group students added to the exam");
+  };
+
+  const saveEnrollment = async (enrollment) => {
+    if (!examId) return;
+    try {
+      const { data } = await api.patch(`/teacher/exams/${examId}/enrollments/${enrollment.id}`, {
+        student_name: enrollment.student_name,
+        extra_time_minutes: enrollment.extra_time_minutes
+      });
+      setEnrollments(prev => prev.map(item => item.id === enrollment.id ? data.enrollment : item));
+      notify.success("Enrollment saved");
+    } catch (error) {
+      notify.error(error.message || "Failed to save enrollment");
+    }
+  };
+
+  const removeEnrollment = async () => {
+    if (!pendingRemove || !examId) {
+      setPendingRemove(null);
+      return;
+    }
+    try {
+      await api.delete(`/teacher/exams/${examId}/enrollments/${pendingRemove.id}`);
+      setEnrollments(prev => prev.filter(item => item.id !== pendingRemove.id));
+      notify.success("Student removed from this exam");
+    } catch (error) {
+      notify.error(error.message || "Failed to remove student");
+    } finally {
+      setPendingRemove(null);
+    }
+  };
+
   return (
     <div className="space-y-5">
       <div className="rounded-lg border border-info/30 bg-info/5 p-4 text-sm text-info">
-        Draft roster notes stay with this React editor flow. Use Admin Groups and the teacher dashboard APIs for live assignments.
+        Search students, assign a group, or paste a roster in the format <span className="font-semibold">ROLL, Student Name, Extra Minutes</span>.
+        {examId ? " Changes are saved immediately." : " These entries are applied when you save the exam."}
       </div>
-      {examId && <Badge variant="info">Editing exam #{examId}</Badge>}
-      <Textarea
-        label="Student Roster Draft"
-        value={exam?.enrollment_lines || ""}
-        onChange={event => onUpdate("enrollment_lines", event.target.value)}
-        rows={8}
-        placeholder="One student per line: ROLL, Student Name, Extra Minutes"
-        helperText="Use this as a staging area while composing the exam."
-      />
-      <Input
-        label="Group ID Draft"
-        value={exam?.group_id || ""}
-        onChange={event => onUpdate("group_id", event.target.value)}
-        placeholder="Paste a group ID from Admin > Groups"
+
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="space-y-5">
+          <div className="rounded-xl border border-border bg-background-card p-5 shadow-card">
+            <div className="relative">
+              <Input
+                label="Search Students"
+                value={query}
+                onChange={event => setQuery(event.target.value)}
+                placeholder="Search by name, email, username, or roll number"
+                helperText="Choose a result to add the student to this exam."
+              />
+              {(students.length > 0 || searching) && (
+                <div className="absolute z-20 mt-2 max-h-72 w-full overflow-y-auto rounded-lg border border-border bg-background-card p-2 shadow-elevated">
+                  {searching && <p className="px-3 py-2 text-sm text-text-muted">Searching...</p>}
+                  {students.map(student => (
+                    <button
+                      key={student.id}
+                      type="button"
+                      onClick={() => addStudent(student)}
+                      className="flex w-full items-center justify-between rounded-md px-3 py-3 text-left text-sm transition hover:bg-background-elevated"
+                    >
+                      <span>
+                        <span className="block font-semibold text-text-primary">{student.name}</span>
+                        <span className="text-xs text-text-muted">{student.roll_number || student.username} · {student.email || "No email"}</span>
+                      </span>
+                      <Badge variant="info" size="sm">Add</Badge>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-border bg-background-card p-5 shadow-card">
+            <h3 className="mb-4 text-sm font-semibold text-text-primary">Manual Add</h3>
+            <div className="grid gap-4 md:grid-cols-[1fr_1fr_140px_auto]">
+              <Input
+                label="Roll Number"
+                value={manual.roll_no}
+                onChange={event => setManual(prev => ({ ...prev, roll_no: event.target.value }))}
+              />
+              <Input
+                label="Student Name"
+                value={manual.student_name}
+                onChange={event => setManual(prev => ({ ...prev, student_name: event.target.value }))}
+              />
+              <Input
+                label="Extra Minutes"
+                type="number"
+                min="0"
+                value={manual.extra_time_minutes}
+                onChange={event => setManual(prev => ({ ...prev, extra_time_minutes: Number(event.target.value || 0) }))}
+              />
+              <Button className="self-end" loading={saving} onClick={addManualStudent}>
+                <Plus size={16} /> Add
+              </Button>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-border bg-background-card p-5 shadow-card">
+            <h3 className="mb-4 text-sm font-semibold text-text-primary">Bulk Roster</h3>
+            <Textarea
+              label="Roster Lines"
+              value={bulkText}
+              onChange={event => {
+                setBulkText(event.target.value);
+                onUpdate("enrollment_lines", event.target.value);
+              }}
+              rows={7}
+              placeholder={"ROLL001, Asha Sen, 10\nROLL002, Ravi Roy, 0"}
+              helperText="One student per line. Extra minutes are optional and default to 0."
+            />
+            <div className="mt-4 flex justify-end">
+              <Button variant="secondary" loading={saving} onClick={applyBulkRoster}>Apply Roster</Button>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-5">
+          <div className="rounded-xl border border-border bg-background-card p-5 shadow-card">
+            <h3 className="mb-4 text-sm font-semibold text-text-primary">Group Assignment</h3>
+            <Select
+              label="Student Group"
+              value={selectedGroup}
+              onChange={value => {
+                setSelectedGroup(value);
+                onUpdate("group_id", value);
+              }}
+              options={[
+                { value: "", label: "Select a group" },
+                ...groups.map(group => ({
+                  value: String(group.id),
+                  label: `${group.name} (${group.student_count})`
+                }))
+              ]}
+            />
+            <Button className="mt-4 w-full" variant="secondary" loading={saving} onClick={applyGroup}>
+              Add Group Students
+            </Button>
+          </div>
+
+          <div className="rounded-xl border border-border bg-background-card p-5 shadow-card">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold text-text-primary">Current Enrollment</h3>
+              <Badge variant="purple">{examId ? enrollments.length : countDraftRoster(bulkText)} students</Badge>
+            </div>
+            {!examId ? (
+              <div className="rounded-lg border border-border bg-background-base p-4 text-sm text-text-muted">
+                Save the exam to convert this roster into live enrollment records with editable extra time.
+              </div>
+            ) : loading ? (
+              <div className="space-y-2">
+                {[0, 1, 2].map(item => (
+                  <div key={item} className="h-16 animate-pulse rounded-lg bg-background-elevated" />
+                ))}
+              </div>
+            ) : enrollments.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-border bg-background-base p-6 text-center text-sm text-text-muted">
+                No students enrolled yet.
+              </div>
+            ) : (
+              <div className="max-h-[520px] space-y-3 overflow-y-auto pr-1">
+                {enrollments.map(enrollment => (
+                  <div key={enrollment.id} className="rounded-lg border border-border bg-background-base p-3">
+                    <div className="mb-3 flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-text-primary">{enrollment.student_name || "Unnamed student"}</p>
+                        <p className="text-xs text-text-muted">{enrollment.roll_no}</p>
+                      </div>
+                      <Button variant="ghost" size="sm" onClick={() => setPendingRemove(enrollment)}>
+                        <Trash2 size={16} />
+                      </Button>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-[1fr_110px]">
+                      <Input
+                        label="Name"
+                        value={enrollment.student_name || ""}
+                        onChange={event => setEnrollments(prev => prev.map(item => (
+                          item.id === enrollment.id ? { ...item, student_name: event.target.value } : item
+                        )))}
+                        onBlur={() => saveEnrollment(enrollment)}
+                      />
+                      <Input
+                        label="Extra"
+                        type="number"
+                        min="0"
+                        value={enrollment.extra_time_minutes || 0}
+                        onChange={event => setEnrollments(prev => prev.map(item => (
+                          item.id === enrollment.id ? { ...item, extra_time_minutes: Number(event.target.value || 0) } : item
+                        )))}
+                        onBlur={() => saveEnrollment(enrollment)}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <ConfirmationDialog
+        open={Boolean(pendingRemove)}
+        title="Remove Student?"
+        description={`Remove ${pendingRemove?.student_name || pendingRemove?.roll_no || "this student"} from this exam enrollment.`}
+        confirmLabel="Remove"
+        confirmWord="DELETE"
+        variant="danger"
+        onConfirm={removeEnrollment}
+        onClose={() => setPendingRemove(null)}
       />
     </div>
   );
+}
+
+function countDraftRoster(text) {
+  return String(text || "").split("\n").filter(line => line.trim()).length;
 }
 
 function SettingsStep({ exam, onUpdate }) {

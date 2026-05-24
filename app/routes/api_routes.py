@@ -27,7 +27,8 @@ from app.services.security_service import SecurityService
 from app.services.settings_service import SettingsService
 from app.socketio.realtime_events import emit_to_proctors, emit_to_session
 from app.routes.teacher_routes import _save_question_images
-from app.utils.helpers import current_session_matches_user, parse_options
+from app.utils.export_utils import csv_response, format_datetime
+from app.utils.helpers import create_submission_pdf, current_session_matches_user, parse_options
 from app.utils.network import get_client_ip
 from app.utils.rate_limiter import rate_limit
 
@@ -444,6 +445,203 @@ def _exam_editor_payload(exam):
     }
 
 
+def _teacher_student_payload(student):
+    return {
+        "id": student.id,
+        "name": student.name,
+        "username": student.username,
+        "email": student.email,
+        "roll_number": student.roll_number,
+    }
+
+
+def _teacher_group_option_payload(group):
+    return {
+        "id": group.id,
+        "name": group.name,
+        "student_count": len(group.members),
+    }
+
+
+def _enrollment_payload(enrollment):
+    student = _find_student_by_identifier(enrollment.roll_no)
+    return {
+        "id": enrollment.id,
+        "roll_no": enrollment.roll_no,
+        "student_name": enrollment.student_name or (student.name if student else ""),
+        "extra_time_minutes": enrollment.extra_time_minutes,
+        "created_at": _iso_datetime(enrollment.created_at),
+        "updated_at": _iso_datetime(enrollment.updated_at),
+        "student": _teacher_student_payload(student) if student else None,
+    }
+
+
+def _teacher_result_export_base_row(student_session):
+    exam = student_session.exam_set
+    result = student_session.result
+    return [
+        exam.exam_name if exam else "",
+        exam.subject if exam else "",
+        exam.set_code if exam else "",
+        student_session.student_name,
+        student_session.roll_no,
+        student_session.status,
+        format_datetime(student_session.start_time),
+        format_datetime(student_session.submitted_at),
+        result.total_marks_obtained if result else "",
+        result.total_marks if result else (exam.total_marks if exam else ""),
+        result.percentage if result else "",
+        "Yes" if result and result.published else "No",
+        format_datetime(result.published_at) if result and result.published_at else "",
+        student_session.focus_violations,
+        result.teacher_remarks if result else "",
+    ]
+
+
+def _parse_extra_minutes(value):
+    try:
+        return max(int(value or 0), 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _parse_enrollment_line(raw_line):
+    parts = [part.strip() for part in (raw_line or "").split(",")]
+    if not parts or not parts[0]:
+        return None
+    return {
+        "roll_no": parts[0],
+        "student_name": parts[1] if len(parts) > 1 else "",
+        "extra_time_minutes": _parse_extra_minutes(parts[2] if len(parts) > 2 else 0),
+    }
+
+
+def _sync_enrollment_sessions(exam_id, roll_no, student_name, extra_time_minutes):
+    sessions = (
+        StudentSession.query.filter(
+            StudentSession.exam_set_id == exam_id,
+            db.func.upper(StudentSession.roll_no) == (roll_no or "").upper(),
+            StudentSession.status.notin_(LOCKED_SESSION_STATUSES),
+        )
+        .all()
+    )
+    for student_session in sessions:
+        if student_name:
+            student_session.student_name = student_name
+        student_session.extra_time_minutes = extra_time_minutes
+
+
+def _upsert_exam_enrollment(exam, teacher, roll_no, student_name="", extra_time_minutes=0):
+    normalized_roll = ExamEnrollment.normalize_roll_no(roll_no)
+    if not normalized_roll:
+        return None, "Roll number is required."
+
+    student = _find_student_by_identifier(normalized_roll)
+    clean_name = (student_name or "").strip() or (student.name if student else "")
+    clean_extra = _parse_extra_minutes(extra_time_minutes)
+    enrollment = (
+        ExamEnrollment.query.filter(
+            ExamEnrollment.exam_set_id == exam.id,
+            db.func.upper(ExamEnrollment.roll_no) == normalized_roll,
+        )
+        .first()
+    )
+    if enrollment:
+        enrollment.student_name = clean_name
+        enrollment.extra_time_minutes = clean_extra
+    else:
+        enrollment = ExamEnrollment(
+            exam_set_id=exam.id,
+            roll_no=normalized_roll,
+            student_name=clean_name,
+            extra_time_minutes=clean_extra,
+            created_by=teacher.id,
+        )
+        db.session.add(enrollment)
+
+    _sync_enrollment_sessions(exam.id, normalized_roll, clean_name, clean_extra)
+    return enrollment, None
+
+
+def _apply_teacher_enrollment_payload(exam, teacher, payload):
+    added = 0
+    errors = []
+
+    student_id = payload.get("student_id")
+    if student_id:
+        student = User.query.filter_by(id=student_id, role="student").first()
+        if not student:
+            errors.append("Selected student was not found.")
+        else:
+            roll_no = student.roll_number or student.username
+            _, error = _upsert_exam_enrollment(
+                exam,
+                teacher,
+                roll_no,
+                student.name,
+                payload.get("extra_time_minutes", 0),
+            )
+            if error:
+                errors.append(error)
+            else:
+                added += 1
+
+    if payload.get("roll_no"):
+        _, error = _upsert_exam_enrollment(
+            exam,
+            teacher,
+            payload.get("roll_no"),
+            payload.get("student_name", ""),
+            payload.get("extra_time_minutes", 0),
+        )
+        if error:
+            errors.append(error)
+        else:
+            added += 1
+
+    group_id = payload.get("group_id")
+    if group_id:
+        group = StudentGroup.query.get(group_id)
+        if not group:
+            errors.append("Selected group was not found.")
+        else:
+            for member in group.members:
+                student = member.student
+                if not student:
+                    continue
+                roll_no = student.roll_number or student.username
+                _, error = _upsert_exam_enrollment(exam, teacher, roll_no, student.name, 0)
+                if error:
+                    errors.append(error)
+                else:
+                    added += 1
+
+    bulk_items = payload.get("enrollments") or payload.get("enrollment_lines")
+    if isinstance(bulk_items, str):
+        iterable = [_parse_enrollment_line(line) for line in bulk_items.splitlines()]
+    elif isinstance(bulk_items, list):
+        iterable = bulk_items
+    else:
+        iterable = []
+
+    for item in iterable:
+        if not isinstance(item, dict):
+            continue
+        _, error = _upsert_exam_enrollment(
+            exam,
+            teacher,
+            item.get("roll_no") or item.get("roll_number") or item.get("username"),
+            item.get("student_name") or item.get("name") or "",
+            item.get("extra_time_minutes", 0),
+        )
+        if error:
+            errors.append(error)
+        else:
+            added += 1
+
+    return added, errors
+
+
 def _result_question_payload(question, answer, question_mark, result):
     answer_text = answer.answer_text if answer else ""
     marks_awarded = question_mark.marks_awarded if question_mark else 0
@@ -599,7 +797,7 @@ def _session_review_summary(student_session):
         else None,
         "links": {
             "review": f"/react/teacher/session/{student_session.id}/review",
-            "answer_pdf": url_for("teacher.student_answer_pdf", session_id=student_session.id),
+            "answer_pdf": f"/api/teacher/reports/sessions/{student_session.id}/answer.pdf",
         },
     }
 
@@ -1479,6 +1677,193 @@ def teacher_dashboard_api():
     )
 
 
+@api_bp.route("/teacher/students/search")
+def teacher_students_search_api():
+    teacher, error_response = _require_teacher_api()
+    if error_response:
+        return error_response
+
+    query_text = (request.args.get("q") or "").strip().lower()
+    query = User.query.filter_by(role="student", is_active=True)
+    if query_text:
+        pattern = f"%{query_text}%"
+        query = query.filter(
+            or_(
+                db.func.lower(User.name).like(pattern),
+                db.func.lower(User.username).like(pattern),
+                db.func.lower(User.email).like(pattern),
+                db.func.lower(User.roll_number).like(pattern),
+            )
+        )
+    students = query.order_by(User.name.asc()).limit(12).all()
+    return jsonify({"ok": True, "students": [_teacher_student_payload(student) for student in students]})
+
+
+@api_bp.route("/teacher/groups")
+def teacher_groups_api():
+    teacher, error_response = _require_teacher_api()
+    if error_response:
+        return error_response
+    groups = StudentGroup.query.order_by(StudentGroup.name.asc()).all()
+    return jsonify({"ok": True, "groups": [_teacher_group_option_payload(group) for group in groups]})
+
+
+@api_bp.route("/teacher/exams/<int:exam_id>/enrollments", methods=["GET", "POST"])
+@rate_limit("admin_action", methods=("POST",))
+def teacher_exam_enrollments_api(exam_id):
+    exam, error_response = _require_teacher_owner(exam_id=exam_id)
+    if error_response:
+        return error_response
+
+    if request.method == "POST":
+        payload = _get_json_payload()
+        added, errors = _apply_teacher_enrollment_payload(exam, exam.creator, payload)
+        if errors and not added:
+            return jsonify({"ok": False, "message": errors[0], "errors": errors}), 400
+        db.session.commit()
+
+    enrollments = (
+        ExamEnrollment.query.filter_by(exam_set_id=exam.id)
+        .order_by(ExamEnrollment.roll_no.asc())
+        .all()
+    )
+    groups = StudentGroup.query.order_by(StudentGroup.name.asc()).all()
+    return jsonify(
+        {
+            "ok": True,
+            "message": "Enrollment updated." if request.method == "POST" else None,
+            "enrollments": [_enrollment_payload(enrollment) for enrollment in enrollments],
+            "groups": [_teacher_group_option_payload(group) for group in groups],
+        }
+    )
+
+
+@api_bp.route("/teacher/exams/<int:exam_id>/enrollments/<int:enrollment_id>", methods=["PATCH", "DELETE"])
+@rate_limit("admin_action")
+def teacher_exam_enrollment_item_api(exam_id, enrollment_id):
+    exam, error_response = _require_teacher_owner(exam_id=exam_id)
+    if error_response:
+        return error_response
+
+    enrollment = ExamEnrollment.query.filter_by(id=enrollment_id, exam_set_id=exam.id).first_or_404()
+    if request.method == "DELETE":
+        db.session.delete(enrollment)
+        db.session.commit()
+        return jsonify({"ok": True, "message": "Student removed from this exam."})
+
+    payload = _get_json_payload()
+    enrollment.student_name = (payload.get("student_name") or enrollment.student_name or "").strip()
+    enrollment.extra_time_minutes = _parse_extra_minutes(payload.get("extra_time_minutes"))
+    _sync_enrollment_sessions(
+        exam.id,
+        enrollment.roll_no,
+        enrollment.student_name,
+        enrollment.extra_time_minutes,
+    )
+    db.session.commit()
+    return jsonify({"ok": True, "message": "Enrollment saved.", "enrollment": _enrollment_payload(enrollment)})
+
+
+@api_bp.route("/teacher/reports/results.csv")
+def teacher_reports_all_results_csv_api():
+    teacher, error_response = _require_teacher_api()
+    if error_response:
+        return error_response
+
+    exam_ids = [exam.id for exam in ExamSet.query.filter_by(created_by=teacher.id).all()]
+    sessions = []
+    if exam_ids:
+        sessions = (
+            StudentSession.query.filter(StudentSession.exam_set_id.in_(exam_ids))
+            .order_by(StudentSession.created_at.desc())
+            .all()
+        )
+
+    headers = [
+        "Exam",
+        "Subject",
+        "Set Code",
+        "Student Name",
+        "Roll No",
+        "Session Status",
+        "Started At",
+        "Submitted At",
+        "Marks Obtained",
+        "Total Marks",
+        "Percentage",
+        "Published",
+        "Published At",
+        "Violation Count",
+        "Teacher Remarks",
+    ]
+    return csv_response("teacher_results.csv", headers, [_teacher_result_export_base_row(item) for item in sessions])
+
+
+@api_bp.route("/teacher/reports/exams/<int:exam_id>/results.csv")
+def teacher_reports_exam_results_csv_api(exam_id):
+    exam, error_response = _require_teacher_owner(exam_id=exam_id)
+    if error_response:
+        return error_response
+
+    sessions = (
+        StudentSession.query.filter_by(exam_set_id=exam.id)
+        .order_by(StudentSession.created_at.desc())
+        .all()
+    )
+    questions = Question.query.filter_by(exam_set_id=exam.id).order_by(Question.question_number.asc()).all()
+
+    headers = [
+        "Exam",
+        "Subject",
+        "Set Code",
+        "Student Name",
+        "Roll No",
+        "Session Status",
+        "Started At",
+        "Submitted At",
+        "Marks Obtained",
+        "Total Marks",
+        "Percentage",
+        "Published",
+        "Published At",
+        "Violation Count",
+        "Teacher Remarks",
+    ]
+    for question in questions:
+        headers.extend([f"Q{question.question_number} Marks", f"Q{question.question_number} Remark"])
+
+    rows = []
+    for student_session in sessions:
+        row = _teacher_result_export_base_row(student_session)
+        marks_by_question = {}
+        if student_session.result:
+            marks_by_question = {question_mark.question_id: question_mark for question_mark in student_session.result.question_marks}
+        for question in questions:
+            question_mark = marks_by_question.get(question.id)
+            row.extend(
+                [
+                    question_mark.marks_awarded if question_mark else "",
+                    question_mark.teacher_remark if question_mark else "",
+                ]
+            )
+        rows.append(row)
+
+    safe_name = "".join(ch if ch.isalnum() else "_" for ch in exam.set_code or str(exam.id))
+    return csv_response(f"results_{safe_name}.csv", headers, rows)
+
+
+@api_bp.route("/teacher/reports/sessions/<int:session_id>/answer.pdf")
+def teacher_reports_answer_pdf_api(session_id):
+    student_session = StudentSession.query.get_or_404(session_id)
+    exam, error_response = _require_teacher_owner(student_session=student_session)
+    if error_response:
+        return error_response
+
+    pdf_buffer = create_submission_pdf(student_session, include_unpublished_feedback=True)
+    filename = f"answer_sheet_{student_session.roll_no}_{student_session.session_code}.pdf"
+    return send_file(pdf_buffer, mimetype="application/pdf", as_attachment=True, download_name=filename)
+
+
 def _json_exam_question_rows(payload):
     rows = []
     for index, question in enumerate(payload.get("questions") or [], start=1):
@@ -1665,6 +2050,24 @@ def _save_teacher_exam_from_request(teacher, exam=None):
         question.set_image_paths(row["image_paths"])
         db.session.add(question)
 
+    enrollment_payload = {
+        "enrollment_lines": request.form.get("enrollment_lines") if is_multipart else payload.get("enrollment_lines"),
+        "group_id": request.form.get("group_id") if is_multipart else payload.get("group_id"),
+    }
+    if enrollment_payload["enrollment_lines"] or enrollment_payload["group_id"]:
+        _, enrollment_errors = _apply_teacher_enrollment_payload(exam, teacher, enrollment_payload)
+        if enrollment_errors:
+            return None, (
+                jsonify(
+                    {
+                        "ok": False,
+                        "message": enrollment_errors[0],
+                        "errors": enrollment_errors,
+                    }
+                ),
+                400,
+            )
+
     db.session.commit()
     return exam, None
 
@@ -1795,7 +2198,7 @@ def teacher_exam_review_api(exam_id):
             "questions": [_question_payload(question) for question in questions],
             "sessions": [_session_review_summary(student_session) for student_session in sessions],
             "links": {
-                "csv_export": url_for("teacher.export_exam_results", exam_id=exam.id),
+                "csv_export": f"/api/teacher/reports/exams/{exam.id}/results.csv",
                 "similarity": f"/react/teacher/exam/{exam.id}/review",
             },
         }
@@ -1969,7 +2372,7 @@ def teacher_session_review_api(session_id):
             "questions": review_questions,
             "links": {
                 "exam_review": f"/react/teacher/exam/{exam.id}/review",
-                "answer_pdf": url_for("teacher.student_answer_pdf", session_id=student_session.id),
+                "answer_pdf": f"/api/teacher/reports/sessions/{student_session.id}/answer.pdf",
             },
         }
     )

@@ -29,7 +29,7 @@ admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
 
 @admin_bp.before_request
-def _redirect_classic_admin_pages_to_react():
+def _redirect_admin_pages_to_react_shell():
     if request.method != "GET":
         return None
 

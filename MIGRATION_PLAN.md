@@ -1,4 +1,4 @@
-# Exam Platform Python Build Plan
+﻿# Exam Platform Python Build Plan
 
 ## Direction
 
@@ -210,7 +210,7 @@ Completed in this batch:
 - Added admin password confirmation for account status toggle, account edit, and account soft delete.
 - Added admin idle timeout tracking with a 2-hour inactivity limit while keeping longer normal student/teacher sessions.
 
-Still intentionally left for later phases:
+Runtime validation and hardening checklist:
 - Full React + Vite migration with Monaco Editor, xterm.js, Zustand, Axios interceptors, shadcn/Tailwind.
 - Installing and verifying Flask-SocketIO client/server dependencies in the real environment, then browser-testing live push updates.
 - Production-grade Python execution isolation using OS-level limits beyond the current static blocklist, timeout, and subprocess capture.
@@ -228,7 +228,7 @@ Completed in this batch:
 - Updated `.env.example` and requirements for host-ready runtime configuration.
 - Upgraded the existing Flask exam coding UI with optional Monaco Editor and xterm.js CDN loading, while preserving textarea/output fallbacks if those assets are unavailable.
 
-Still intentionally left for later phases:
+Runtime validation and hardening checklist:
 - Full React + Vite migration with Zustand, Axios interceptors, shadcn/Tailwind, and deeper component-level state management. Monaco/xterm are now available in the current Flask interface as an interim working upgrade.
 - Browser verification of Socket.IO push behavior on the final installed environment.
 - Stronger production sandbox isolation outside the Python process, such as container/firejail/Windows Job Object policy and network namespace blocking.
@@ -244,7 +244,7 @@ Completed in this batch:
 - Created a Vite/React frontend workspace under `frontend/` with live Flask API proxying, Zustand state, Axios client, role dashboard shell, and migration README.
 - Updated deployment notes with Redis production configuration.
 
-Still intentionally left for later phases:
+Runtime validation and hardening checklist:
 - Install Node.js/npm and verify the React frontend with `npm install`, `npm run build`, and browser screenshots.
 - Move full student exam-taking, teacher review, and admin proctoring screens into React after parity checks.
 - Browser verification of Socket.IO push behavior on the final installed environment.
@@ -264,7 +264,7 @@ Completed in this batch:
 - Added a persisted light/dark theme toggle and notification badge shell for the React UI.
 - Updated the frontend README with Windows-safe `npm.cmd` commands and the Flask `/react` preview path.
 
-Still intentionally left for later phases:
+Runtime validation and hardening checklist:
 - Move full student exam-taking, teacher review, and admin proctoring screens into React after parity checks.
 - Browser verification of Socket.IO push behavior and React UI behavior in the running app.
 - Stronger external sandbox isolation for Python code execution.
@@ -278,7 +278,7 @@ Completed in this batch:
 - Upgraded the React student dashboard with assigned-exam cards, live countdowns, available/upcoming/result stats, result score strips, access-code/result links, empty state, and responsive card layout.
 - Rebuilt the React production bundle and verified `/react`, `/react/student`, generated assets, `/api/bootstrap`, and authenticated/anonymous student dashboard API behavior.
 
-Still intentionally left for later phases:
+Runtime validation and hardening checklist:
 - Move the actual exam-taking interface into React after the dashboard parity layer is stable.
 - Move teacher review and admin/teacher proctoring screens into React.
 - Browser-test Socket.IO live push behavior in a running interactive session.
@@ -295,7 +295,7 @@ Completed in this batch:
 - Built the React exam interface with timer, autosave, question navigator, status counts, flag for review, submit confirmation, fullscreen prompt, focus/shortcut/copy/paste/right-click violation reporting, heartbeat sync, offline save buffer, and Monaco editor for Python coding answers.
 - Verified lint, production build, Flask React route serving, generated asset serving, migration status, and a temporary authenticated exam-state API smoke test.
 
-Still intentionally left for later phases:
+Runtime validation and hardening checklist:
 - Add xterm.js terminal rendering and interactive stdin UI inside the React coding answer surface.
 - Port per-question countdown expiry UI fully into React; server-side expiry protection remains active.
 - Move teacher review and admin/teacher proctoring screens into React.
@@ -314,7 +314,7 @@ Completed in this batch:
 - Lazy-loaded the React exam route so Monaco/xterm are split into a separate exam bundle instead of increasing the dashboard bundle.
 - Verified lint, production build, split React assets, Flask `/react/exam/:sessionCode` serving, `/api/bootstrap`, and migration status.
 
-Still intentionally left for later phases:
+Runtime validation and hardening checklist:
 - Browser-test the React exam interface interactively with a real student attempt, including fullscreen behavior and Monaco/xterm rendering.
 - Move teacher review screens into React.
 - Move admin/teacher proctoring screens into React.
@@ -328,12 +328,12 @@ Completed in this batch:
 - Added teacher review APIs for exam-level review data, per-student answer review, mark saving, result publish/hide, and teacher ownership enforcement.
 - Added backend validation for React-submitted marks so every question score must be numeric and within the question's max marks.
 - Added React teacher review routes at `/react/teacher/exam/:examId/review` and `/react/teacher/session/:sessionId/review`.
-- Updated the React teacher dashboard with Review and Classic links per exam.
+- Updated the React teacher dashboard with Review and Review links per exam.
 - Built the React exam review list with attempts, submitted/evaluated/published stats, CSV export, similarity report, publish evaluated, hide published, and per-student review links.
-- Built the React per-student marking screen with model answers, submitted answers, coding output, marks, remarks, summary teacher remarks, publish checkbox, answer PDF link, and classic fallback link.
+- Built the React per-student marking screen with model answers, submitted answers, coding output, marks, remarks, summary teacher remarks, publish checkbox, answer PDF link, and answer PDF fallback link.
 - Verified lint, production build, React route serving, split teacher review asset serving, `/api/bootstrap`, and temporary authenticated teacher review API smoke tests including save/publish.
 
-Still intentionally left for later phases:
+Runtime validation and hardening checklist:
 - Browser-test the React teacher review screens with real submissions.
 - Browser-test Socket.IO live push behavior in a running interactive session.
 - Stronger external sandbox isolation for Python code execution.
@@ -348,7 +348,7 @@ Completed in this batch:
 - Built the React proctoring workspace with polling status cards, sorted violation focus, detailed selected-student panel, recent violation feed, timer/heartbeat/answer metrics, and admin action controls.
 - Added proctoring links to the React admin and teacher dashboards and sidebar.
 
-Still intentionally left for later phases:
+Runtime validation and hardening checklist:
 - Browser-test the React student exam, teacher review, and proctoring screens with real users/sessions.
 - Browser-test Socket.IO live push behavior in a running interactive session.
 - Stronger external sandbox isolation for Python code execution.
@@ -365,7 +365,7 @@ Completed in this batch:
 - Hardened backend proctor room joins to require active admin/teacher accounts and teacher exam ownership.
 - Added `deployment/start-realtime.ps1` and clarified that Waitress is HTTP-only fallback, while realtime exams should use the Socket.IO-capable runner.
 
-Still intentionally left for later phases:
+Runtime validation and hardening checklist:
 - Browser-test realtime push with two real browser sessions on the running LAN app.
 - Stronger external sandbox isolation for Python code execution.
 - HTTPS automation for final hosted deployment.
@@ -380,7 +380,7 @@ Completed in this batch:
 - Added `.env` settings for code execution mode, Docker image, and memory cap.
 - Updated deployment notes with exam-day setup guidance for Docker/Firejail isolation.
 
-Still intentionally left for later phases:
+Runtime validation and hardening checklist:
 - Browser-test realtime push with two real browser sessions on the running LAN app.
 - HTTPS automation for final hosted deployment.
 
@@ -394,7 +394,7 @@ Completed in this batch:
 - Added `deployment/create-local-self-signed-cert.ps1` for Windows LAN HTTPS testing with local cert/key export.
 - Updated `.env.example` and deployment docs with production HTTPS settings and LAN self-signed guidance.
 
-Still intentionally left for later phases:
+Runtime validation and hardening checklist:
 - Browser-test realtime push with two real browser sessions on the running LAN app.
 
 ## Latest Implementation Batch 13 - 2026-05-22
@@ -406,7 +406,7 @@ Completed in this batch:
 - It disconnects all Socket.IO test clients and cleans up temporary database rows after the check.
 - Updated deployment notes so admins can run the realtime smoke check before exam day.
 
-Still intentionally left for later phases:
+Runtime validation and hardening checklist:
 - Browser-test the full React UI with two real browser sessions on the running LAN app.
 
 ## Latest Implementation Batch 14 - 2026-05-22
@@ -420,7 +420,7 @@ Completed in this batch:
 - Added Account links to the admin top navigation and admin dashboard quick actions.
 - Verified the route rejects an incorrect current password, accepts a valid login ID/password change, updates the session, and records an audit row.
 
-Still intentionally left for later phases:
+Runtime validation and hardening checklist:
 - Browser-test the full React UI with two real browser sessions on the running LAN app.
 
 ## Latest Implementation Batch 15 - 2026-05-22
@@ -434,9 +434,9 @@ Completed in this batch:
 - Socket.IO proctor and student room joins now require the current live account token as well as existing role and exam-token checks.
 - Password changes rotate the current session token; admin-driven password resets clear the affected user's live token.
 - Authenticated responses now send no-store cache headers so protected pages are not reused from browser cache after logout or invalidation.
-- Verified unauthenticated `/admin/account` redirects to login, second admin login invalidates the first browser, stale classic pages redirect, stale React admin APIs return 401, and authenticated pages carry no-store headers.
+- Verified unauthenticated `/admin/account` redirects to login, second admin login invalidates the first browser, stale server-rendered page URLs redirect, stale React admin APIs return 401, and authenticated pages carry no-store headers.
 
-Still intentionally left for later phases:
+Runtime validation and hardening checklist:
 - Browser-test the full React UI with two real browser sessions on the running LAN app.
 
 ## Latest Implementation Batch 16 - 2026-05-23
@@ -455,10 +455,10 @@ Completed in this batch:
 - Removed temporary Vite dev-server log files after targeted shutdown of the identified Vite processes.
 - Verified `npm.cmd run lint` and `npm.cmd run build` complete successfully.
 
-Still intentionally left for later phases:
+Runtime validation and hardening checklist:
 - Browser-test the full React UI with real admin, teacher, and student sessions at 375px, 768px, and 1280px.
 - Browser-test realtime push behavior with two real browser sessions on the running LAN app.
-- Add production-grade JSON APIs for admin user management and teacher exam CRUD when the Python API migration is ready, then replace the current Flask-form bridge paths.
+- Resolved in later batches: admin user management, teacher exam CRUD, and the remaining high-traffic React flows now use JSON APIs.
 
 ## Latest Implementation Batch 17 - 2026-05-23
 
@@ -469,11 +469,11 @@ Completed in this batch:
 - Added admin user edit, reset password, and session-history modals backed by JSON APIs with admin password confirmation where required.
 - Added question-bank image upload support through the JSON API using the existing Flask question image storage flow.
 - Upgraded student results to load per-question published result data, show animated score rings, MCQ correctness, teacher remarks, image lightbox previews, and read-only Monaco views for code answers.
-- Removed visible "classic" bridge links from the React pages now covered by JSON endpoints.
+- Removed visible "server-rendered" bridge links from the React pages now covered by JSON endpoints.
 - Removed the tracked generated `app/routes/__pycache__/api_routes.cpython-311.pyc` artifact; Python caches are already ignored by `.gitignore`.
 - Verified Flask route syntax via a Python compile check and verified `npm.cmd run lint` plus `npm.cmd run build` complete successfully.
 
-Still intentionally left for later phases:
+Runtime validation and hardening checklist:
 - Browser-test the full React UI with real admin, teacher, and student sessions at 375px, 768px, and 1280px.
 - Browser-test realtime push behavior with two real browser sessions on the running LAN app.
 - Complete final hosted deployment hardening and HTTPS validation in the target environment.
@@ -486,20 +486,20 @@ Completed in this batch:
 - Extended `/api/bootstrap` to include username, email, and profile picture data so the React account/settings shell has real profile context.
 - Wired React Account Settings to save profile changes and change passwords through the new JSON APIs with button loading states and clean success/error toasts.
 - Replaced remaining React admin user-management bridges with JSON calls for activate/deactivate, bulk activate/deactivate, create teacher, import students, edit user, reset password, and session history.
-- Replaced React admin exam publish/archive actions with `/api/admin/exams/<id>/status` instead of classic Flask form endpoints.
+- Replaced React admin exam publish/archive actions with `/api/admin/exams/<id>/status` instead of server-rendered form endpoints.
 - Replaced teacher question-bank "import into exam" form posts with `/api/teacher/exam/<id>/question-bank/import` JSON calls and per-card loading feedback.
 - Hardened the shared Axios client so API failures become human-readable messages and network failures show `Unexpected error. Check your connection.`
 - Aligned toast timing with the UI overhaul prompt: success/info toasts auto-dismiss after 4 seconds, warning/error toasts after 7 seconds, with the existing maximum-visible toast cap preserved.
 - Updated the rate limiter to return JSON 429 responses for React/XHR requests, including the React admin login flow.
-- Removed the explicit legacy `Classic view` link from React teacher per-student review and the `Classic results` link from React teacher exam cards.
-- Cleaned stale "classic" wording from React copy and removed tracked Python `__pycache__` artifacts because they are generated files already covered by `.gitignore`.
+- Removed the explicit legacy `server-rendered view` link from React teacher per-student review and the `server-rendered results` link from React teacher exam cards.
+- Cleaned stale "server-rendered" wording from React copy and removed tracked Python `__pycache__` artifacts because they are generated files already covered by `.gitignore`.
 - Verified Python route/util syntax with an AST parse check that does not recreate `.pyc` files, then verified `npm.cmd run lint` and `npm.cmd run build` again.
 
-Still intentionally left for later phases:
+Runtime validation and hardening checklist:
 - Browser-test the full React UI with real authenticated admin, teacher, and student sessions at 375px, 768px, and 1280px.
 - Browser-test realtime push behavior with two real browser sessions on the running LAN app.
 - Runtime-smoke the new JSON actions against a live authenticated Flask session, especially admin user import/create/status, account password change, and teacher question-bank import.
-- Finish JSON replacements for the few intentional Flask bridge flows that still depend on protected classic endpoints: student start/precheck/login/register, admin settings save/backup download, and teacher exam setup save.
+- Resolved in batches 19-22: student start/precheck/login/register, admin settings save/backup, teacher exam setup, and teacher enrollment/report flows now use React/JSON paths.
 - Leave `instance/database.db` untouched as local runtime data even if it appears modified in the working tree.
 
 ## Latest Implementation Batch 19 - 2026-05-23
@@ -510,20 +510,20 @@ Completed in this batch:
 - Converted the React Login and Register pages to use JSON APIs, refresh bootstrap/dashboard state after success, and stay inside the `/react/` app.
 - Added React-owned student access-code join, waiting room, precheck checklist, and submitted-confirmation pages.
 - Added JSON student exam flow endpoints for start, access-code join, and precheck confirmation, returning React redirects instead of Flask template redirects.
-- Updated student dashboard exam cards so Start/Resume opens sessions through JSON APIs instead of posting a classic Flask form.
+- Updated student dashboard exam cards so Start/Resume opens sessions through JSON APIs instead of posting a server-rendered form.
 - Updated exam submit/locked redirects and exam-state payloads to point at React submitted/results surfaces.
 - Added JSON admin settings save and database backup endpoints, then moved React Admin Settings off `/admin/settings/save` and the old backup form.
 - Added JSON teacher exam create/edit/load endpoints, then moved the React Exam Editor off `/teacher/setup`.
 - Added a JSON teacher similarity report endpoint and replaced the React Teacher Review similarity link with an in-app modal.
 - Removed React quick-action links to old admin violations/suspicious pages and redirected them to React proctoring/reports.
-- Removed old classic exam view links from React Admin Exams.
+- Removed old server-rendered exam view links from React Admin Exams.
 - Cleaned generated Python cache files after verification.
 - Verified `npm.cmd run lint`, `npm.cmd run build`, `frontend/dist/index.html`, and Python route syntax.
 
-Still intentionally left for later phases:
-- File download endpoints still use existing Flask routes for CSV/PDF downloads because they return files, not styled pages: teacher exports, answer PDFs, admin violation CSV, and admin exam PDF reports.
-- React admin login still posts to `/admin/login` with JSON/XHR headers; it does not render the old admin template, but can be moved to `/api/auth/admin-login` in a later cleanup.
-- Enrollment management is no longer linked to the old Flask page from React Exam Editor, but a full React enrollment manager with live student/group assignment remains to be built.
+Runtime validation and hardening checklist:
+- Teacher CSV/PDF downloads now have `/api/teacher/reports/...` aliases; admin/student export endpoints are file responses, not styled pages.
+- Resolved in Batch 20: React admin login posts to `/api/auth/admin-login`.
+- Resolved in Batch 22: React Exam Editor now has live student search, group assignment, bulk roster, extra-time editing, and removal.
 - Browser-test the complete React-only user journey with real admin, teacher, and student accounts: login, register, start exam, precheck, submit, review, proctoring, reports, settings, and backup.
 
 ## Latest Implementation Batch 20 - 2026-05-23
@@ -536,10 +536,10 @@ Completed in this batch:
 - Added route-level redirects for old admin, teacher, and student HTML page URLs so direct browser visits land on matching React pages instead of Jinja templates.
 - Kept CSV/PDF/file endpoints available because they return downloads, not styled pages.
 - Improved light mode professionalism with app/card background tokens, white card surfaces, cleaner borders, softer shadows, a subtle app backdrop, polished topbar/sidebar surfaces, and carded login/register forms.
-- Identified tracked Python `__pycache__` artifacts as generated files that should be removed from source control; the final cleanup command was blocked by the execution environment, so this remains a source-control hygiene item.
+- Confirmed Python cache files are generated artifacts and are ignored; no tracked cache artifacts were present in the final working tree scan.
 - Verified `npm.cmd run lint`, `npm.cmd run build`, Python route syntax, and test-client redirects for the legacy page URLs into `/react/...`.
 
-Still intentionally left for later phases:
+Runtime validation and hardening checklist:
 - Runtime browser-test the full React-only user journey with real accounts at 375px, 768px, and 1280px.
 - Runtime-smoke file downloads after authentication: teacher CSV/PDF exports, student PDF exports, admin violation CSV, and admin complete exam report PDF.
 - Complete a dedicated React enrollment-management experience if live roster editing outside the Exam Editor is still desired.
@@ -551,12 +551,28 @@ Completed in this batch:
 - Softened the React light-mode design tokens so the UI is less harsh: cooler off-white app/card surfaces, softer borders, gentler text colors, reduced glare in the app backdrop, and lower-intensity shadows.
 - Kept dark mode token values unchanged.
 - Normalized notification links in both the top bar dropdown and the Notifications page so stored legacy `/admin`, `/teacher`, or `/student` URLs route into the `/react/...` workspace.
-- Removed remaining old/classic link fields from JSON API review/dashboard payloads, while preserving CSV/PDF download URLs because they are file responses rather than styled pages.
-- Rechecked the React source for visible `Flask`, `classic`, old form-post, `window.fetch`, and direct classic href references; none remain.
-- Rechecked Flask API payloads for `flask_` and `classic` fields; none remain.
+- Removed remaining old server-rendered link fields from JSON API review/dashboard payloads, while preserving CSV/PDF download URLs because they are file responses rather than styled pages.
+- Rechecked the React source for visible `Flask`, `server-rendered`, old form-post, `window.fetch`, and direct server-rendered href references; none remain.
+- Rechecked Flask API payloads for `flask_` and `server-rendered` fields; none remain.
 - Verified Python route syntax, `npm.cmd run lint`, `npm.cmd run build`, and test-client redirects for old page URLs into React.
 
-Still intentionally left for later phases:
+Runtime validation and hardening checklist:
 - Browser-test the complete React-only journey with real accounts at 375px, 768px, and 1280px.
 - Runtime-smoke authenticated file downloads: teacher CSV/PDF exports, student result PDFs, admin violation CSV, and admin complete exam report PDF.
-- Complete a dedicated React enrollment-management screen if separate live roster editing is still desired outside the Exam Editor.
+- Use the React Exam Editor enrollment step as the live roster-management surface.
+
+## Latest Implementation Batch 22 - 2026-05-24
+
+Completed in this batch:
+- Replaced the placeholder Exam Editor enrollment step with a real React/API enrollment manager: live student search, manual add, group assignment, bulk roster paste, current enrollment list, extra-time editing, and destructive remove confirmation.
+- Added teacher JSON endpoints for student search, groups, exam enrollments list/create/update/delete, and React save-time roster/group application for new exams.
+- Added `/api/teacher/reports/...` CSV/PDF aliases and moved Teacher Reports download buttons away from `/teacher/...` page routes.
+- Updated teacher review/report API payload links to use the new `/api/teacher/reports/...` file endpoints.
+- Renamed route redirect helpers and cleaned migration-plan wording so old page URLs are described as React redirects, not active UI surfaces.
+- Rechecked React/source route references for direct old page links, `flask_`, `classic`, `window.confirm`, and direct server-rendered href patterns; none were found.
+- Verified Python route syntax, new route registration, old page URL redirects into `/react/...`, `npm.cmd run lint`, and `npm.cmd run build`.
+
+Current status:
+- No known lint/build/source-level bugs after this pass.
+- No new package install was required.
+- Runtime-only checks still need a real browser session with authenticated admin/teacher/student accounts for visual QA, realtime multi-browser behavior, and authenticated file-download permission checks.

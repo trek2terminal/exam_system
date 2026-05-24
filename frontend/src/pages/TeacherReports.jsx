@@ -43,7 +43,7 @@ export default function TeacherReports() {
         <div>
           <p className="text-sm font-semibold uppercase text-text-muted">Teacher workspace</p>
           <h1 className="text-3xl font-bold text-text-primary">Reports</h1>
-          <p className="mt-1 text-text-secondary">Export result CSVs and answer-sheet PDFs through the existing Flask report routes.</p>
+          <p className="mt-1 text-text-secondary">Export result CSVs and answer-sheet PDFs from the React reporting workspace.</p>
         </div>
       </div>
 
@@ -76,10 +76,10 @@ export default function TeacherReports() {
                 </div>
               )}
               <div className="flex flex-col gap-3 sm:flex-row">
-                <Button as="a" href="/teacher/results/export" variant="secondary" className="flex-1">
+                <Button as="a" href="/api/teacher/reports/results.csv" variant="secondary" className="flex-1">
                   <Download size={18} /> Export All CSV
                 </Button>
-                <Button as="a" href={selectedExamId ? `/teacher/exam/${selectedExamId}/results/export` : "#"} variant="primary" className="flex-1" aria-disabled={!selectedExamId}>
+                <Button as="a" href={selectedExamId ? `/api/teacher/reports/exams/${selectedExamId}/results.csv` : "#"} variant="primary" className="flex-1" aria-disabled={!selectedExamId}>
                   <Download size={18} /> Export Exam CSV
                 </Button>
               </div>
@@ -98,7 +98,7 @@ export default function TeacherReports() {
             </div>
             <div className="space-y-4">
               <Input label="Session ID" value={sessionId} onChange={event => setSessionId(event.target.value)} placeholder="e.g. 42" />
-              <Button as="a" href={sessionId ? `/teacher/session/${sessionId}/answer-pdf` : "#"} variant="primary" className="w-full" aria-disabled={!sessionId}>
+              <Button as="a" href={sessionId ? `/api/teacher/reports/sessions/${sessionId}/answer.pdf` : "#"} variant="primary" className="w-full" aria-disabled={!sessionId}>
                 <Download size={18} /> Download PDF
               </Button>
               <p className="text-sm text-text-muted">Session IDs are visible from the exam review list.</p>

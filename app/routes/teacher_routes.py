@@ -26,7 +26,7 @@ teacher_bp = Blueprint("teacher", __name__, url_prefix="/teacher")
 
 
 @teacher_bp.before_request
-def _redirect_classic_teacher_pages_to_react():
+def _redirect_teacher_pages_to_react_shell():
     if request.method != "GET":
         return None
 

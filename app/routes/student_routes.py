@@ -15,7 +15,7 @@ student_bp = Blueprint("student", __name__, url_prefix="/student")
 
 
 @student_bp.before_request
-def _redirect_classic_student_pages_to_react():
+def _redirect_student_pages_to_react_shell():
     if request.method != "GET":
         return None
 
@@ -32,15 +32,15 @@ def _redirect_classic_student_pages_to_react():
     if path in direct:
         return redirect(direct[path])
 
-    for classic_prefix, react_prefix in (
+    for source_prefix, react_prefix in (
         ("/student/waiting/", "/react/student/waiting/"),
         ("/student/precheck/", "/react/student/precheck/"),
         ("/student/exam/", "/react/exam/"),
         ("/student/submitted/", "/react/student/submitted/"),
         ("/student/session-active/", "/react/student/waiting/"),
     ):
-        if path.startswith(classic_prefix):
-            return redirect(f"{react_prefix}{path.removeprefix(classic_prefix)}")
+        if path.startswith(source_prefix):
+            return redirect(f"{react_prefix}{path.removeprefix(source_prefix)}")
 
     return None
 
