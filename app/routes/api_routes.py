@@ -192,7 +192,7 @@ def _user_payload(user):
         "last_login": _iso_datetime(user.last_login),
         "created_at": _iso_datetime(user.created_at),
         "updated_at": _iso_datetime(user.updated_at),
-        "edit_href": url_for("admin.edit_user", user_id=user.id),
+        "edit_href": f"/react/admin/users?edit={user.id}",
     }
 
 
@@ -535,7 +535,7 @@ def _student_exam_action_payload(exam, student_session, attempts_remaining, wind
     return {
         "label": label,
         "ready_label": "Start exam" if exam.status == "active" else label,
-        "href": f"/react/student/precheck/{student_session.session_code}" if student_session and student_session.start_time is None else url_for("student.start_assigned_exam", exam_id=exam.id),
+        "href": f"/react/student/precheck/{student_session.session_code}" if student_session and student_session.start_time is None else "/react/student",
         "api_path": f"/student/exams/{exam.id}/start",
         "method": "post",
         "variant": "primary",
@@ -599,7 +599,6 @@ def _session_review_summary(student_session):
         else None,
         "links": {
             "review": f"/react/teacher/session/{student_session.id}/review",
-            "flask_review": url_for("teacher.student_view", session_id=student_session.id),
             "answer_pdf": url_for("teacher.student_answer_pdf", session_id=student_session.id),
         },
     }
@@ -1299,7 +1298,7 @@ def student_dashboard_api():
                     "total_marks": published_result.total_marks,
                     "percentage": published_result.percentage,
                     "published_at": _iso_datetime(published_result.published_at),
-                    "href": url_for("student.submitted", session_code=latest_session.session_code),
+                    "href": f"/react/student/submitted/{latest_session.session_code}",
                     "pdf_href": url_for("student.result_pdf", session_code=latest_session.session_code),
                 }
                 if published_result
@@ -1797,8 +1796,7 @@ def teacher_exam_review_api(exam_id):
             "sessions": [_session_review_summary(student_session) for student_session in sessions],
             "links": {
                 "csv_export": url_for("teacher.export_exam_results", exam_id=exam.id),
-                "similarity": url_for("teacher.similarity_report", exam_id=exam.id),
-                "flask_results": url_for("teacher.exam_results", exam_id=exam.id),
+                "similarity": f"/react/teacher/exam/{exam.id}/review",
             },
         }
     )
@@ -1972,7 +1970,6 @@ def teacher_session_review_api(session_id):
             "links": {
                 "exam_review": f"/react/teacher/exam/{exam.id}/review",
                 "answer_pdf": url_for("teacher.student_answer_pdf", session_id=student_session.id),
-                "flask_review": url_for("teacher.student_view", session_id=student_session.id),
             },
         }
     )
@@ -3100,7 +3097,7 @@ def admin_proctoring_action_api(session_id):
                 "exam:terminated",
                 {
                     "reason": reason,
-                    "redirect": url_for("student.submitted", session_code=student_session.session_code),
+                    "redirect": f"/react/student/submitted/{student_session.session_code}",
                 },
             )
         _record_admin_session_action(student_session, "terminate_exam_session", reason=reason)
@@ -3292,12 +3289,12 @@ def exam_state(session_code):
     if exam.status != "active" or time_state == "not_started":
         return _forbidden_session_response(
             "This exam has not opened yet.",
-            redirect=url_for("student.waiting", session_code=session_code),
+            redirect=f"/react/student/waiting/{session_code}",
         )
     if not student_session.start_time:
         return _forbidden_session_response(
             "Please complete the pre-exam checklist first.",
-            redirect=url_for("student.precheck", session_code=session_code, ui="react"),
+            redirect=f"/react/student/precheck/{session_code}",
         )
     if student_session.status not in {"active", "paused"}:
         return _forbidden_session_response("This exam attempt is not active.")

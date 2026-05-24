@@ -3,6 +3,7 @@ import { AlertTriangle, Bell, CheckCircle2, Info, MailCheck } from "lucide-react
 import { Badge, Button, Card, EmptyState } from "../components/ui";
 import { api } from "../services/api";
 import { notify } from "../components/ui/Toast";
+import { normalizeReactHref } from "../components/layout/navigation";
 
 function notificationIcon(type) {
   if (String(type).includes("warning") || String(type).includes("violation")) return AlertTriangle;
@@ -19,9 +20,9 @@ function timeLabel(value) {
 }
 
 function notificationHref(item) {
-  if (item.href) return item.href;
+  if (item.href) return normalizeReactHref(item.href);
   if (item.related_entity_type === "result") return "/react/student/results";
-  if (item.related_entity_type === "student_session") return "/react/teacher/dashboard";
+  if (item.related_entity_type === "student_session") return "/react/teacher";
   if (String(item.type || "").includes("violation")) return "/react/admin/proctoring";
   return "/react/notifications";
 }
@@ -94,7 +95,7 @@ export default function NotificationsPage({ notifications, auth, onMarkAllRead }
         <div>
           <p className="text-sm font-semibold uppercase text-text-muted">Workspace</p>
           <h1 className="text-3xl font-bold text-text-primary">Notifications</h1>
-          <p className="mt-1 text-text-secondary">Unread alerts and system notices from the current Flask notification feed.</p>
+          <p className="mt-1 text-text-secondary">Unread alerts and system notices from your exam workspace.</p>
         </div>
         <Button variant="secondary" disabled={unreadCount === 0} onClick={markAll}>
           <MailCheck size={18} /> Mark all as read

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Bell, LogOut, Menu, Moon, Search, Settings, Sun, User } from "lucide-react";
 import { Avatar, Badge, Button, cn } from "../ui";
-import { breadcrumbFor, logoutHref, roleLabel, userName, userSubtitle } from "./navigation";
+import { breadcrumbFor, logoutHref, normalizeReactHref, roleLabel, userName, userSubtitle } from "./navigation";
 
 function formatNotificationTime(value) {
   if (!value) return "";
@@ -120,7 +120,7 @@ export function TopBar({ auth, notifications, theme, onToggleTheme, onMarkAllRea
                   unreadItems.map(item => (
                     <a
                       className="block border-b border-border px-4 py-3 transition hover:bg-background-elevated"
-                      href={item.href || "/react/notifications"}
+                      href={normalizeReactHref(item.href, "/react/notifications")}
                       key={item.id || item.message}
                     >
                       <div className="flex items-start gap-3">

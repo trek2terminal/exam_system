@@ -544,3 +544,19 @@ Still intentionally left for later phases:
 - Runtime-smoke file downloads after authentication: teacher CSV/PDF exports, student PDF exports, admin violation CSV, and admin complete exam report PDF.
 - Complete a dedicated React enrollment-management experience if live roster editing outside the Exam Editor is still desired.
 - Remove tracked Python `__pycache__` artifacts once the environment allows the cleanup command or via a normal Git cleanup commit.
+
+## Latest Implementation Batch 21 - 2026-05-24
+
+Completed in this batch:
+- Softened the React light-mode design tokens so the UI is less harsh: cooler off-white app/card surfaces, softer borders, gentler text colors, reduced glare in the app backdrop, and lower-intensity shadows.
+- Kept dark mode token values unchanged.
+- Normalized notification links in both the top bar dropdown and the Notifications page so stored legacy `/admin`, `/teacher`, or `/student` URLs route into the `/react/...` workspace.
+- Removed remaining old/classic link fields from JSON API review/dashboard payloads, while preserving CSV/PDF download URLs because they are file responses rather than styled pages.
+- Rechecked the React source for visible `Flask`, `classic`, old form-post, `window.fetch`, and direct classic href references; none remain.
+- Rechecked Flask API payloads for `flask_` and `classic` fields; none remain.
+- Verified Python route syntax, `npm.cmd run lint`, `npm.cmd run build`, and test-client redirects for old page URLs into React.
+
+Still intentionally left for later phases:
+- Browser-test the complete React-only journey with real accounts at 375px, 768px, and 1280px.
+- Runtime-smoke authenticated file downloads: teacher CSV/PDF exports, student result PDFs, admin violation CSV, and admin complete exam report PDF.
+- Complete a dedicated React enrollment-management screen if separate live roster editing is still desired outside the Exam Editor.
