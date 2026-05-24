@@ -487,6 +487,46 @@
   animation: adminSpin 1s linear infinite;
 }
 
+.adminLoginConflict {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid rgba(245, 158, 11, 0.36);
+  border-radius: 10px;
+  background: rgba(245, 158, 11, 0.1);
+  color: #d97706;
+  padding: 10px 12px;
+  font-size: 13px;
+  animation: adminCardEnter 250ms ease-out both;
+}
+
+.dark .adminLoginConflict {
+  color: #f59e0b;
+}
+
+.adminLoginConflict span {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.adminLoginConflict button {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.adminLoginConflict button:hover {
+  background: rgba(245, 158, 11, 0.14);
+}
+
 .adminLoginError {
   max-height: 0;
   overflow: hidden;

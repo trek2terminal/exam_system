@@ -18,11 +18,13 @@ import {
   Users
 } from "lucide-react";
 import { PageLayout } from "./components/layout/PageLayout";
+import { SessionEndedOverlay } from "./components/SessionEndedOverlay";
 import { Badge, Button, Card, EmptyState, StatCard } from "./components/ui";
 import { cn } from "./components/ui/utils";
 import { useAppStore } from "./store/appStore";
 import { api } from "./services/api";
 import { notify } from "./components/ui/Toast";
+import { useSessionWatcher } from "./hooks/useSessionWatcher";
 
 const ExamInterface = lazy(() => import("./ExamInterface.jsx"));
 const TeacherReview = lazy(() => import("./TeacherReview.jsx"));
@@ -672,6 +674,7 @@ export default function App() {
   const { bootstrap, dashboard, error, loading, loadBootstrap, loadDashboard } = useAppStore();
   const location = useLocation();
   const role = bootstrap?.auth?.role;
+  const { endedSession, goToLogin } = useSessionWatcher(role);
   const [theme, setTheme] = useState(() => {
     try {
       const stored = window.localStorage.getItem("examTheme");
@@ -1065,21 +1068,33 @@ export default function App() {
     </>
   );
 
+  const sessionEndedOverlay = endedSession ? (
+    <SessionEndedOverlay role={endedSession.role} onLogin={goToLogin} />
+  ) : null;
+
   if (!role || location.pathname.startsWith("/exam/")) {
-    return routes;
+    return (
+      <>
+        {routes}
+        {sessionEndedOverlay}
+      </>
+    );
   }
 
   return (
-    <Shell
-      platformName={bootstrap?.settings?.platform_name}
-      platformLogoUrl={bootstrap?.settings?.logo_url}
-      auth={bootstrap?.auth}
-      notifications={bootstrap?.notifications}
-      theme={theme}
-      onToggleTheme={() => setTheme(current => (current === "dark" ? "light" : "dark"))}
-      onMarkAllRead={markAllRead}
-    >
-      {routes}
-    </Shell>
+    <>
+      <Shell
+        platformName={bootstrap?.settings?.platform_name}
+        platformLogoUrl={bootstrap?.settings?.logo_url}
+        auth={bootstrap?.auth}
+        notifications={bootstrap?.notifications}
+        theme={theme}
+        onToggleTheme={() => setTheme(current => (current === "dark" ? "light" : "dark"))}
+        onMarkAllRead={markAllRead}
+      >
+        {routes}
+      </Shell>
+      {sessionEndedOverlay}
+    </>
   );
 }

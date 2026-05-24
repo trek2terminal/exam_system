@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { CheckCircle2, Eye, EyeOff, LogIn } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Eye, EyeOff, LogIn, X } from "lucide-react";
 import { Button, Input } from "../components/ui";
 import { cn } from "../components/ui/utils";
 import { api } from "../services/api";
@@ -16,6 +16,7 @@ export default function LoginPage({ settings }) {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [conflictMessage, setConflictMessage] = useState("");
 
   const loginMeta = useMemo(() => {
     if (role === "teacher") {
@@ -33,15 +34,26 @@ export default function LoginPage({ settings }) {
     };
   }, [role]);
 
+  useEffect(() => {
+    if (!conflictMessage) return undefined;
+    const timeoutId = window.setTimeout(() => setConflictMessage(""), 5000);
+    return () => window.clearTimeout(timeoutId);
+  }, [conflictMessage]);
+
   const handleSubmit = async event => {
     event.preventDefault();
     setSubmitting(true);
+    setConflictMessage("");
     try {
       const { data } = await api.post("/auth/login", {
         role,
         identifier,
         password
       });
+      if (data.session_conflict) {
+        setConflictMessage(data.conflict_message || "Another session on a different device has been signed out.");
+        await new Promise(resolve => window.setTimeout(resolve, 1200));
+      }
       notify.success(data.message || "Login successful");
       const bootstrap = await loadBootstrap();
       if (bootstrap?.auth?.role) await loadDashboard(bootstrap.auth.role);
@@ -164,6 +176,21 @@ export default function LoginPage({ settings }) {
               <Button type="submit" variant="primary" size="md" loading={submitting} loadingLabel="Signing in..." className="w-full">
                 <LogIn size={18} /> Sign in
               </Button>
+
+              {conflictMessage && (
+                <div className="flex items-start gap-3 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-warning animate-fade-in-up">
+                  <AlertTriangle size={17} className="mt-0.5 shrink-0" />
+                  <span className="flex-1">{conflictMessage}</span>
+                  <button
+                    type="button"
+                    className="grid h-6 w-6 place-items-center rounded-md transition hover:bg-warning/15"
+                    onClick={() => setConflictMessage("")}
+                    aria-label="Dismiss session conflict notice"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
             </form>
 
             <div className="mt-6 space-y-3 text-center text-sm">

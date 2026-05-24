@@ -192,6 +192,24 @@ def _admin_idle_timeout_seconds():
     return min(max(minutes, 5), 24 * 60) * 60
 
 
+def _has_live_session_conflict(user):
+    if not user or not user.active_session_token or not user.active_session_started_at:
+        return False
+
+    max_age_seconds = _admin_idle_timeout_seconds() if user.role == "admin" else 24 * 60 * 60
+    age_seconds = (datetime.utcnow() - user.active_session_started_at).total_seconds()
+    return age_seconds <= max_age_seconds
+
+
+def _session_conflict_payload(conflict):
+    if not conflict:
+        return {"session_conflict": False}
+    return {
+        "session_conflict": True,
+        "conflict_message": "Another session was active on a different device. It has been signed out.",
+    }
+
+
 def _row_payload_value(row, *names):
     lowered = {str(key).strip().lower(): value for key, value in (row or {}).items()}
     for name in names:
@@ -1119,6 +1137,7 @@ def react_admin_login_api():
             **_admin_lockout_payload(admin),
         }), 423 if admin.failed_login_attempts >= lockout_limit else 401
 
+    session_conflict = _has_live_session_conflict(admin)
     admin.reset_failed_attempts()
     auth_session_token = admin.issue_active_session_token()
     db.session.commit()
@@ -1143,7 +1162,13 @@ def react_admin_login_api():
         user_agent=request.headers.get("User-Agent"),
     ).save()
 
-    return jsonify({"ok": True, "message": "Welcome Admin!", "redirect": "/react/admin", "role": "admin"})
+    return jsonify({
+        "ok": True,
+        "message": "Welcome Admin!",
+        "redirect": "/react/admin",
+        "role": "admin",
+        **_session_conflict_payload(session_conflict),
+    })
 
 
 @api_bp.route("/auth/admin-setup", methods=["GET", "POST"])
@@ -1248,6 +1273,7 @@ def react_login_api():
         minutes = max(int((user.locked_until - datetime.utcnow()).total_seconds() // 60), 1) if user.locked_until else 30
         return jsonify({"ok": False, "message": f"Account locked. Try again in {minutes} minutes.", "locked": True}), 423
 
+    session_conflict = _has_live_session_conflict(user)
     user.reset_failed_attempts()
     auth_session_token = user.issue_active_session_token()
     db.session.commit()
@@ -1282,7 +1308,34 @@ def react_login_api():
         ip_address=get_client_ip(),
         user_agent=request.headers.get("User-Agent"),
     ).save()
-    return jsonify({"ok": True, "message": "Login successful.", "redirect": redirect, "role": role})
+    return jsonify({
+        "ok": True,
+        "message": "Login successful.",
+        "redirect": redirect,
+        "role": role,
+        **_session_conflict_payload(session_conflict),
+    })
+
+
+@api_bp.route("/auth/session-status", methods=["GET"])
+@rate_limit("session_status", limit=120, window_seconds=60, methods=("GET",))
+def react_session_status_api():
+    user_id = session.get("user_id") or session.get("admin_id") or session.get("teacher_id") or session.get("student_user_id")
+    role = session.get("role")
+    session_token = session.get("auth_session_token")
+
+    if not user_id or not role or not session_token:
+        return jsonify({"ok": True, "valid": False, "reason": "no_session"})
+
+    user = User.query.get(user_id)
+    if not user or not user.is_active or user.role != role:
+        return jsonify({"ok": True, "valid": False, "reason": "account_inactive"})
+
+    active_token = getattr(user, "active_session_token", None)
+    if not active_token or not secrets.compare_digest(str(session_token), str(active_token)):
+        return jsonify({"ok": True, "valid": False, "reason": "signed_out_elsewhere"})
+
+    return jsonify({"ok": True, "valid": True, "role": role})
 
 
 @api_bp.route("/auth/register", methods=["POST"])

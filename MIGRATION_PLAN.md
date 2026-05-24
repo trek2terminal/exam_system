@@ -607,3 +607,21 @@ Current status:
 - No known lint/build/source-level bugs after this pass.
 - No new package install was required.
 - Runtime-only checks still need a real authenticated browser pass for destructive admin deletion, avatar/logo upload file storage, and multi-role visual QA at 375px, 768px, and 1280px.
+
+## Latest Implementation Batch 25 - 2026-05-24
+
+Completed in this batch:
+- Built proactive session-conflict handling for React logins.
+- Added live-session conflict detection before rotating `users.active_session_token`; successful admin, teacher, and student JSON logins now return `session_conflict` plus a human-readable `conflict_message` when another live browser session was displaced.
+- Added `/api/auth/session-status`, a lightweight authenticated polling endpoint returning `{ valid: true }` or `{ valid: false, reason: "signed_out_elsewhere" }`.
+- Added a `session_status` rate-limit key scoped to the current user session, capped at 120 requests per minute.
+- Added `useSessionWatcher` and mounted it at top-level `App.jsx`; admin sessions poll every 15 seconds, teacher/student sessions poll every 30 seconds.
+- Added a non-dismissible full-screen "Session Ended" overlay that appears over protected React pages when a stale session is detected, with a single Go to Login action.
+- Added exam-answer snapshot protection: if a student is mid-exam when the watcher detects sign-out elsewhere, current answers are copied into the existing localStorage offline buffer before the overlay appears.
+- Added dismissible amber conflict banners to the common Login page and Admin Login page when the new login displaced another device.
+- Verified `python -B -m py_compile` on changed backend files, `npm.cmd run lint`, and `npm.cmd run build`.
+
+Current status:
+- Session-conflict feature is source-complete and build-clean.
+- No new package install was required.
+- Runtime-only validation still needed: open two real browsers, log into the same admin/teacher/student account, confirm the first browser receives the overlay within the expected poll window, and confirm in-exam localStorage buffering resumes correctly after logging back in.

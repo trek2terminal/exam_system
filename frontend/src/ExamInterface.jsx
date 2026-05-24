@@ -170,6 +170,29 @@ export default function ExamInterface() {
     return false;
   }, []);
 
+  useEffect(() => {
+    function snapshotAnswers(event) {
+      if (event.detail?.sessionCode && event.detail.sessionCode !== sessionCode) return;
+      try {
+        const key = `react_exam_buffer_${sessionCode}`;
+        const queue = JSON.parse(window.localStorage.getItem(key) || "{}");
+        questions.forEach(question => {
+          queue[question.id] = {
+            question_id: question.id,
+            answer_text: answers[question.id] || "",
+            visit_status: normalizeStatus(statuses[question.id])
+          };
+        });
+        window.localStorage.setItem(key, JSON.stringify(queue));
+      } catch {
+        // best effort before the global session-ended overlay takes over
+      }
+    }
+
+    window.addEventListener("exam-platform:session-ended", snapshotAnswers);
+    return () => window.removeEventListener("exam-platform:session-ended", snapshotAnswers);
+  }, [answers, questions, sessionCode, statuses]);
+
   const loadAttempt = useCallback(async () => {
     setLoading(true);
     setError("");

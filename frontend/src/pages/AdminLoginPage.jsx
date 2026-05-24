@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { AlertTriangle, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck } from "lucide-react";
+import { AlertTriangle, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck, X } from "lucide-react";
 import { useAppStore } from "../store/appStore";
 import { api } from "../services/api";
 
@@ -31,6 +31,7 @@ export default function AdminLoginPage() {
   const [lockoutSeconds, setLockoutSeconds] = useState(0);
   const [shakeKey, setShakeKey] = useState(0);
   const [setupRequired, setSetupRequired] = useState(false);
+  const [conflictMessage, setConflictMessage] = useState("");
 
   useEffect(() => {
     if (!lockoutSeconds) return undefined;
@@ -39,6 +40,12 @@ export default function AdminLoginPage() {
     }, 1000);
     return () => window.clearInterval(intervalId);
   }, [lockoutSeconds]);
+
+  useEffect(() => {
+    if (!conflictMessage) return undefined;
+    const timeoutId = window.setTimeout(() => setConflictMessage(""), 5000);
+    return () => window.clearTimeout(timeoutId);
+  }, [conflictMessage]);
 
   const displayedError = useMemo(() => {
     if (lockoutSeconds > 0) return `Account locked. Try again in ${formatCountdown(lockoutSeconds)}.`;
@@ -51,9 +58,14 @@ export default function AdminLoginPage() {
     setError("");
     setLockoutSeconds(0);
     setSetupRequired(false);
+    setConflictMessage("");
 
     try {
       const { data } = await api.post("/auth/admin-login", { username, password });
+      if (data.session_conflict) {
+        setConflictMessage(data.conflict_message || "Another session on a different device has been signed out.");
+        await new Promise(resolve => window.setTimeout(resolve, 1200));
+      }
 
       const bootstrap = await loadBootstrap();
       if (bootstrap?.auth?.role) await loadDashboard(bootstrap.auth.role);
@@ -126,6 +138,18 @@ export default function AdminLoginPage() {
           <button className="adminLoginButton" type="submit" disabled={loading || lockoutSeconds > 0}>
             {loading ? <span className="adminButtonSpinner" aria-label="Signing in" /> : "Sign In"}
           </button>
+
+          {conflictMessage && (
+            <div className="adminLoginConflict">
+              <span>
+                <AlertTriangle size={16} />
+                {conflictMessage}
+              </span>
+              <button type="button" onClick={() => setConflictMessage("")} aria-label="Dismiss session conflict notice">
+                <X size={14} />
+              </button>
+            </div>
+          )}
 
           <div className={`adminLoginError ${displayedError ? "open" : ""}`} aria-live="polite">
             <span>

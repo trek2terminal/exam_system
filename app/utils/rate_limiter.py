@@ -3,7 +3,7 @@ from collections import defaultdict, deque
 from functools import wraps
 from threading import Lock
 
-from flask import current_app, flash, jsonify, redirect, request
+from flask import current_app, flash, jsonify, redirect, request, session
 
 from app.utils.network import get_client_ip
 
@@ -13,6 +13,16 @@ _rate_lock = Lock()
 
 
 def _client_key(scope):
+    if scope == "session_status":
+        user_key = (
+            session.get("user_id")
+            or session.get("admin_id")
+            or session.get("teacher_id")
+            or session.get("student_user_id")
+            or get_client_ip()
+        )
+        return f"{scope}:{user_key}"
+
     user_key = (
         request.view_args.get("session_code")
         if request.view_args and request.view_args.get("session_code")

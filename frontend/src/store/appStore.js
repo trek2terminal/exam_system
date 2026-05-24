@@ -6,6 +6,9 @@ export const useAppStore = create(set => ({
   bootstrap: null,
   dashboard: null,
   error: null,
+  clearSession() {
+    set({ bootstrap: null, dashboard: null, error: null, loading: false });
+  },
   async loadBootstrap() {
     set({ loading: true, error: null });
     try {
