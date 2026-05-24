@@ -10,7 +10,6 @@ import {
   Edit3,
   FileText,
   KeyRound,
-  LogIn,
   Play,
   Plus,
   Radio,
@@ -53,11 +52,6 @@ const AdminReports = lazy(() => import("./pages/AdminReports.jsx"));
 const AccountSettings = lazy(() => import("./pages/AccountSettings.jsx"));
 const NotificationsPage = lazy(() => import("./pages/NotificationsPage.jsx"));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage.jsx"));
-
-const loginLinks = [
-  { label: "Admin", href: "/admin/login" },
-  { label: "Teacher or Student", href: "/login" }
-];
 
 const rolePaths = {
   admin: "/admin",
@@ -167,24 +161,10 @@ function PageSuspense({ children, label = "Loading workspace..." }) {
   );
 }
 
-function LoginPanel({ settings }) {
-  return (
-    <section className="loginPanel">
-      <div>
-        <span className="eyebrow">Local LAN and hosted ready</span>
-        <h2>{settings?.welcome_message || "Choose your workspace"}</h2>
-        <p>Sign in to the modern React workspace for exams, reviews, proctoring, reports, and settings.</p>
-      </div>
-      <div className="loginLinks">
-        {loginLinks.map(item => (
-          <Link key={item.label} to={item.href}>
-            <LogIn size={18} />
-            {item.label} Login
-          </Link>
-        ))}
-      </div>
-    </section>
-  );
+function LoginPanel() {
+  const location = useLocation();
+  const target = location.pathname.startsWith("/admin") ? "/admin/login" : "/login";
+  return <Navigate to={target} replace state={{ from: location.pathname }} />;
 }
 
 function StudentDashboard({ dashboard }) {

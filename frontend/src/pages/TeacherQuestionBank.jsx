@@ -7,6 +7,7 @@ import { api } from "../services/api";
 const typeOptions = [
   { value: "all", label: "All Types" },
   { value: "mcq", label: "MCQ" },
+  { value: "true_false", label: "True/False" },
   { value: "short", label: "Short Answer" },
   { value: "long", label: "Long Answer" },
   { value: "coding", label: "Code" }
@@ -107,7 +108,7 @@ export default function TeacherQuestionBank() {
     try {
       const payload = new window.FormData();
       Object.entries(formData).forEach(([key, value]) => payload.append(key, value ?? ""));
-      payload.set("options", formData.question_type === "mcq" ? options.filter(Boolean).join("|") : "");
+      payload.set("options", ["mcq", "true_false"].includes(formData.question_type) ? options.filter(Boolean).join("|") : "");
       imageFiles.forEach(file => payload.append("question_images", file));
       const { data } = await api.post("/teacher/question-bank", payload, {
         headers: { "Content-Type": "multipart/form-data" }
@@ -139,7 +140,7 @@ export default function TeacherQuestionBank() {
         marks: Number(editForm.marks || 1),
         time_limit_seconds: Number(editForm.time_limit_seconds || 0),
         execution_time_limit_seconds: Number(editForm.execution_time_limit_seconds || 10),
-        options: editForm.question_type === "mcq" ? editOptions.filter(Boolean) : []
+        options: ["mcq", "true_false"].includes(editForm.question_type) ? editOptions.filter(Boolean) : []
       };
       const { data } = await api.patch(`/teacher/question-bank/${editTarget.id}`, payload);
       setItems(current => current.map(item => item.id === editTarget.id ? normalizeItem(data.item) : item));
@@ -329,7 +330,7 @@ function QuestionForm({ formData, setFormData, options, setOptions, onSubmit, sa
       <Textarea label="Question Text" rows={5} required value={formData.question_text} onChange={event => update({ question_text: event.target.value })} placeholder="Write the reusable question text." />
       <Input label="Marks" type="number" min="1" required value={formData.marks} onChange={event => update({ marks: event.target.value })} />
 
-      {formData.question_type === "mcq" && (
+      {["mcq", "true_false"].includes(formData.question_type) && (
         <div className="space-y-3">
           <span className="block text-sm font-semibold text-text-secondary">MCQ Options</span>
           {options.map((option, index) => (

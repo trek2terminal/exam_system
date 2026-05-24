@@ -283,6 +283,7 @@ def _question_bank_payload(item):
         "correct_answer": item.correct_answer,
         "explanation": item.explanation,
         "model_answer": item.model_answer,
+        "image_paths": item.image_paths_as_list(),
         "image_urls": [url_for("static", filename=path) for path in item.image_paths_as_list()],
         "code_snippet": item.code_snippet,
         "code_language": item.code_language or "python",
@@ -3463,7 +3464,14 @@ def teacher_question_bank_api():
         question_type = (payload.get("question_type") or "short").strip().lower()
         marks = _parse_int_field(payload, "marks") or 1
         options = parse_options(payload.get("options") or [])
-        image_paths = _save_question_images(request.files.getlist("question_images")) if is_multipart else payload.get("image_paths") or []
+        if is_multipart:
+            try:
+                existing_image_paths = json.loads(payload.get("image_paths") or "[]")
+            except json.JSONDecodeError:
+                existing_image_paths = []
+            image_paths = existing_image_paths + _save_question_images(request.files.getlist("question_images"))
+        else:
+            image_paths = payload.get("image_paths") or []
         if not question_text:
             return jsonify({"ok": False, "message": "Question text is required."}), 400
         if question_type == "mcq" and len(options) < 2:

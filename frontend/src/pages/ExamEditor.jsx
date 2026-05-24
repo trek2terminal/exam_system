@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Trash2, Plus, Upload } from "lucide-react";
+import { BookOpenCheck, Save, Trash2, Plus, Upload } from "lucide-react";
 import { Badge, Button, Input, Select, Textarea, StepWizard, ConfirmationDialog, Modal, Toggle } from "../components/ui";
 import { api } from "../services/api";
 import { notify } from "../components/ui/Toast";
@@ -36,6 +36,8 @@ export default function ExamEditor() {
   const [saving, setSaving] = useState(false);
   const [exam, setExam] = useState(() => createEmptyExam());
   const [showImportWizard, setShowImportWizard] = useState(false);
+  const [showBankImport, setShowBankImport] = useState(false);
+  const [savingBankQuestionId, setSavingBankQuestionId] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingQuestionId, setDeletingQuestionId] = useState(null);
 
@@ -159,6 +161,34 @@ export default function ExamEditor() {
     setShowDeleteConfirm(false);
   };
 
+  const saveQuestionToBank = async question => {
+    if (!question?.text?.trim()) {
+      notify.error("Enter the question text before saving it to the question bank.");
+      return;
+    }
+    setSavingBankQuestionId(question.id);
+    try {
+      const payload = questionToBankPayload(question);
+      const { data } = await api.post("/teacher/question-bank", payload, {
+        headers: { "Content-Type": "multipart/form-data" }
+      });
+      notify.success(data.message || "Question added to question bank");
+    } catch (error) {
+      notify.error(error.message || "Could not save question to bank");
+    } finally {
+      setSavingBankQuestionId(null);
+    }
+  };
+
+  const importBankQuestion = item => {
+    setExam(prev => ({
+      ...prev,
+      questions: [...(prev.questions || []), bankItemToExamQuestion(item)]
+    }));
+    setShowBankImport(false);
+    notify.success("Question imported from bank. Save the exam to keep it in this paper.");
+  };
+
   if (loading) return <div className="p-8 text-center">Loading exam...</div>;
 
   const isNewExam = !examId;
@@ -186,6 +216,9 @@ export default function ExamEditor() {
             onUpdateQuestion={updateQuestion}
             onDeleteQuestion={deleteQuestion}
             onImport={() => setShowImportWizard(true)}
+            onOpenBank={() => setShowBankImport(true)}
+            onSaveToBank={saveQuestionToBank}
+            savingBankQuestionId={savingBankQuestionId}
           />
         )}
         {currentStep === 2 && <EnrollmentStep exam={exam} examId={examId} onUpdate={updateExamField} />}
@@ -220,6 +253,12 @@ export default function ExamEditor() {
           }}
         />
       </Modal>
+
+      <QuestionBankImportModal
+        open={showBankImport}
+        onClose={() => setShowBankImport(false)}
+        onImport={importBankQuestion}
+      />
     </div>
   );
 }
@@ -252,6 +291,54 @@ function mapQuestionType(type) {
     true_false: "mcq"
   };
   return typeMap[type] || "short";
+}
+
+function bankTypeToEditorType(type) {
+  const typeMap = {
+    short: "short_answer",
+    long: "long_answer",
+    coding: "code",
+    code: "code",
+    true_false: "true_false",
+    mcq: "mcq"
+  };
+  return typeMap[type] || "short_answer";
+}
+
+function questionToBankPayload(question) {
+  const payload = new window.FormData();
+  payload.append("question_text", question.text || "");
+  payload.append("question_type", mapQuestionType(question.type));
+  payload.append("marks", String(question.max_marks || 1));
+  payload.append("options", (question.options || []).filter(Boolean).join("|"));
+  payload.append("correct_answer", question.correct_answer || "");
+  payload.append("model_answer", question.model_answer || "");
+  payload.append("code_snippet", question.code_snippet || "");
+  payload.append("code_language", question.code_language || "python");
+  payload.append("time_limit_seconds", String(question.time_limit_seconds || 0));
+  payload.append("execution_time_limit_seconds", String(question.execution_time_limit_seconds || 10));
+  payload.append("image_paths", JSON.stringify(question.image_paths || []));
+  (question.image_files || []).forEach(file => payload.append("question_images", file));
+  return payload;
+}
+
+function bankItemToExamQuestion(item) {
+  return {
+    id: `bank_${item.id}_${Date.now()}`,
+    text: item.question_text || item.text || "",
+    type: bankTypeToEditorType(item.question_type || item.type),
+    options: item.options || [],
+    max_marks: item.marks || 1,
+    correct_answer: item.correct_answer || "",
+    model_answer: item.model_answer || "",
+    image_paths: item.image_paths || [],
+    image_urls: item.image_urls || [],
+    code_snippet: item.code_snippet || "",
+    has_code_snippet: Boolean(item.code_snippet),
+    code_language: item.code_language || "python",
+    time_limit_seconds: item.time_limit_seconds || 0,
+    execution_time_limit_seconds: item.execution_time_limit_seconds || 10
+  };
 }
 
 function ExamDetailsStep({ exam, onUpdate }) {
@@ -314,7 +401,7 @@ function ExamDetailsStep({ exam, onUpdate }) {
   );
 }
 
-function QuestionsStep({ exam, onAddQuestion, onUpdateQuestion, onDeleteQuestion, onImport }) {
+function QuestionsStep({ exam, onAddQuestion, onUpdateQuestion, onDeleteQuestion, onImport, onOpenBank, onSaveToBank, savingBankQuestionId }) {
   const [selectedQuestion, setSelectedQuestion] = useState(null);
   const questions = exam?.questions || [];
 
@@ -327,7 +414,10 @@ function QuestionsStep({ exam, onAddQuestion, onUpdateQuestion, onDeleteQuestion
             <Plus size={16} /> Add
           </Button>
           <Button variant="secondary" size="sm" onClick={onImport} className="flex-1">
-            <Upload size={16} /> Import
+            <Upload size={16} /> File
+          </Button>
+          <Button variant="secondary" size="sm" onClick={onOpenBank} className="flex-1">
+            <BookOpenCheck size={16} /> Bank
           </Button>
         </div>
         <div className="space-y-2 max-h-96 overflow-y-auto">
@@ -356,6 +446,8 @@ function QuestionsStep({ exam, onAddQuestion, onUpdateQuestion, onDeleteQuestion
             question={questions.find(q => q.id === selectedQuestion)}
             onUpdate={(field, value) => onUpdateQuestion(selectedQuestion, field, value)}
             onDelete={() => onDeleteQuestion(selectedQuestion)}
+            onSaveToBank={() => onSaveToBank(questions.find(q => q.id === selectedQuestion))}
+            savingToBank={savingBankQuestionId === selectedQuestion}
           />
         ) : (
           <div className="rounded-lg border border-border/50 bg-background-elevated/30 p-8 text-center">
@@ -367,7 +459,7 @@ function QuestionsStep({ exam, onAddQuestion, onUpdateQuestion, onDeleteQuestion
   );
 }
 
-function QuestionEditor({ question, onUpdate, onDelete }) {
+function QuestionEditor({ question, onUpdate, onDelete, onSaveToBank, savingToBank }) {
   const imagePreviews = question?.image_files ? Array.from(question.image_files).map(file => ({
     name: file.name,
     url: window.URL.createObjectURL(file)
@@ -377,9 +469,14 @@ function QuestionEditor({ question, onUpdate, onDelete }) {
     <div className="space-y-5 rounded-lg border border-border bg-background-surface p-5">
       <div className="flex items-center justify-between">
         <h3 className="font-semibold text-text-primary">Edit Question</h3>
-        <Button variant="danger" size="sm" onClick={onDelete}>
-          <Trash2 size={16} />
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="secondary" size="sm" onClick={onSaveToBank} loading={savingToBank} loadingLabel="Saving">
+            <Save size={16} /> Add to Question Bank
+          </Button>
+          <Button variant="danger" size="sm" onClick={onDelete} aria-label="Delete question">
+            <Trash2 size={16} />
+          </Button>
+        </div>
       </div>
 
       <Select
@@ -519,6 +616,100 @@ function QuestionEditor({ question, onUpdate, onDelete }) {
         <Badge variant="purple">Coding answers render with Monaco and terminal output in the student UI.</Badge>
       )}
     </div>
+  );
+}
+
+function QuestionBankImportModal({ open, onClose, onImport }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    async function loadBank() {
+      setLoading(true);
+      try {
+        const { data } = await api.get("/teacher/question-bank");
+        if (!cancelled) setItems(data.items || []);
+      } catch (error) {
+        if (!cancelled) {
+          setItems([]);
+          notify.error(error.message || "Could not load question bank");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    loadBank();
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
+  const filteredItems = items.filter(item => {
+    const query = search.trim().toLowerCase();
+    if (!query) return true;
+    return [
+      item.question_text,
+      item.question_type,
+      item.correct_answer,
+      item.model_answer
+    ].filter(Boolean).join(" ").toLowerCase().includes(query);
+  });
+
+  return (
+    <Modal open={open} onClose={onClose} title="Import from Question Bank" className="max-w-4xl">
+      <div className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+          <Input
+            label="Search Bank"
+            value={search}
+            onChange={event => setSearch(event.target.value)}
+            placeholder="Search saved questions"
+          />
+          <Button as="a" href="/react/teacher/question-bank" variant="secondary">
+            Manage Bank
+          </Button>
+        </div>
+
+        {loading ? (
+          <div className="rounded-lg border border-border bg-background-base p-8 text-center text-text-muted">Loading question bank...</div>
+        ) : filteredItems.length === 0 ? (
+          <div className="rounded-lg border border-border bg-background-base p-8 text-center text-text-muted">
+            No saved questions found.
+          </div>
+        ) : (
+          <div className="grid max-h-[60vh] gap-3 overflow-y-auto pr-1 md:grid-cols-2">
+            {filteredItems.map(item => (
+              <div key={item.id} className="rounded-lg border border-border bg-background-base p-4">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant={item.question_type === "mcq" ? "info" : item.question_type === "coding" ? "purple" : "secondary"}>
+                      {item.question_type}
+                    </Badge>
+                    <Badge variant="secondary">{item.marks || 1} marks</Badge>
+                  </div>
+                  <Button variant="primary" size="sm" onClick={() => onImport(item)}>
+                    <Plus size={16} /> Import
+                  </Button>
+                </div>
+                <p className="line-clamp-3 text-sm font-semibold text-text-primary">{item.question_text}</p>
+                {item.options?.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {item.options.slice(0, 4).map(option => (
+                      <Badge key={option} variant={option === item.correct_answer ? "success" : "secondary"} size="sm">
+                        {option}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </Modal>
   );
 }
 

@@ -625,3 +625,20 @@ Current status:
 - Session-conflict feature is source-complete and build-clean.
 - No new package install was required.
 - Runtime-only validation still needed: open two real browsers, log into the same admin/teacher/student account, confirm the first browser receives the overlay within the expected poll window, and confirm in-exam localStorage buffering resumes correctly after logging back in.
+
+## Latest Implementation Batch 26 - 2026-05-24
+
+Completed in this batch:
+- Removed the intermediate protected-route login panel that displayed "Local LAN and hosted ready" and the welcome/settings copy; unauthenticated protected routes now redirect directly to `/react/login` or `/react/admin/login`.
+- Fixed uploaded-logo display during Vite development by proxying `/static` to Flask, so `/static/uploads/...` files served by Flask are no longer broken when React runs on the Vite dev server.
+- Added "Add to Question Bank" directly inside the Exam Editor question panel. Teachers can save the question they are currently editing to `/api/teacher/question-bank` with marks, options, model answer, snippets, timers, and image uploads.
+- Added an "Import from Question Bank" modal inside the Exam Editor, with search, preview cards, and one-click import into the current paper.
+- Kept the existing file/paste import wizard available as a separate File import action.
+- Added `image_paths` to question-bank API payloads so existing uploaded question images are preserved when copying exam questions into the bank.
+- Expanded Question Bank type handling for true/false style questions and kept existing edit/delete flows intact.
+- Verified `python -B -m py_compile app/routes/api_routes.py`, `npm.cmd run lint`, and `npm.cmd run build`.
+
+Current status:
+- No known lint/build/source-level bugs after this pass.
+- No new package install was required.
+- Uploaded logo display should now work in Vite dev and Flask-served production; runtime browser check still recommended after uploading a fresh logo.
