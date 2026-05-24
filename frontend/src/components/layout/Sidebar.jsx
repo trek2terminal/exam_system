@@ -1,7 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
 import { LogOut } from "lucide-react";
-import { Avatar, Badge, Button, Tooltip, cn } from "../ui";
-import { logoutHref, platformIcon as PlatformIcon, roleLabel, roleNavigation, userName, userSubtitle } from "./navigation";
+import { Avatar, Badge, Button, PlatformLogo, Tooltip, cn } from "../ui";
+import { logoutHref, roleLabel, roleNavigation, userName, userSubtitle } from "./navigation";
 
 export function Sidebar({ auth, platformName, platformLogoUrl, mobile = false, onNavigate }) {
   const location = useLocation();
@@ -16,17 +16,7 @@ export function Sidebar({ auth, platformName, platformLogoUrl, mobile = false, o
       )}
     >
       <div className={cn("mb-6 flex items-center gap-3", !mobile && "md:justify-center lg:justify-start")}>
-        {platformLogoUrl ? (
-          <img
-            src={platformLogoUrl}
-            alt={`${platformName || "Exam Platform"} logo`}
-            className="h-11 w-11 shrink-0 rounded-lg border border-border bg-background-base object-contain p-1 shadow-sm"
-          />
-        ) : (
-          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-brand-primary text-white shadow-sm">
-            <PlatformIcon size={22} />
-          </span>
-        )}
+        <PlatformLogo src={platformLogoUrl} name={platformName || "Exam Platform"} size="md" />
         <div className={cn("min-w-0", !mobile && "hidden lg:block")}>
           <strong className="block truncate text-sm font-bold">{platformName || "Exam Platform"}</strong>
           <span className="block truncate text-xs text-text-muted">Focused assessment</span>

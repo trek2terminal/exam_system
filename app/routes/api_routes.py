@@ -37,16 +37,37 @@ from app.utils.rate_limiter import rate_limit
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 
 
+def _login_page_settings(settings):
+    heading = (
+        getattr(settings, "login_page_heading", None)
+        or SettingsService.DEFAULT_LOGIN_PAGE_HEADING
+    ).strip()
+    subheading = (
+        getattr(settings, "login_page_subheading", None)
+        or SettingsService.DEFAULT_LOGIN_PAGE_SUBHEADING
+    ).strip()
+    features = SettingsService.normalize_login_features(getattr(settings, "login_page_features", None))
+    return heading, subheading, features
+
+
 def _settings_payload(settings):
     if not settings:
         return {}
     logo_path = getattr(settings, "logo_path", None)
+    login_heading, login_subheading, login_features = _login_page_settings(settings)
     return {
         "platform_name": settings.platform_name,
         "logo_path": logo_path,
         "logo_url": url_for("static", filename=logo_path) if logo_path else None,
         "welcome_message": settings.welcome_message,
         "announcement_message": getattr(settings, "announcement_message", None),
+        "login_page_heading": login_heading,
+        "login_page_subheading": login_subheading,
+        "login_page_features": login_features,
+        "login_heading": login_heading,
+        "login_subheading": login_subheading,
+        "login_features": login_features,
+        "quote_pool": SettingsService.get_quotes(settings),
         "student_self_registration": settings.student_self_registration,
         "registration_code_required": bool(getattr(settings, "registration_code_required", False)),
         "registration_code": getattr(settings, "registration_code", None),
@@ -2652,12 +2673,15 @@ def admin_dashboard_api():
     )
 
 
-@api_bp.route("/admin/settings", methods=["PATCH"])
+@api_bp.route("/admin/settings", methods=["GET", "PATCH", "POST"])
 @rate_limit("admin_action")
 def admin_settings_api():
     admin, error_response = _require_admin_api()
     if error_response:
         return error_response
+
+    if request.method == "GET":
+        return jsonify({"ok": True, "settings": _settings_payload(SettingsService.get_settings())})
 
     payload = _get_json_payload()
     if payload.get("registration_code_required") and not (payload.get("registration_code") or "").strip():
@@ -2666,6 +2690,9 @@ def admin_settings_api():
         "platform_name": payload.get("platform_name"),
         "welcome_message": payload.get("welcome_message"),
         "announcement_message": payload.get("announcement_message"),
+        "login_page_heading": payload.get("login_page_heading"),
+        "login_page_subheading": payload.get("login_page_subheading"),
+        "login_page_features": payload.get("login_page_features"),
         "quote_pool": payload.get("quote_pool"),
         "max_violations_before_alert": payload.get("max_violations_before_alert"),
         "student_self_registration": "on" if payload.get("student_self_registration") else "",

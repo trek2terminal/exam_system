@@ -1,3 +1,4 @@
+import json
 import random
 from datetime import datetime
 
@@ -14,6 +15,34 @@ class SettingsService:
         "A steady mind does better work than a rushed one.",
         "You do not need to be perfect. You only need to be present.",
     ]
+    DEFAULT_LOGIN_PAGE_HEADING = "Assessment made simple."
+    DEFAULT_LOGIN_PAGE_SUBHEADING = "Focused, secure, and ready for every exam session."
+    DEFAULT_LOGIN_PAGE_FEATURES = [
+        "Real-time proctoring and monitoring",
+        "Multiple question types and formats",
+        "Instant results and detailed analytics",
+        "Code execution support with live testing",
+    ]
+
+    @staticmethod
+    def normalize_login_features(value):
+        if isinstance(value, list):
+            items = value
+        elif isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+                items = parsed if isinstance(parsed, list) else []
+            except (TypeError, ValueError):
+                items = value.splitlines()
+        else:
+            items = []
+
+        features = [str(item).strip()[:160] for item in items if str(item).strip()]
+        return features[:6] or list(SettingsService.DEFAULT_LOGIN_PAGE_FEATURES)
+
+    @staticmethod
+    def serialize_login_features(value):
+        return json.dumps(SettingsService.normalize_login_features(value))
 
     @staticmethod
     def get_settings():
@@ -25,6 +54,9 @@ class SettingsService:
             platform_name="Exam System",
             welcome_message="Calm assessment space",
             announcement_message="",
+            login_page_heading=SettingsService.DEFAULT_LOGIN_PAGE_HEADING,
+            login_page_subheading=SettingsService.DEFAULT_LOGIN_PAGE_SUBHEADING,
+            login_page_features=SettingsService.serialize_login_features(SettingsService.DEFAULT_LOGIN_PAGE_FEATURES),
             student_self_registration=False,
             registration_code_required=False,
             registration_code=None,
@@ -44,6 +76,10 @@ class SettingsService:
         platform_name = (data.get("platform_name") or "Exam System").strip()
         welcome_message = (data.get("welcome_message") or "Calm assessment space").strip()
         announcement_message = (data.get("announcement_message") or "").strip()
+        login_page_heading = (data.get("login_page_heading") or SettingsService.DEFAULT_LOGIN_PAGE_HEADING).strip()
+        login_page_subheading = (
+            data.get("login_page_subheading") or SettingsService.DEFAULT_LOGIN_PAGE_SUBHEADING
+        ).strip()
         quote_pool = (data.get("quote_pool") or "").strip()
         registration_code = (data.get("registration_code") or "").strip()
 
@@ -68,6 +104,18 @@ class SettingsService:
         settings.platform_name = platform_name[:120]
         settings.welcome_message = welcome_message[:255]
         settings.announcement_message = announcement_message[:600]
+        if "login_page_heading" in data:
+            settings.login_page_heading = login_page_heading[:240]
+        elif not getattr(settings, "login_page_heading", None):
+            settings.login_page_heading = SettingsService.DEFAULT_LOGIN_PAGE_HEADING
+        if "login_page_subheading" in data:
+            settings.login_page_subheading = login_page_subheading[:360]
+        elif not getattr(settings, "login_page_subheading", None):
+            settings.login_page_subheading = SettingsService.DEFAULT_LOGIN_PAGE_SUBHEADING
+        if "login_page_features" in data:
+            settings.login_page_features = SettingsService.serialize_login_features(data.get("login_page_features"))
+        elif not getattr(settings, "login_page_features", None):
+            settings.login_page_features = SettingsService.serialize_login_features(SettingsService.DEFAULT_LOGIN_PAGE_FEATURES)
         settings.student_self_registration = data.get("student_self_registration") == "on"
         settings.registration_code_required = data.get("registration_code_required") == "on"
         settings.registration_code = registration_code[:80] or None

@@ -1,11 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AlertTriangle, CheckCircle2, Eye, EyeOff, LogIn, X } from "lucide-react";
-import { Button, Input } from "../components/ui";
+import { Button, Input, PlatformLogo } from "../components/ui";
 import { cn } from "../components/ui/utils";
 import { api } from "../services/api";
 import { notify } from "../components/ui/Toast";
 import { useAppStore } from "../store/appStore";
+
+const defaultLoginFeatures = [
+  "Real-time proctoring and monitoring",
+  "Multiple question types and formats",
+  "Instant results and detailed analytics",
+  "Code execution support with live testing"
+];
 
 export default function LoginPage({ settings }) {
   const navigate = useNavigate();
@@ -39,6 +46,20 @@ export default function LoginPage({ settings }) {
     const timeoutId = window.setTimeout(() => setConflictMessage(""), 5000);
     return () => window.clearTimeout(timeoutId);
   }, [conflictMessage]);
+
+  const panelContent = useMemo(() => {
+    const features = Array.isArray(settings?.login_page_features)
+      ? settings.login_page_features
+      : Array.isArray(settings?.login_features)
+        ? settings.login_features
+        : defaultLoginFeatures;
+    return {
+      platformName: settings?.platform_name || "Exam Platform",
+      heading: settings?.login_page_heading || settings?.login_heading || "Assessment made simple.",
+      subheading: settings?.login_page_subheading || settings?.login_subheading || "Focused, secure, and ready for every exam session.",
+      features: features.filter(Boolean).slice(0, 6)
+    };
+  }, [settings]);
 
   const handleSubmit = async event => {
     event.preventDefault();
@@ -78,23 +99,29 @@ export default function LoginPage({ settings }) {
 
           <div className="relative z-10">
             <div className="mb-8 flex items-center gap-3">
-              {settings?.logo_url ? (
-                <img src={settings.logo_url} alt="Platform logo" className="h-12 w-12 rounded-lg bg-white/20 object-contain p-1" />
-              ) : (
-                <span className="grid h-12 w-12 place-items-center rounded-lg bg-white/20 text-xl font-bold">EP</span>
-              )}
-              <h1 className="text-4xl font-bold">{settings?.platform_name || "Exam Platform"}</h1>
+              <PlatformLogo
+                src={settings?.logo_url}
+                name={panelContent.platformName}
+                size="lg"
+                className="border-white/25 bg-white/15"
+                fallbackClassName="bg-brand-primary"
+              />
+              <h1 className="text-4xl font-bold">{panelContent.platformName}</h1>
             </div>
-            <p className="max-w-sm text-lg text-white/90">
-              Assessment made simple. Focused, secure, and ready for every exam session.
-            </p>
+            {settings ? (
+              <>
+                <h2 className="max-w-lg text-4xl font-bold leading-tight">{panelContent.heading}</h2>
+                <p className="mt-4 max-w-md text-lg text-white/90">{panelContent.subheading}</p>
+              </>
+            ) : (
+              <div className="space-y-4">
+                <div className="h-10 max-w-md rounded-lg bg-white/20 animate-pulse" />
+                <div className="h-5 max-w-sm rounded-lg bg-white/15 animate-pulse" />
+                <div className="h-5 max-w-xs rounded-lg bg-white/15 animate-pulse" />
+              </div>
+            )}
             <div className="mt-12 space-y-4 text-sm text-white/85">
-              {[
-                "Real-time proctoring and monitoring",
-                "Multiple question types and formats",
-                "Instant results and detailed analytics",
-                "Code execution support with live testing"
-              ].map(item => (
+              {(settings ? panelContent.features : defaultLoginFeatures).map(item => (
                 <p key={item} className="flex items-center gap-3">
                   <span className="grid h-6 w-6 place-items-center rounded-full bg-white/20">
                     <CheckCircle2 size={14} />
@@ -109,12 +136,8 @@ export default function LoginPage({ settings }) {
         <div className="flex flex-1 flex-col justify-center px-4 py-12 transition-colors sm:px-6 lg:px-8">
           <div className="mx-auto w-full max-w-sm rounded-card border border-border bg-background-card p-6 shadow-elevated sm:p-8">
             <div className="mb-8 flex items-center justify-center gap-2 lg:hidden">
-              {settings?.logo_url ? (
-                <img src={settings.logo_url} alt="Platform logo" className="h-10 w-10 rounded-lg border border-border bg-background-base object-contain p-1" />
-              ) : (
-                <span className="grid h-10 w-10 place-items-center rounded-lg bg-brand-primary text-base font-bold text-white">EP</span>
-              )}
-              <h2 className="text-2xl font-bold text-text-primary">{settings?.platform_name || "Exam Platform"}</h2>
+              <PlatformLogo src={settings?.logo_url} name={panelContent.platformName} size="sm" />
+              <h2 className="text-2xl font-bold text-text-primary">{panelContent.platformName}</h2>
             </div>
 
             <div className="mb-8 text-center">

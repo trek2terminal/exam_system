@@ -1,3 +1,5 @@
+import json
+
 from sqlalchemy import inspect, text
 
 from app.models.database import db
@@ -236,6 +238,38 @@ class MigrationService:
             )
 
     @staticmethod
+    def _migration_login_page_content():
+        MigrationService._add_column_if_missing("platform_settings", "login_page_heading", "TEXT")
+        MigrationService._add_column_if_missing("platform_settings", "login_page_subheading", "TEXT")
+        MigrationService._add_column_if_missing("platform_settings", "login_page_features", "TEXT")
+
+        default_features = json.dumps(
+            [
+                "Real-time proctoring and monitoring",
+                "Multiple question types and formats",
+                "Instant results and detailed analytics",
+                "Code execution support with live testing",
+            ]
+        )
+        with db.engine.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    UPDATE platform_settings
+                    SET
+                        login_page_heading = COALESCE(NULLIF(login_page_heading, ''), :heading),
+                        login_page_subheading = COALESCE(NULLIF(login_page_subheading, ''), :subheading),
+                        login_page_features = COALESCE(NULLIF(login_page_features, ''), :features)
+                    """
+                ),
+                {
+                    "heading": "Assessment made simple.",
+                    "subheading": "Focused, secure, and ready for every exam session.",
+                    "features": default_features,
+                },
+            )
+
+    @staticmethod
     def _migration_platform_settings_seed():
         if PlatformSettings.query.first():
             return
@@ -348,6 +382,11 @@ class MigrationService:
             "Add MCQ option shuffle and per-code-question execution timeout",
             _migration_exam_shuffle_options_and_code_timeout.__func__,
         ),
+        (
+            "20260524_019_login_page_content",
+            "Add admin-editable login page content fields",
+            _migration_login_page_content.__func__,
+        ),
     ]
 
     @staticmethod
@@ -449,6 +488,12 @@ class MigrationService:
                 MigrationService._has_column("exam_sets", "shuffle_options")
                 and MigrationService._has_column("questions", "execution_time_limit_seconds")
                 and MigrationService._has_column("question_bank_items", "execution_time_limit_seconds")
+            )
+        if version == "20260524_019_login_page_content":
+            return (
+                MigrationService._has_column("platform_settings", "login_page_heading")
+                and MigrationService._has_column("platform_settings", "login_page_subheading")
+                and MigrationService._has_column("platform_settings", "login_page_features")
             )
         return False
 

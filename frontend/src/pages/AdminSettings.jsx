@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Bell, DatabaseBackup, Download, Megaphone, Save, Settings2, ShieldCheck, Upload, UserPlus, X } from "lucide-react";
-import { Button, Card, Input, Textarea, Toggle } from "../components/ui";
+import { ArrowDown, ArrowUp, Bell, CheckCircle2, DatabaseBackup, Download, Megaphone, Plus, Save, Settings2, ShieldCheck, Trash2, Upload, UserPlus, X } from "lucide-react";
+import { Badge, Button, Card, Input, PlatformLogo, Textarea, Toggle } from "../components/ui";
 import { notify } from "../components/ui/Toast";
 import { api } from "../services/api";
 import { useAppStore } from "../store/appStore";
@@ -13,6 +13,19 @@ const tabs = [
   { id: "backup", label: "Backup", icon: DatabaseBackup },
   { id: "notifications", label: "Notifications", icon: Bell }
 ];
+
+const defaultLoginFeatures = [
+  "Real-time proctoring and monitoring",
+  "Multiple question types and formats",
+  "Instant results and detailed analytics",
+  "Code execution support with live testing"
+];
+
+function settingsFeatures(value) {
+  if (Array.isArray(value)) return value.filter(Boolean).slice(0, 6);
+  if (typeof value === "string") return value.split(/\r?\n/).map(item => item.trim()).filter(Boolean).slice(0, 6);
+  return defaultLoginFeatures;
+}
 
 export default function AdminSettings() {
   const loadBootstrap = useAppStore(state => state.loadBootstrap);
@@ -28,6 +41,9 @@ export default function AdminSettings() {
     platform_name: "Exam Platform",
     logo_url: "",
     welcome_message: "Welcome to the Exam Platform",
+    login_page_heading: "Assessment made simple.",
+    login_page_subheading: "Focused, secure, and ready for every exam session.",
+    login_page_features: defaultLoginFeatures,
     quote_pool: [
       "One calm question at a time.",
       "Focus brings success.",
@@ -52,13 +68,17 @@ export default function AdminSettings() {
   useEffect(() => {
     async function loadSettings() {
       try {
-        const { data } = await api.get("/bootstrap");
+        const { data } = await api.get("/admin/settings");
         const settings = data.settings || {};
         setGeneral(current => ({
           ...current,
           platform_name: settings.platform_name || current.platform_name,
           logo_url: settings.logo_url || "",
-          welcome_message: settings.welcome_message || current.welcome_message
+          welcome_message: settings.welcome_message || current.welcome_message,
+          login_page_heading: settings.login_page_heading || current.login_page_heading,
+          login_page_subheading: settings.login_page_subheading || current.login_page_subheading,
+          login_page_features: settingsFeatures(settings.login_page_features),
+          quote_pool: settingsFeatures(settings.quote_pool || current.quote_pool)
         }));
         setRegistration(current => ({
           ...current,
@@ -106,12 +126,52 @@ export default function AdminSettings() {
     setHasChanges(true);
   };
 
+  const updateLoginFeature = (index, value) => {
+    setGeneral(current => {
+      const loginPageFeatures = [...current.login_page_features];
+      loginPageFeatures[index] = value;
+      return { ...current, login_page_features: loginPageFeatures };
+    });
+    setHasChanges(true);
+  };
+
+  const addLoginFeature = () => {
+    setGeneral(current => {
+      if (current.login_page_features.length >= 6) return current;
+      return { ...current, login_page_features: [...current.login_page_features, ""] };
+    });
+    setHasChanges(true);
+  };
+
+  const removeLoginFeature = index => {
+    setGeneral(current => ({
+      ...current,
+      login_page_features: current.login_page_features.filter((_, featureIndex) => featureIndex !== index)
+    }));
+    setHasChanges(true);
+  };
+
+  const moveLoginFeature = (index, direction) => {
+    setGeneral(current => {
+      const nextIndex = index + direction;
+      if (nextIndex < 0 || nextIndex >= current.login_page_features.length) return current;
+      const loginPageFeatures = [...current.login_page_features];
+      const [feature] = loginPageFeatures.splice(index, 1);
+      loginPageFeatures.splice(nextIndex, 0, feature);
+      return { ...current, login_page_features: loginPageFeatures };
+    });
+    setHasChanges(true);
+  };
+
   const handleSave = async () => {
     setLoading(true);
     try {
       await api.patch("/admin/settings", {
         platform_name: general.platform_name,
         welcome_message: general.welcome_message,
+        login_page_heading: general.login_page_heading,
+        login_page_subheading: general.login_page_subheading,
+        login_page_features: general.login_page_features.map(feature => feature.trim()).filter(Boolean),
         announcement_message: announcement.enabled ? announcement.message : "",
         quote_pool: general.quote_pool.join("\n"),
         max_violations_before_alert: security.violation_threshold,
@@ -121,6 +181,7 @@ export default function AdminSettings() {
         admin_lockout_count: security.admin_lockout_count,
         admin_idle_timeout_minutes: security.admin_idle_timeout
       });
+      await loadBootstrap();
       notify.success("Settings saved successfully");
       setHasChanges(false);
     } catch (error) {
@@ -209,6 +270,10 @@ export default function AdminSettings() {
       onQuoteDraftChange={setQuoteDraft}
       onAddQuote={addQuote}
       onRemoveQuote={removeQuote}
+      onUpdateLoginFeature={updateLoginFeature}
+      onAddLoginFeature={addLoginFeature}
+      onRemoveLoginFeature={removeLoginFeature}
+      onMoveLoginFeature={moveLoginFeature}
       onBackup={handleBackup}
       onLogoUpload={handleLogoUpload}
       logoUploading={logoUploading}
@@ -295,6 +360,10 @@ function SettingsSection({
   onQuoteDraftChange,
   onAddQuote,
   onRemoveQuote,
+  onUpdateLoginFeature,
+  onAddLoginFeature,
+  onRemoveLoginFeature,
+  onMoveLoginFeature,
   onBackup,
   onLogoUpload,
   logoUploading,
@@ -309,11 +378,13 @@ function SettingsSection({
           <div>
             <label className="mb-3 block font-semibold text-text-primary">Logo</label>
             <div className="rounded-lg border-2 border-dashed border-border bg-background-base p-6 text-center">
-              {general.logo_url ? (
-                <img src={general.logo_url} alt="Platform logo" className="mx-auto mb-3 max-h-20 max-w-48 rounded-md object-contain" />
-              ) : (
-                <Upload size={32} className="mx-auto mb-3 text-text-muted" />
-              )}
+              <PlatformLogo
+                src={general.logo_url}
+                name={general.platform_name}
+                size="lg"
+                className="mx-auto mb-3"
+                fallbackClassName="bg-brand-primary"
+              />
               <p className="mb-3 text-sm text-text-secondary">Upload a PNG, JPG, WEBP, or GIF logo up to 2 MB.</p>
               <Button as="label" variant="secondary" loading={logoUploading} loadingLabel="Uploading..." className="cursor-pointer">
                 <Upload size={16} /> Upload Logo
@@ -322,6 +393,113 @@ function SettingsSection({
             </div>
           </div>
           <Textarea label="Welcome Message" value={general.welcome_message} onChange={event => onGeneralChange("welcome_message", event.target.value)} rows={3} />
+          <div className="space-y-4 rounded-lg border border-border bg-background-base p-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="text-base font-semibold text-text-primary">Login Page Content</h3>
+                <p className="text-sm text-text-secondary">Controls the left panel copy shown before users sign in.</p>
+              </div>
+              <Badge variant="info">{general.login_page_features.length}/6 features</Badge>
+            </div>
+            <Input
+              label="Heading"
+              value={general.login_page_heading}
+              onChange={event => onGeneralChange("login_page_heading", event.target.value)}
+              placeholder="Assessment made simple."
+            />
+            <Input
+              label="Subheading"
+              value={general.login_page_subheading}
+              onChange={event => onGeneralChange("login_page_subheading", event.target.value)}
+              placeholder="Focused, secure, and ready for every exam session."
+            />
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <label className="font-semibold text-text-primary">Feature Bullets</label>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={onAddLoginFeature}
+                  disabled={general.login_page_features.length >= 6}
+                >
+                  <Plus size={15} /> Add Feature
+                </Button>
+              </div>
+              <div className="space-y-2">
+                {general.login_page_features.map((feature, index) => (
+                  <div key={`login-feature-${index}`} className="grid gap-2 rounded-md border border-border bg-background-card p-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                    <Input
+                      aria-label={`Login feature ${index + 1}`}
+                      value={feature}
+                      onChange={event => onUpdateLoginFeature(index, event.target.value)}
+                      placeholder="Feature text"
+                    />
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-11 w-11 px-0"
+                        onClick={() => onMoveLoginFeature(index, -1)}
+                        disabled={index === 0}
+                        aria-label="Move feature up"
+                      >
+                        <ArrowUp size={16} />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-11 w-11 px-0"
+                        onClick={() => onMoveLoginFeature(index, 1)}
+                        disabled={index === general.login_page_features.length - 1}
+                        aria-label="Move feature down"
+                      >
+                        <ArrowDown size={16} />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-11 w-11 px-0 text-danger hover:text-danger"
+                        onClick={() => onRemoveLoginFeature(index)}
+                        aria-label="Remove feature"
+                      >
+                        <Trash2 size={16} />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="overflow-hidden rounded-xl border border-border bg-gradient-to-br from-brand-primary via-indigo-500 to-info p-5 text-white shadow-sm">
+              <div className="mb-6 flex items-center gap-3">
+                <PlatformLogo
+                  src={general.logo_url}
+                  name={general.platform_name}
+                  size="sm"
+                  className="border-white/25 bg-white/15"
+                  fallbackClassName="bg-brand-primary"
+                />
+                <strong className="truncate text-lg">{general.platform_name || "Exam Platform"}</strong>
+              </div>
+              <h4 className="text-2xl font-bold leading-tight">{general.login_page_heading || "Assessment made simple."}</h4>
+              <p className="mt-3 text-sm text-white/85">
+                {general.login_page_subheading || "Focused, secure, and ready for every exam session."}
+              </p>
+              <div className="mt-6 space-y-2 text-sm text-white/85">
+                {(general.login_page_features.length ? general.login_page_features : defaultLoginFeatures).filter(Boolean).map(feature => (
+                  <p key={feature} className="flex items-center gap-2">
+                    <span className="grid h-6 w-6 place-items-center rounded-full bg-white/20">
+                      <CheckCircle2 size={14} />
+                    </span>
+                    {feature}
+                  </p>
+                ))}
+              </div>
+            </div>
+          </div>
           <div className="space-y-3">
             <label className="block font-semibold text-text-primary">Quote Pool</label>
             <div className="flex flex-wrap gap-2">

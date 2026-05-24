@@ -6,6 +6,7 @@ export { ConfirmationDialog } from "./ConfirmationDialog";
 export { EmptyState } from "./EmptyState";
 export { Input } from "./Input";
 export { Modal } from "./Modal";
+export { PlatformLogo } from "./PlatformLogo";
 export { ProgressBar } from "./ProgressBar";
 export { Select } from "./Select";
 export { Skeleton, SkeletonCard, SkeletonStat, SkeletonTableRows } from "./Skeleton";

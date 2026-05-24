@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Check, CheckCircle2, Eye, EyeOff, UserPlus } from "lucide-react";
-import { Button, Input, ProgressBar } from "../components/ui";
+import { Button, Input, PlatformLogo, ProgressBar } from "../components/ui";
 import { cn } from "../components/ui/utils";
 import { api } from "../services/api";
 import { notify } from "../components/ui/Toast";
@@ -52,6 +52,7 @@ export default function RegisterPage({ settings }) {
     && validations.number
     && validations.special
   );
+  const platformName = settings?.platform_name || "Exam Platform";
 
   const handleSubmit = async event => {
     event.preventDefault();
@@ -90,12 +91,14 @@ export default function RegisterPage({ settings }) {
 
           <div className="relative z-10">
             <div className="mb-8 flex items-center gap-3">
-              {settings?.logo_url ? (
-                <img src={settings.logo_url} alt="Platform logo" className="h-12 w-12 rounded-lg bg-white/20 object-contain p-1" />
-              ) : (
-                <span className="grid h-12 w-12 place-items-center rounded-lg bg-white/20 text-xl font-bold">EP</span>
-              )}
-              <h1 className="text-4xl font-bold">{settings?.platform_name || "Exam Platform"}</h1>
+              <PlatformLogo
+                src={settings?.logo_url}
+                name={platformName}
+                size="lg"
+                className="border-white/25 bg-white/15"
+                fallbackClassName="bg-brand-primary"
+              />
+              <h1 className="text-4xl font-bold">{platformName}</h1>
             </div>
             <p className="max-w-sm text-lg text-white/90">
               Create your student account and move straight into a focused exam workspace.
@@ -121,12 +124,8 @@ export default function RegisterPage({ settings }) {
         <div className="flex flex-1 flex-col justify-center px-4 py-12 transition-colors sm:px-6 lg:px-8">
           <div className="mx-auto w-full max-w-md rounded-card border border-border bg-background-card p-6 shadow-elevated sm:p-8">
             <div className="mb-8 flex items-center justify-center gap-2 lg:hidden">
-              {settings?.logo_url ? (
-                <img src={settings.logo_url} alt="Platform logo" className="h-10 w-10 rounded-lg border border-border bg-background-base object-contain p-1" />
-              ) : (
-                <span className="grid h-10 w-10 place-items-center rounded-lg bg-brand-primary text-base font-bold text-white">EP</span>
-              )}
-              <h2 className="text-2xl font-bold text-text-primary">{settings?.platform_name || "Exam Platform"}</h2>
+              <PlatformLogo src={settings?.logo_url} name={platformName} size="sm" />
+              <h2 className="text-2xl font-bold text-text-primary">{platformName}</h2>
             </div>
 
             <div className="mb-8 text-center">

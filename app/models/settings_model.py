@@ -11,6 +11,22 @@ class PlatformSettings(db.Model):
     platform_name = db.Column(db.String(120), nullable=False, default="Exam System")
     welcome_message = db.Column(db.String(255), nullable=False, default="Calm assessment space")
     announcement_message = db.Column(db.Text, nullable=True)
+    login_page_heading = db.Column(db.Text, nullable=False, default="Assessment made simple.")
+    login_page_subheading = db.Column(
+        db.Text,
+        nullable=False,
+        default="Focused, secure, and ready for every exam session.",
+    )
+    login_page_features = db.Column(
+        db.Text,
+        nullable=False,
+        default=(
+            '["Real-time proctoring and monitoring", '
+            '"Multiple question types and formats", '
+            '"Instant results and detailed analytics", '
+            '"Code execution support with live testing"]'
+        ),
+    )
     student_self_registration = db.Column(db.Boolean, default=False, nullable=False)
     registration_code_required = db.Column(db.Boolean, default=False, nullable=False)
     registration_code = db.Column(db.String(80), nullable=True)

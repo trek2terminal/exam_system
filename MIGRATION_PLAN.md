@@ -642,3 +642,21 @@ Current status:
 - No known lint/build/source-level bugs after this pass.
 - No new package install was required.
 - Uploaded logo display should now work in Vite dev and Flask-served production; runtime browser check still recommended after uploading a fresh logo.
+
+## Latest Implementation Batch 27 - 2026-05-24
+
+Completed in this batch:
+- Added admin-editable login page content to platform settings: heading, subheading, and up to six feature bullets.
+- Added recorded schema migration `20260524_019_login_page_content` for `platform_settings.login_page_heading`, `login_page_subheading`, and `login_page_features`.
+- Extended `/api/bootstrap` and `/api/admin/settings` so public login pages and Admin Settings both receive normalized login content arrays.
+- Added `/api/admin/settings` GET/POST support alongside PATCH for React settings management.
+- Replaced repeated logo `<img>` snippets with a reusable `PlatformLogo` component that caps logos at 48x48, uses `object-contain`, and falls back to the platform initial if the URL is missing or the image fails to load.
+- Applied the logo fallback to Login, Register, Sidebar/Mobile Drawer, and Admin Settings logo preview/live login preview.
+- Added the Admin Settings General > Login Page Content editor with inline feature editing, add/remove, up/down reordering, count badge, and live preview.
+- Applied the local migration and confirmed migration status includes `20260524_019_login_page_content`.
+- Verified backend syntax, `npm.cmd run lint`, and `npm.cmd run build`.
+
+Current status:
+- No known lint/build/source-level bugs after this pass.
+- No new package install was required.
+- Runtime browser check is still recommended after uploading a fresh logo and editing login copy from Admin Settings.
