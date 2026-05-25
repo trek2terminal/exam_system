@@ -465,6 +465,21 @@ def _question_bank_payload(item):
     }
 
 
+def _normalize_question_identity(value):
+    return re.sub(r"\s+", " ", (value or "").strip().lower())
+
+
+def _question_identity(question_type, question_text):
+    return (
+        (question_type or "short").strip().lower(),
+        _normalize_question_identity(question_text),
+    )
+
+
+def _bank_item_matches_identity(item, identity):
+    return _question_identity(item.question_type, item.question_text) == identity
+
+
 def _question_options_for_attempt(question, student_session=None):
     options = question.options_as_list()
     if (
@@ -3876,6 +3891,29 @@ def teacher_question_bank_api():
             return jsonify({"ok": False, "message": "Question text is required."}), 400
         if question_type == "mcq" and len(options) < 2:
             return jsonify({"ok": False, "message": "MCQ questions need at least two options."}), 400
+        duplicate_identity = _question_identity(question_type, question_text)
+        duplicate_item = next(
+            (
+                item
+                for item in QuestionBankItem.query.filter_by(
+                    teacher_id=teacher.id,
+                    question_type=question_type,
+                ).all()
+                if _bank_item_matches_identity(item, duplicate_identity)
+            ),
+            None,
+        )
+        if duplicate_item:
+            return (
+                jsonify(
+                    {
+                        "ok": False,
+                        "message": "This question already exists in your question bank.",
+                        "duplicate_item": _question_bank_payload(duplicate_item),
+                    }
+                ),
+                409,
+            )
         item = QuestionBankItem(
             teacher_id=teacher.id,
             question_text=question_text,
@@ -3935,6 +3973,32 @@ def teacher_question_bank_item_api(item_id):
             max(_parse_int_field(payload, "execution_time_limit_seconds") or 10, 1),
             60,
         )
+    if not item.question_text:
+        return jsonify({"ok": False, "message": "Question text is required."}), 400
+    duplicate_identity = _question_identity(item.question_type, item.question_text)
+    duplicate_item = next(
+        (
+            bank_item
+            for bank_item in QuestionBankItem.query.filter(
+                QuestionBankItem.teacher_id == teacher.id,
+                QuestionBankItem.question_type == item.question_type,
+                QuestionBankItem.id != item.id,
+            ).all()
+            if _bank_item_matches_identity(bank_item, duplicate_identity)
+        ),
+        None,
+    )
+    if duplicate_item:
+        return (
+            jsonify(
+                {
+                    "ok": False,
+                    "message": "This question already exists in your question bank.",
+                    "duplicate_item": _question_bank_payload(duplicate_item),
+                }
+            ),
+            409,
+        )
     db.session.commit()
     return jsonify({"ok": True, "item": _question_bank_payload(item)})
 
@@ -3975,8 +4039,18 @@ def teacher_import_question_bank_api(exam_id):
     )
     next_number = (last_question.question_number if last_question else 0) + 1
     imported_questions = []
+    skipped_items = []
+    existing_questions = Question.query.filter_by(exam_set_id=exam.id).all()
+    existing_identities = {
+        _question_identity(question.question_type, question.question_text)
+        for question in existing_questions
+    }
 
     for item in bank_items:
+        item_identity = _question_identity(item.question_type, item.question_text)
+        if item_identity in existing_identities:
+            skipped_items.append(item)
+            continue
         question = Question(
             exam_set_id=exam.id,
             question_number=next_number,
@@ -3995,16 +4069,35 @@ def teacher_import_question_bank_api(exam_id):
         question.set_image_paths(item.image_paths_as_list())
         db.session.add(question)
         imported_questions.append(question)
+        existing_identities.add(item_identity)
         next_number += 1
+
+    if not imported_questions:
+        return (
+            jsonify(
+                {
+                    "ok": False,
+                    "message": "Selected question(s) are already imported in this exam.",
+                    "imported_count": 0,
+                    "skipped_count": len(skipped_items),
+                }
+            ),
+            409,
+        )
 
     db.session.flush()
     exam.total_marks = sum(q.marks for q in Question.query.filter_by(exam_set_id=exam.id).all())
     db.session.commit()
+    skipped_count = len(skipped_items)
+    message = f"Imported {len(imported_questions)} question(s)."
+    if skipped_count:
+        message += f" {skipped_count} already imported question(s) skipped."
     return jsonify(
         {
             "ok": True,
-            "message": f"Imported {len(imported_questions)} question(s).",
+            "message": message,
             "imported_count": len(imported_questions),
+            "skipped_count": skipped_count,
             "questions": [_question_payload(question) for question in imported_questions],
         }
     )

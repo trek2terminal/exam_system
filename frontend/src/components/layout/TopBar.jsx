@@ -56,7 +56,7 @@ export function TopBar({ auth, notifications, theme, onToggleTheme, onMarkAllRea
       <div className="ml-auto flex items-center gap-2" ref={containerRef}>
         {searchOpen && (
           <label className="hidden h-9 w-64 items-center gap-2 rounded-md border border-border bg-background-card px-3 text-sm text-text-secondary shadow-sm md:flex">
-            <Search size={17} />
+            <Search size={24} strokeWidth={2.35} />
             <input
               className="min-w-0 flex-1 bg-transparent text-text-primary outline-none placeholder:text-text-muted"
               placeholder="Search"
@@ -68,27 +68,27 @@ export function TopBar({ auth, notifications, theme, onToggleTheme, onMarkAllRea
           <Button
             variant="ghost"
             className={cn(
-              "h-10 w-10 rounded-lg px-0 transition duration-150 hover:bg-black/[0.08] dark:hover:bg-white/10",
+              "h-12 w-12 rounded-lg px-0 transition duration-150 hover:bg-black/[0.08] dark:hover:bg-white/10",
               searchOpen && "bg-background-elevated dark:bg-white/10"
             )}
             aria-label="Search"
             onClick={() => setSearchOpen(current => !current)}
           >
-            <Search size={20} />
+            <Search size={28} strokeWidth={2.35} />
           </Button>
 
           <Button
-            className="h-10 w-10 rounded-lg px-0 transition duration-150 hover:bg-black/[0.08] dark:hover:bg-white/10"
+            className="h-12 w-12 rounded-lg px-0 transition duration-150 hover:bg-black/[0.08] dark:hover:bg-white/10"
             variant="ghost"
             aria-label="Toggle theme"
             onClick={onToggleTheme}
           >
-            {theme === "dark" ? <Moon size={20} /> : <Sun size={20} />}
+            {theme === "dark" ? <Moon size={28} strokeWidth={2.35} /> : <Sun size={28} strokeWidth={2.35} />}
           </Button>
 
           <div className="relative">
             <Button
-              className="relative h-10 w-10 rounded-lg px-0 transition duration-150 hover:bg-black/[0.08] dark:hover:bg-white/10"
+              className="relative h-12 w-12 rounded-lg px-0 transition duration-150 hover:bg-black/[0.08] dark:hover:bg-white/10"
               variant="ghost"
               aria-label="Notifications"
               aria-expanded={showNotifications}
@@ -97,7 +97,7 @@ export function TopBar({ auth, notifications, theme, onToggleTheme, onMarkAllRea
                 setShowUserMenu(false);
               }}
             >
-              <Bell size={20} />
+              <Bell size={28} strokeWidth={2.35} />
               {unreadCount > 0 && (
                 <span className="absolute -right-1 -top-1 grid min-h-5 min-w-5 place-items-center rounded-pill bg-danger px-1 text-[11px] font-bold text-white">
                   {unreadCount > 99 ? "99+" : unreadCount}

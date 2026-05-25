@@ -29,6 +29,14 @@ const createEmptyExam = () => ({
   group_ids: []
 });
 
+function normalizeQuestionIdentity(value) {
+  return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function questionIdentity(type, text) {
+  return `${mapQuestionType(type)}::${normalizeQuestionIdentity(text)}`;
+}
+
 export default function ExamEditor() {
   const { examId } = useParams();
   const navigate = useNavigate();
@@ -147,7 +155,15 @@ export default function ExamEditor() {
   const updateQuestion = (id, field, value) => {
     setExam(prev => ({
       ...prev,
-      questions: prev.questions.map(q => q.id === id ? { ...q, [field]: value } : q)
+      questions: prev.questions.map(q => {
+        if (q.id !== id) return q;
+        const nextQuestion = { ...q, [field]: value };
+        if (field === "text" || field === "type") {
+          nextQuestion.bank_item_id = null;
+          nextQuestion.from_question_bank = false;
+        }
+        return nextQuestion;
+      })
     }));
   };
 
@@ -169,6 +185,10 @@ export default function ExamEditor() {
       notify.error("Enter the question text before saving it to the question bank.");
       return;
     }
+    if (question.from_question_bank || question.bank_item_id) {
+      notify.info("This question is already in your question bank.");
+      return;
+    }
     setSavingBankQuestionId(question.id);
     try {
       const payload = questionToBankPayload(question);
@@ -176,6 +196,14 @@ export default function ExamEditor() {
         headers: { "Content-Type": "multipart/form-data" }
       });
       notify.success(data.message || "Question added to question bank");
+      setExam(prev => ({
+        ...prev,
+        questions: prev.questions.map(item => (
+          item.id === question.id
+            ? { ...item, bank_item_id: data.item?.id, from_question_bank: true }
+            : item
+        ))
+      }));
     } catch (error) {
       notify.error(error.message || "Could not save question to bank");
     } finally {
@@ -184,6 +212,14 @@ export default function ExamEditor() {
   };
 
   const importBankQuestion = item => {
+    const importedIdentity = questionIdentity(item.question_type || item.type, item.question_text || item.text);
+    const alreadyImported = (exam.questions || []).some(question => (
+      questionIdentity(question.type, question.text) === importedIdentity
+    ));
+    if (alreadyImported) {
+      notify.info("This question is already imported in this exam.");
+      return;
+    }
     setExam(prev => ({
       ...prev,
       questions: [...(prev.questions || []), bankItemToExamQuestion(item)]
@@ -261,6 +297,7 @@ export default function ExamEditor() {
         open={showBankImport}
         onClose={() => setShowBankImport(false)}
         onImport={importBankQuestion}
+        existingQuestions={exam.questions || []}
       />
     </div>
   );
@@ -328,6 +365,8 @@ function questionToBankPayload(question) {
 function bankItemToExamQuestion(item) {
   return {
     id: `bank_${item.id}_${Date.now()}`,
+    bank_item_id: item.id,
+    from_question_bank: true,
     text: item.question_text || item.text || "",
     type: bankTypeToEditorType(item.question_type || item.type),
     options: item.options || [],
@@ -451,6 +490,7 @@ function QuestionsStep({ exam, onAddQuestion, onUpdateQuestion, onDeleteQuestion
             onDelete={() => onDeleteQuestion(selectedQuestion)}
             onSaveToBank={() => onSaveToBank(questions.find(q => q.id === selectedQuestion))}
             savingToBank={savingBankQuestionId === selectedQuestion}
+            alreadyInBank={Boolean(questions.find(q => q.id === selectedQuestion)?.from_question_bank || questions.find(q => q.id === selectedQuestion)?.bank_item_id)}
           />
         ) : (
           <div className="rounded-lg border border-border/50 bg-background-elevated/30 p-8 text-center">
@@ -462,7 +502,7 @@ function QuestionsStep({ exam, onAddQuestion, onUpdateQuestion, onDeleteQuestion
   );
 }
 
-function QuestionEditor({ question, onUpdate, onDelete, onSaveToBank, savingToBank }) {
+function QuestionEditor({ question, onUpdate, onDelete, onSaveToBank, savingToBank, alreadyInBank }) {
   const imagePreviews = question?.image_files ? Array.from(question.image_files).map(file => ({
     name: file.name,
     url: window.URL.createObjectURL(file)
@@ -473,8 +513,15 @@ function QuestionEditor({ question, onUpdate, onDelete, onSaveToBank, savingToBa
       <div className="flex items-center justify-between">
         <h3 className="font-semibold text-text-primary">Edit Question</h3>
         <div className="flex gap-2">
-          <Button variant="secondary" size="sm" onClick={onSaveToBank} loading={savingToBank} loadingLabel="Saving">
-            <Save size={16} /> Add to Question Bank
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={onSaveToBank}
+            loading={savingToBank}
+            loadingLabel="Saving"
+            disabled={alreadyInBank}
+          >
+            <Save size={16} /> {alreadyInBank ? "Already in Question Bank" : "Add to Question Bank"}
           </Button>
           <Button variant="danger" size="sm" onClick={onDelete} aria-label="Delete question">
             <Trash2 size={16} />
@@ -622,10 +669,13 @@ function QuestionEditor({ question, onUpdate, onDelete, onSaveToBank, savingToBa
   );
 }
 
-function QuestionBankImportModal({ open, onClose, onImport }) {
+function QuestionBankImportModal({ open, onClose, onImport, existingQuestions = [] }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
+  const existingIdentities = new Set(
+    (existingQuestions || []).map(question => questionIdentity(question.type, question.text))
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -684,7 +734,9 @@ function QuestionBankImportModal({ open, onClose, onImport }) {
           </div>
         ) : (
           <div className="grid max-h-[60vh] gap-3 overflow-y-auto pr-1 md:grid-cols-2">
-            {filteredItems.map(item => (
+            {filteredItems.map(item => {
+              const alreadyImported = existingIdentities.has(questionIdentity(item.question_type || item.type, item.question_text || item.text));
+              return (
               <div key={item.id} className="rounded-lg border border-border bg-background-base p-4">
                 <div className="mb-3 flex items-start justify-between gap-3">
                   <div className="flex flex-wrap gap-2">
@@ -692,9 +744,15 @@ function QuestionBankImportModal({ open, onClose, onImport }) {
                       {item.question_type}
                     </Badge>
                     <Badge variant="secondary">{item.marks || 1} marks</Badge>
+                    {alreadyImported && <Badge variant="success">Already imported</Badge>}
                   </div>
-                  <Button variant="primary" size="sm" onClick={() => onImport(item)}>
-                    <Plus size={16} /> Import
+                  <Button
+                    variant={alreadyImported ? "secondary" : "primary"}
+                    size="sm"
+                    onClick={() => alreadyImported ? notify.info("This question is already imported in this exam.") : onImport(item)}
+                    disabled={alreadyImported}
+                  >
+                    <Plus size={16} /> {alreadyImported ? "Already imported" : "Import"}
                   </Button>
                 </div>
                 <p className="line-clamp-3 text-sm font-semibold text-text-primary">{item.question_text}</p>
@@ -708,7 +766,8 @@ function QuestionBankImportModal({ open, onClose, onImport }) {
                   </div>
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
