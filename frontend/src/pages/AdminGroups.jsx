@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { Copy, Plus, RefreshCw, Search, Trash2, UserPlus, X } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import { Avatar, Badge, Button, Card, ConfirmationDialog, EmptyState } from "../components/ui";
 import { api } from "../services/api";
 import { notify } from "../components/ui/Toast";
 import { useLiveRefresh } from "../hooks/useLiveRefresh";
+import { useDraftAutoSave } from "../hooks/useDraftAutoSave";
 
 export default function AdminGroups() {
+  const [searchParams] = useSearchParams();
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -33,6 +36,39 @@ export default function AdminGroups() {
   }, [loadGroups]);
   useLiveRefresh(loadGroups, { intervalMs: 25000 });
 
+  const restoreGroupDraft = useCallback(draftData => {
+    setNewGroup({
+      name: draftData.name || "",
+      description: draftData.description || ""
+    });
+  }, []);
+
+  const groupDraft = useDraftAutoSave({
+    draftType: "admin_group",
+    formState: newGroup,
+    titlePreview: newGroup.name,
+    onRestore: restoreGroupDraft,
+    enabled: !loading
+  });
+
+  useEffect(() => {
+    const draftId = searchParams.get("draft");
+    if (!draftId) return;
+    let active = true;
+    async function restoreFromQuery() {
+      try {
+        const { data } = await api.get(`/drafts/${draftId}`);
+        if (active) restoreGroupDraft(data.draft?.draft_data || {});
+      } catch (error) {
+        notify.error(error.message || "Could not restore draft");
+      }
+    }
+    restoreFromQuery();
+    return () => {
+      active = false;
+    };
+  }, [restoreGroupDraft, searchParams]);
+
   const filteredGroups = groups.filter(group => group.name.toLowerCase().includes(search.toLowerCase()));
   const panelClass = "rounded-2xl border border-white/10 bg-[#1e2130] shadow-xl";
   const fieldClass = "w-full rounded-xl border border-white/10 bg-[#141827] px-4 py-2.5 text-white placeholder-gray-500 outline-none transition-all duration-200 focus:border-indigo-400/50 focus:ring-2 focus:ring-indigo-500";
@@ -45,6 +81,7 @@ export default function AdminGroups() {
       const { data } = await api.post("/admin/groups", newGroup);
       setGroups(current => [...current, data.group].sort((left, right) => left.name.localeCompare(right.name)));
       setNewGroup({ name: "", description: "" });
+      await groupDraft.clearDraft();
       notify.success("Group created");
     } catch (error) {
       notify.error(error.response?.data?.message || "Could not create group");
@@ -156,6 +193,7 @@ export default function AdminGroups() {
               <h2 className="text-xl font-semibold text-white">Create Group</h2>
             </div>
           </div>
+          {groupDraft.banner}
           <form onSubmit={createGroup} className="space-y-4">
             <label className="grid gap-2">
               <span className={labelClass}>Group Name <span className="text-red-400">*</span></span>
@@ -168,6 +206,7 @@ export default function AdminGroups() {
             <button type="submit" className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 px-4 py-2.5 font-semibold text-white shadow-lg shadow-indigo-950/30 transition-all duration-200 hover:opacity-90">
               <Plus size={18} /> Create Group
             </button>
+            <div className="text-right">{groupDraft.indicator}</div>
           </form>
         </Card>
 

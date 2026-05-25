@@ -54,6 +54,7 @@ const AdminGroups = lazy(() => import("./pages/AdminGroups.jsx"));
 const AdminExams = lazy(() => import("./pages/AdminExams.jsx"));
 const AdminReports = lazy(() => import("./pages/AdminReports.jsx"));
 const AccountSettings = lazy(() => import("./pages/AccountSettings.jsx"));
+const MyDrafts = lazy(() => import("./pages/MyDrafts.jsx"));
 const NotificationsPage = lazy(() => import("./pages/NotificationsPage.jsx"));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage.jsx"));
 
@@ -1123,6 +1124,16 @@ export default function App() {
           )}
         />
         <Route
+          path="/teacher/drafts"
+          element={role === "teacher" ? (
+            <PageSuspense label="Loading drafts...">
+              <MyDrafts role="teacher" />
+            </PageSuspense>
+          ) : (
+            <LoginPanel settings={bootstrap?.settings} />
+          )}
+        />
+        <Route
           path="/teacher/reports"
           element={role === "teacher" ? (
             <PageSuspense label="Loading reports...">
@@ -1189,6 +1200,16 @@ export default function App() {
           element={role === "admin" ? (
             <PageSuspense label="Loading groups...">
               <AdminGroups />
+            </PageSuspense>
+          ) : (
+            <LoginPanel settings={bootstrap?.settings} />
+          )}
+        />
+        <Route
+          path="/admin/drafts"
+          element={role === "admin" ? (
+            <PageSuspense label="Loading drafts...">
+              <MyDrafts role="admin" />
             </PageSuspense>
           ) : (
             <LoginPanel settings={bootstrap?.settings} />

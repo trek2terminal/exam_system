@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { BookOpenCheck, Save, Trash2, Plus, Upload } from "lucide-react";
 import { Avatar, Badge, Button, Input, MarksInput, Select, Textarea, StepWizard, ConfirmationDialog, Modal, Toggle } from "../components/ui";
 import { api } from "../services/api";
 import { notify } from "../components/ui/Toast";
 import QuestionImportWizard from "./QuestionImportWizard";
+import { useDraftAutoSave } from "../hooks/useDraftAutoSave";
 
 const createEmptyExam = () => ({
   name: "",
@@ -70,6 +71,7 @@ function generateClientAccessCode() {
 
 export default function ExamEditor() {
   const { examId } = useParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(0);
   const [loading, setLoading] = useState(!!examId);
@@ -80,6 +82,7 @@ export default function ExamEditor() {
   const [savingBankQuestionId, setSavingBankQuestionId] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingQuestionId, setDeletingQuestionId] = useState(null);
+  const [draftDirty, setDraftDirty] = useState(false);
 
   const loadExam = useCallback(async () => {
     try {
@@ -95,6 +98,41 @@ export default function ExamEditor() {
   useEffect(() => {
     if (examId) loadExam();
   }, [examId, loadExam]);
+
+  const restoreExamDraft = useCallback(draftData => {
+    const nextExam = draftData.exam || draftData;
+    setExam({ ...createEmptyExam(), ...nextExam });
+    if (Number.isInteger(draftData.currentStep)) setCurrentStep(draftData.currentStep);
+    setDraftDirty(false);
+  }, []);
+
+  const draft = useDraftAutoSave({
+    draftType: examId ? `exam_edit_${examId}` : "exam",
+    formState: { exam, currentStep },
+    titlePreview: exam.name || exam.subject,
+    onRestore: restoreExamDraft,
+    enabled: !loading,
+    dirty: draftDirty
+  });
+
+  useEffect(() => {
+    const draftId = searchParams.get("draft");
+    if (!draftId) return;
+    let active = true;
+    async function restoreFromQuery() {
+      try {
+        const { data } = await api.get(`/drafts/${draftId}`);
+        if (!active) return;
+        restoreExamDraft(data.draft?.draft_data || {});
+      } catch (error) {
+        notify.error(error.message || "Could not restore draft");
+      }
+    }
+    restoreFromQuery();
+    return () => {
+      active = false;
+    };
+  }, [restoreExamDraft, searchParams]);
 
   const steps = [
     { label: "Exam Details" },
@@ -157,6 +195,8 @@ export default function ExamEditor() {
         headers: { "Content-Type": "multipart/form-data" }
       });
       notify.success(response.data?.message || "Exam saved successfully");
+      await draft.clearDraft();
+      setDraftDirty(false);
       navigate("/teacher/exams", { replace: true });
     } catch (error) {
       notify.error(error.message || "Failed to save exam");
@@ -166,6 +206,7 @@ export default function ExamEditor() {
   };
 
   const updateExamField = (field, value) => {
+    setDraftDirty(true);
     setExam(prev => ({
       ...prev,
       [field]: value
@@ -173,6 +214,7 @@ export default function ExamEditor() {
   };
 
   const addQuestion = () => {
+    setDraftDirty(true);
     setExam(prev => ({
       ...prev,
       questions: [
@@ -183,6 +225,7 @@ export default function ExamEditor() {
   };
 
   const updateQuestion = (id, field, value) => {
+    setDraftDirty(true);
     setExam(prev => ({
       ...prev,
       questions: prev.questions.map(q => {
@@ -203,6 +246,7 @@ export default function ExamEditor() {
   };
 
   const confirmDelete = () => {
+    setDraftDirty(true);
     setExam(prev => ({
       ...prev,
       questions: prev.questions.filter(q => q.id !== deletingQuestionId)
@@ -234,6 +278,7 @@ export default function ExamEditor() {
             : item
         ))
       }));
+      setDraftDirty(true);
     } catch (error) {
       notify.error(error.message || "Could not save question to bank");
     } finally {
@@ -254,6 +299,7 @@ export default function ExamEditor() {
       ...prev,
       questions: [...(prev.questions || []), bankItemToExamQuestion(item)]
     }));
+    setDraftDirty(true);
     setShowBankImport(false);
     notify.success("Question imported from bank. Save the exam to keep it in this paper.");
   };
@@ -268,6 +314,7 @@ export default function ExamEditor() {
         <p className="text-sm font-semibold text-text-muted">CREATE EXAM</p>
         <h1 className="text-3xl font-bold text-text-primary">{isNewExam ? "New Exam" : exam?.name}</h1>
       </div>
+      {draft.banner}
 
       <StepWizard
         steps={steps}
@@ -294,6 +341,7 @@ export default function ExamEditor() {
         {currentStep === 3 && <SettingsStep exam={exam} onUpdate={updateExamField} />}
         {currentStep === 4 && <ReviewStep exam={exam} />}
       </StepWizard>
+      <div className="flex justify-end">{draft.indicator}</div>
 
       <ConfirmationDialog
         open={showDeleteConfirm}
@@ -313,6 +361,7 @@ export default function ExamEditor() {
       >
         <QuestionImportWizard
           onImport={(questions) => {
+            setDraftDirty(true);
             setExam(prev => ({
               ...prev,
               questions: [...(prev.questions || []), ...questions]

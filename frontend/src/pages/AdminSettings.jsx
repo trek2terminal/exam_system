@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { ArrowDown, ArrowUp, BarChart2, Bell, BookOpen, CheckCircle2, Code2, DatabaseBackup, Download, GripVertical, Layers, Lock, Megaphone, Plus, Save, Shield, Settings2, ShieldCheck, Trash2, Upload, UserCheck, UserPlus, X, Zap } from "lucide-react";
 import { Badge, Button, Card, CropModal, Input, PlatformLogo, Select, Textarea, Toggle } from "../components/ui";
 import { notify } from "../components/ui/Toast";
 import { api } from "../services/api";
 import { useAppStore } from "../store/appStore";
+import { useDraftAutoSave } from "../hooks/useDraftAutoSave";
 
 const tabs = [
   { id: "general", label: "General", icon: Settings2 },
@@ -63,6 +65,7 @@ function settingsList(value) {
 }
 
 export default function AdminSettings() {
+  const [searchParams] = useSearchParams();
   const loadBootstrap = useAppStore(state => state.loadBootstrap);
   const [activeTab, setActiveTab] = useState("general");
   const [loading, setLoading] = useState(false);
@@ -161,6 +164,40 @@ export default function AdminSettings() {
   const handleSecurityChange = markChanged(setSecurity);
   const handleAnnouncementChange = markChanged(setAnnouncement);
 
+  const restoreSettingsDraft = data => {
+    if (data.general) setGeneral(current => ({ ...current, ...data.general }));
+    if (data.registration) setRegistration(current => ({ ...current, ...data.registration }));
+    if (data.security) setSecurity(current => ({ ...current, ...data.security }));
+    if (data.announcement) setAnnouncement(current => ({ ...current, ...data.announcement }));
+    setHasChanges(true);
+  };
+
+  const settingsDraft = useDraftAutoSave({
+    draftType: "admin_settings",
+    formState: { general, registration, security, announcement },
+    titlePreview: general.platform_name || "Platform settings",
+    onRestore: restoreSettingsDraft,
+    dirty: hasChanges
+  });
+
+  useEffect(() => {
+    const draftId = searchParams.get("draft");
+    if (!draftId) return;
+    let active = true;
+    async function restoreFromQuery() {
+      try {
+        const { data } = await api.get(`/drafts/${draftId}`);
+        if (active && data.draft?.draft_type === "admin_settings") restoreSettingsDraft(data.draft.draft_data || {});
+      } catch (error) {
+        notify.error(error.message || "Could not restore draft");
+      }
+    }
+    restoreFromQuery();
+    return () => {
+      active = false;
+    };
+  }, [searchParams]);
+
   const addQuote = () => {
     const quote = quoteDraft.trim();
     if (!quote) return;
@@ -240,6 +277,7 @@ export default function AdminSettings() {
         admin_idle_timeout_minutes: security.admin_idle_timeout
       });
       await loadBootstrap();
+      await settingsDraft.clearDraft();
       notify.success("Settings saved successfully");
       setHasChanges(false);
     } catch (error) {
@@ -380,9 +418,12 @@ export default function AdminSettings() {
           <h1 className="text-3xl font-bold text-text-primary">Platform Settings</h1>
           <p className="mt-1 text-text-secondary">Manage student registration, announcements, violation threshold, and database backup.</p>
         </div>
-        <Button variant="primary" onClick={handleSave} loading={loading} loadingLabel="Saving..." disabled={!hasChanges}>
-          <Save size={16} /> Save Changes
-        </Button>
+        <div className="flex flex-col items-start gap-2 lg:items-end">
+          <Button variant="primary" onClick={handleSave} loading={loading} loadingLabel="Saving..." disabled={!hasChanges}>
+            <Save size={16} /> Save Changes
+          </Button>
+          {settingsDraft.indicator}
+        </div>
       </div>
 
       <div className="grid gap-6 md:grid-cols-[220px_minmax(0,1fr)]">
@@ -408,6 +449,7 @@ export default function AdminSettings() {
         </Card>
 
         <div className="hidden md:block">
+          {activeTab === "general" && <div className="mb-4">{settingsDraft.banner}</div>}
           {renderSection(activeTab)}
         </div>
 

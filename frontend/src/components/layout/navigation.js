@@ -2,6 +2,7 @@ import {
   BarChart3,
   BookOpenCheck,
   ClipboardList,
+  FileText,
   Gauge,
   History,
   Radio,
@@ -23,6 +24,7 @@ export const roleNavigation = {
     { label: "Dashboard", to: "/admin", icon: Gauge },
     { label: "Users", to: "/admin/users", icon: Users },
     { label: "Groups", to: "/admin/groups", icon: UserRoundCog },
+    { label: "My Drafts", to: "/admin/drafts", icon: FileText },
     { label: "Exams", to: "/admin/exams", icon: BookOpenCheck },
     { label: "Proctoring", to: "/admin/proctoring", icon: Radio },
     { label: "Reports", to: "/admin/reports", icon: BarChart3 },
@@ -32,6 +34,7 @@ export const roleNavigation = {
     { label: "Dashboard", to: "/teacher", icon: Gauge },
     { label: "My Exams", to: "/teacher/exams", icon: BookOpenCheck },
     { label: "Question Bank", to: "/teacher/question-bank", icon: ClipboardList },
+    { label: "My Drafts", to: "/teacher/drafts", icon: FileText },
     { label: "Proctoring", to: "/teacher/proctoring", icon: Radio },
     { label: "Reports", to: "/teacher/reports", icon: BarChart3 }
   ],

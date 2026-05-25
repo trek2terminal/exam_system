@@ -14,6 +14,7 @@ from werkzeug.utils import secure_filename
 
 from app.models.audit_model import AuditLog, ViolationLog
 from app.models.database import db
+from app.models.draft_model import Draft
 from app.models.exam_model import ExamEnrollment, ExamSet, Question, QuestionBankItem
 from app.models.group_model import StudentGroup, StudentGroupMember, generate_group_join_code
 from app.models.notification_model import Notification
@@ -149,6 +150,53 @@ def _settings_payload(settings):
         "max_violations_before_alert": settings.max_violations_before_alert,
         "admin_lockout_count": getattr(settings, "admin_lockout_count", 3),
         "admin_idle_timeout_minutes": getattr(settings, "admin_idle_timeout_minutes", 120),
+    }
+
+
+def _draft_json_data(draft):
+    try:
+        parsed = json.loads(draft.draft_data or "{}")
+        return parsed if isinstance(parsed, dict) else {}
+    except (TypeError, ValueError):
+        return {}
+
+
+def _draft_title_preview(draft_type, draft_data):
+    candidates = []
+    if isinstance(draft_data, dict):
+        candidates.extend(
+            [
+                draft_data.get("title"),
+                draft_data.get("name"),
+                draft_data.get("exam_name"),
+                draft_data.get("question_text"),
+                draft_data.get("description"),
+            ]
+        )
+        nested_form = draft_data.get("formData")
+        if isinstance(nested_form, dict):
+            candidates.extend([nested_form.get("question_text"), nested_form.get("name"), nested_form.get("title")])
+        nested_exam = draft_data.get("exam")
+        if isinstance(nested_exam, dict):
+            candidates.extend([nested_exam.get("name"), nested_exam.get("subject")])
+    for candidate in candidates:
+        value = str(candidate or "").strip()
+        if value:
+            return re.sub(r"\s+", " ", value)[:240]
+    label = str(draft_type or "draft").replace("_", " ").strip().title()
+    return f"Untitled {label}"[:240]
+
+
+def _draft_payload(draft):
+    return {
+        "id": draft.id,
+        "user_id": draft.user_id,
+        "user_role": draft.user_role,
+        "draft_type": draft.draft_type,
+        "draft_data": _draft_json_data(draft),
+        "title_preview": draft.title_preview,
+        "created_at": _iso_datetime(draft.created_at),
+        "updated_at": _iso_datetime(draft.updated_at),
     }
 
 
@@ -1284,6 +1332,15 @@ def _require_teacher_api():
     return teacher, None
 
 
+def _require_draft_user_api():
+    role = session.get("role")
+    if role == "admin":
+        return _require_admin_api()
+    if role == "teacher":
+        return _require_teacher_api()
+    return None, _role_error("Admin or teacher login required", 403)
+
+
 def _admin_password_matches(payload):
     password = (payload or {}).get("admin_password") or ""
     admin = User.query.get(session.get("admin_id"))
@@ -1439,6 +1496,80 @@ def bootstrap():
 @api_bp.route("/settings/public")
 def public_settings_api():
     return jsonify({"ok": True, "settings": _public_settings_payload(SettingsService.get_settings())})
+
+
+@api_bp.route("/drafts", methods=["GET", "POST", "DELETE"])
+@rate_limit("admin_action", methods=("POST", "DELETE"))
+def drafts_api():
+    user, error_response = _require_draft_user_api()
+    if error_response:
+        return error_response
+
+    if request.method == "GET":
+        draft_type = (request.args.get("draft_type") or "").strip()
+        query = Draft.query.filter_by(user_id=user.id)
+        if draft_type:
+            query = query.filter_by(draft_type=draft_type)
+        drafts = query.order_by(Draft.updated_at.desc()).all()
+        return jsonify({"ok": True, "drafts": [_draft_payload(draft) for draft in drafts]})
+
+    if request.method == "DELETE":
+        deleted = Draft.query.filter_by(user_id=user.id).delete()
+        db.session.commit()
+        return jsonify({"ok": True, "message": "Drafts deleted.", "deleted": deleted})
+
+    payload = _get_json_payload()
+    draft_type = str(payload.get("draft_type") or "").strip()
+    if not draft_type:
+        return jsonify({"ok": False, "message": "Draft type is required."}), 400
+    draft_data = payload.get("draft_data")
+    if not isinstance(draft_data, dict):
+        draft_data = {}
+    title_preview = (payload.get("title_preview") or _draft_title_preview(draft_type, draft_data)).strip()[:240]
+
+    draft = Draft.query.filter_by(user_id=user.id, draft_type=draft_type).first()
+    status_code = 200
+    if not draft:
+        draft = Draft(user_id=user.id, user_role=user.role, draft_type=draft_type, created_at=datetime.utcnow())
+        db.session.add(draft)
+        status_code = 201
+
+    draft.user_role = user.role
+    draft.draft_data = json.dumps(draft_data)
+    draft.title_preview = title_preview
+    draft.updated_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({"ok": True, "message": "Draft saved.", "draft": _draft_payload(draft)}), status_code
+
+
+@api_bp.route("/drafts/<int:draft_id>", methods=["GET", "PUT", "DELETE"])
+@rate_limit("admin_action", methods=("PUT", "DELETE"))
+def draft_detail_api(draft_id):
+    user, error_response = _require_draft_user_api()
+    if error_response:
+        return error_response
+
+    draft = Draft.query.filter_by(id=draft_id, user_id=user.id).first()
+    if not draft:
+        return jsonify({"ok": False, "message": "Draft not found."}), 404
+
+    if request.method == "GET":
+        return jsonify({"ok": True, "draft": _draft_payload(draft)})
+
+    if request.method == "DELETE":
+        db.session.delete(draft)
+        db.session.commit()
+        return jsonify({"ok": True, "message": "Draft deleted."})
+
+    payload = _get_json_payload()
+    draft_data = payload.get("draft_data")
+    if not isinstance(draft_data, dict):
+        draft_data = {}
+    draft.draft_data = json.dumps(draft_data)
+    draft.title_preview = (payload.get("title_preview") or _draft_title_preview(draft.draft_type, draft_data)).strip()[:240]
+    draft.updated_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({"ok": True, "message": "Draft saved.", "draft": _draft_payload(draft)})
 
 
 def _admin_lockout_payload(user):

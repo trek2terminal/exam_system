@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Download, Edit2, Eye, RotateCcw, Upload, Plus, ShieldCheck, UserX } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import { Avatar, Badge, Button, Card, ConfirmationDialog, Input, Modal, Select, Table, Textarea, Tooltip } from "../components/ui";
 import { api } from "../services/api";
 import { notify } from "../components/ui/Toast";
 import { formatDate, formatDateShort } from "../utils/dateFormat";
 import { useLiveRefresh } from "../hooks/useLiveRefresh";
+import { useDraftAutoSave } from "../hooks/useDraftAutoSave";
 
 function parseCsv(text) {
   const lines = text.split(/\r?\n/).filter(line => line.trim());
@@ -38,6 +40,7 @@ function statusLabel(user) {
 }
 
 export default function AdminUserManagement() {
+  const [searchParams] = useSearchParams();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("all");
@@ -85,6 +88,11 @@ export default function AdminUserManagement() {
     loadUsers();
   }, [loadUsers]);
   useLiveRefresh(loadUsers, { intervalMs: 25000 });
+
+  useEffect(() => {
+    const draftId = searchParams.get("draft");
+    if (draftId) setShowCreateModal(true);
+  }, [searchParams]);
 
   const filteredUsers = useMemo(() => {
     const query = debouncedSearch.trim().toLowerCase();
@@ -427,6 +435,7 @@ export default function AdminUserManagement() {
 
       <Modal open={showCreateModal} onClose={() => setShowCreateModal(false)} title="Create New Teacher">
         <CreateTeacherForm
+          restoreDraftId={searchParams.get("draft")}
           onCreated={user => {
             if (user) setUsers(current => [user, ...current]);
             setShowCreateModal(false);
@@ -621,7 +630,7 @@ export default function AdminUserManagement() {
   );
 }
 
-function CreateTeacherForm({ onCreated }) {
+function CreateTeacherForm({ onCreated, restoreDraftId }) {
   const [formData, setFormData] = useState({
     name: "",
     username: "",
@@ -631,6 +640,41 @@ function CreateTeacherForm({ onCreated }) {
     password: ""
   });
   const [creating, setCreating] = useState(false);
+
+  const restoreTeacherDraft = useCallback(draftData => {
+    setFormData({
+      name: draftData.name || "",
+      username: draftData.username || "",
+      email: draftData.email || "",
+      department: draftData.department || "",
+      designation: draftData.designation || "",
+      password: ""
+    });
+  }, []);
+
+  const teacherDraft = useDraftAutoSave({
+    draftType: "admin_teacher",
+    formState: { ...formData, password: "" },
+    titlePreview: formData.name || formData.username,
+    onRestore: restoreTeacherDraft
+  });
+
+  useEffect(() => {
+    if (!restoreDraftId) return;
+    let active = true;
+    async function restoreFromQuery() {
+      try {
+        const { data } = await api.get(`/drafts/${restoreDraftId}`);
+        if (active && data.draft?.draft_type === "admin_teacher") restoreTeacherDraft(data.draft.draft_data || {});
+      } catch {
+        // The reusable hook still checks any cached draft for this form.
+      }
+    }
+    restoreFromQuery();
+    return () => {
+      active = false;
+    };
+  }, [restoreDraftId, restoreTeacherDraft]);
 
   const handleSubmit = async event => {
     event.preventDefault();
@@ -646,6 +690,7 @@ function CreateTeacherForm({ onCreated }) {
         designation: "",
         password: ""
       });
+      await teacherDraft.clearDraft();
       onCreated?.(data.user);
     } catch (error) {
       notify.error(error.message || "Could not create teacher");
@@ -656,6 +701,7 @@ function CreateTeacherForm({ onCreated }) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {teacherDraft.banner}
       <Input label="Full Name" name="name" value={formData.name} onChange={event => setFormData({ ...formData, name: event.target.value })} required />
       <Input label="Username" name="username" value={formData.username} onChange={event => setFormData({ ...formData, username: event.target.value })} required />
       <Input label="Email" name="email" type="email" value={formData.email} onChange={event => setFormData({ ...formData, email: event.target.value })} required />
@@ -663,6 +709,7 @@ function CreateTeacherForm({ onCreated }) {
       <Input label="Designation" name="designation" value={formData.designation} onChange={event => setFormData({ ...formData, designation: event.target.value })} />
       <Input label="Temporary Password" name="password" type="password" value={formData.password} onChange={event => setFormData({ ...formData, password: event.target.value })} required />
       <Button type="submit" variant="primary" className="w-full" loading={creating} loadingLabel="Creating">Create Teacher</Button>
+      <div className="text-right">{teacherDraft.indicator}</div>
     </form>
   );
 }

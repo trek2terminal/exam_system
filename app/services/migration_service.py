@@ -376,6 +376,34 @@ class MigrationService:
         )
 
     @staticmethod
+    def _migration_drafts_table():
+        if MigrationService._has_table("drafts"):
+            return
+        with db.engine.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS drafts (
+                        id INTEGER PRIMARY KEY,
+                        user_id INTEGER NOT NULL,
+                        user_role VARCHAR(20) NOT NULL,
+                        draft_type VARCHAR(120) NOT NULL,
+                        draft_data TEXT NOT NULL DEFAULT '{}',
+                        title_preview VARCHAR(240),
+                        created_at DATETIME NOT NULL,
+                        updated_at DATETIME NOT NULL,
+                        FOREIGN KEY(user_id) REFERENCES users (id),
+                        CONSTRAINT uq_drafts_user_type UNIQUE (user_id, draft_type)
+                    )
+                    """
+                )
+            )
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_drafts_user_id ON drafts (user_id)"))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_drafts_user_role ON drafts (user_role)"))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_drafts_draft_type ON drafts (draft_type)"))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_drafts_updated_at ON drafts (updated_at)"))
+
+    @staticmethod
     def _migration_platform_settings_seed():
         if PlatformSettings.query.first():
             return
@@ -518,6 +546,11 @@ class MigrationService:
             "Track explicit exam access mode",
             _migration_exam_access_mode.__func__,
         ),
+        (
+            "20260525_025_drafts_table",
+            "Add admin and teacher form drafts",
+            _migration_drafts_table.__func__,
+        ),
     ]
 
     @staticmethod
@@ -645,6 +678,14 @@ class MigrationService:
             )
         if version == "20260525_024_exam_access_mode":
             return MigrationService._has_column("exam_sets", "access_mode")
+        if version == "20260525_025_drafts_table":
+            return (
+                MigrationService._has_table("drafts")
+                and MigrationService._has_column("drafts", "user_id")
+                and MigrationService._has_column("drafts", "draft_type")
+                and MigrationService._has_column("drafts", "draft_data")
+                and MigrationService._has_index("drafts", "ix_drafts_updated_at")
+            )
         return False
 
     @staticmethod

@@ -41,6 +41,7 @@ def init_db(app):
         from app.models.migration_model import SchemaMigration
         from app.models.group_model import StudentGroup, StudentGroupMember
         from app.models.notification_model import Notification
+        from app.models.draft_model import Draft
 
         db.create_all()
         from app.services.migration_service import MigrationService

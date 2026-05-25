@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FilePlus2, Pencil, Search, Trash2, Upload } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import { Badge, Button, Card, ConfirmationDialog, EmptyState, Input, MarksInput, Modal, Select, Textarea } from "../components/ui";
 import { notify } from "../components/ui/Toast";
 import { api } from "../services/api";
 import { useLiveRefresh } from "../hooks/useLiveRefresh";
+import { useDraftAutoSave } from "../hooks/useDraftAutoSave";
 
 const typeOptions = [
   { value: "all", label: "All Types" },
@@ -68,6 +70,7 @@ const sourceOptions = [
 ];
 
 export default function TeacherQuestionBank() {
+  const [searchParams] = useSearchParams();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -82,6 +85,8 @@ export default function TeacherQuestionBank() {
   const [editForm, setEditForm] = useState(emptyForm);
   const [editOptions, setEditOptions] = useState(["", "", "", ""]);
   const [importingId, setImportingId] = useState(null);
+  const [formDirty, setFormDirty] = useState(false);
+  const [editDirty, setEditDirty] = useState(false);
 
   const loadBank = useCallback(async (soft = false) => {
     if (!soft) setLoading(true);
@@ -100,6 +105,62 @@ export default function TeacherQuestionBank() {
     loadBank();
   }, [loadBank]);
   useLiveRefresh(loadBank, { intervalMs: 25000 });
+
+  const restoreCreateDraft = useCallback(draftData => {
+    setFormData({ ...emptyForm, ...(draftData.formData || draftData) });
+    setOptions(Array.isArray(draftData.options) ? draftData.options : ["", "", "", ""]);
+    setFormDirty(false);
+  }, []);
+
+  const createDraft = useDraftAutoSave({
+    draftType: "question_bank",
+    formState: { formData, options },
+    titlePreview: formData.question_text,
+    onRestore: restoreCreateDraft,
+    enabled: !loading,
+    dirty: formDirty
+  });
+
+  const restoreEditDraft = useCallback(draftData => {
+    const targetId = draftData.itemId || editTarget?.id;
+    if (targetId && !editTarget) {
+      const existing = items.find(item => String(item.id) === String(targetId));
+      setEditTarget(existing || { id: targetId, text: draftData.formData?.question_text || "Draft question", options: [] });
+    }
+    setEditForm({ ...emptyForm, ...(draftData.formData || draftData) });
+    setEditOptions(Array.isArray(draftData.options) ? draftData.options : ["", "", "", ""]);
+    setEditDirty(false);
+  }, [editTarget, items]);
+
+  const editDraft = useDraftAutoSave({
+    draftType: editTarget ? `question_bank_edit_${editTarget.id}` : "",
+    formState: { itemId: editTarget?.id, formData: editForm, options: editOptions },
+    titlePreview: editForm.question_text,
+    onRestore: restoreEditDraft,
+    enabled: Boolean(editTarget),
+    dirty: editDirty
+  });
+
+  useEffect(() => {
+    const draftId = searchParams.get("draft");
+    if (!draftId) return;
+    let active = true;
+    async function restoreFromQuery() {
+      try {
+        const { data } = await api.get(`/drafts/${draftId}`);
+        if (!active) return;
+        const draft = data.draft;
+        if (draft?.draft_type?.startsWith("question_bank_edit_")) restoreEditDraft(draft.draft_data || {});
+        else restoreCreateDraft(draft?.draft_data || {});
+      } catch (error) {
+        notify.error(error.message || "Could not restore draft");
+      }
+    }
+    restoreFromQuery();
+    return () => {
+      active = false;
+    };
+  }, [restoreCreateDraft, restoreEditDraft, searchParams]);
 
   const filteredItems = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -125,6 +186,8 @@ export default function TeacherQuestionBank() {
       setItems(current => [normalizeItem(data.item), ...current]);
       setFormData(emptyForm);
       setOptions(["", "", "", ""]);
+      await createDraft.clearDraft();
+      setFormDirty(false);
       notify.success("Question saved to bank");
     } catch (error) {
       notify.error(error.response?.data?.message || error.message || "Could not save question");
@@ -137,6 +200,7 @@ export default function TeacherQuestionBank() {
     setEditTarget(item);
     setEditForm(formFromItem(item));
     setEditOptions([...item.options, "", "", "", ""].slice(0, Math.max(4, item.options.length)));
+    setEditDirty(false);
   };
 
   const saveEdit = async event => {
@@ -153,6 +217,8 @@ export default function TeacherQuestionBank() {
       const { data } = await api.patch(`/teacher/question-bank/${editTarget.id}`, payload);
       setItems(current => current.map(item => item.id === editTarget.id ? normalizeItem(data.item) : item));
       setEditTarget(null);
+      await editDraft.clearDraft();
+      setEditDirty(false);
       notify.success("Question updated");
     } catch (error) {
       notify.error(error.response?.data?.message || error.message || "Could not update question");
@@ -222,6 +288,9 @@ export default function TeacherQuestionBank() {
             saving={saving}
             submitLabel="Save to Bank"
             allowImages
+            draftBanner={createDraft.banner}
+            draftIndicator={createDraft.indicator}
+            onDirty={() => setFormDirty(true)}
           />
         </Card>
 
@@ -308,6 +377,7 @@ export default function TeacherQuestionBank() {
       </div>
 
       <Modal open={!!editTarget} onClose={() => setEditTarget(null)} title="Edit Bank Question" className="max-w-2xl">
+        {editDraft.banner}
         <QuestionForm
           formData={editForm}
           setFormData={setEditForm}
@@ -316,6 +386,8 @@ export default function TeacherQuestionBank() {
           onSubmit={saveEdit}
           saving={saving}
         submitLabel="Save Changes"
+          draftIndicator={editDraft.indicator}
+          onDirty={() => setEditDirty(true)}
       />
       </Modal>
 
@@ -333,12 +405,16 @@ export default function TeacherQuestionBank() {
   );
 }
 
-function QuestionForm({ formData, setFormData, options, setOptions, onSubmit, saving, submitLabel, allowImages = false }) {
+function QuestionForm({ formData, setFormData, options, setOptions, onSubmit, saving, submitLabel, allowImages = false, draftBanner = null, draftIndicator = null, onDirty }) {
   const [imageFiles, setImageFiles] = useState([]);
-  const update = patch => setFormData(current => ({ ...current, ...patch }));
+  const update = patch => {
+    onDirty?.();
+    setFormData(current => ({ ...current, ...patch }));
+  };
 
   return (
     <form className="space-y-4" onSubmit={event => onSubmit(event, imageFiles)}>
+      {draftBanner}
       <Select label="Question Type" value={formData.question_type} onChange={value => update({ question_type: value })} options={questionTypeOptions} required />
       <Textarea label="Question Text" rows={5} required value={formData.question_text} onChange={event => update({ question_text: event.target.value })} placeholder="Write the reusable question text." />
       <MarksInput label="Marks" min="0.01" step="0.01" required value={formData.marks} onChange={event => update({ marks: event.target.value })} />
@@ -353,13 +429,17 @@ function QuestionForm({ formData, setFormData, options, setOptions, onSubmit, sa
               onChange={event => {
                 const next = [...options];
                 next[index] = event.target.value;
+                onDirty?.();
                 setOptions(next);
               }}
               placeholder={`Option ${index + 1}`}
               required={index < 2}
             />
           ))}
-          <Button type="button" variant="ghost" size="sm" onClick={() => setOptions(current => [...current, ""])}>
+          <Button type="button" variant="ghost" size="sm" onClick={() => {
+            onDirty?.();
+            setOptions(current => [...current, ""]);
+          }}>
             Add Option
           </Button>
         </div>
@@ -394,6 +474,7 @@ function QuestionForm({ formData, setFormData, options, setOptions, onSubmit, sa
       <Button type="submit" variant="primary" className="w-full" loading={saving} loadingLabel="Saving...">
         <Upload size={18} /> {submitLabel}
       </Button>
+      {draftIndicator && <div className="text-right">{draftIndicator}</div>}
     </form>
   );
 }
