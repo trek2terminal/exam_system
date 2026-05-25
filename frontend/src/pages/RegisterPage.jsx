@@ -1,13 +1,37 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Check, CheckCircle2, Eye, EyeOff, UserPlus } from "lucide-react";
-import { Button, Input, PlatformLogo, ProgressBar } from "../components/ui";
+import {
+  AlertCircle,
+  ArrowRight,
+  AtSign,
+  BarChart2,
+  BookOpen,
+  Check,
+  Code2,
+  Eye,
+  EyeOff,
+  Hash,
+  Layers,
+  Loader2,
+  Lock,
+  Mail,
+  Shield,
+  ShieldCheck,
+  User,
+  UserCheck,
+  UserPlus,
+  Zap
+} from "lucide-react";
 import { cn } from "../components/ui/utils";
 import { api } from "../services/api";
 import { notify } from "../components/ui/Toast";
 import { useAppStore } from "../store/appStore";
+import { usePlatformSettings } from "../hooks/usePlatformSettings";
+
+const featureIconMap = { Shield, BarChart2, Code2, Layers, UserCheck, BookOpen, Lock, Zap };
 
 export default function RegisterPage({ settings }) {
+  const { settings: platformSettings, loading: settingsLoading } = usePlatformSettings(settings);
   const navigate = useNavigate();
   const loadBootstrap = useAppStore(state => state.loadBootstrap);
   const loadDashboard = useAppStore(state => state.loadDashboard);
@@ -37,8 +61,9 @@ export default function RegisterPage({ settings }) {
     return { level: "Strong", percent: 100, color: "success" };
   }, [validations]);
 
+  const passwordScore = Object.values(validations).filter(Boolean).length;
   const passwordsMatch = password.length > 0 && password === confirmPassword;
-  const needsRegistrationCode = Boolean(settings?.registration_code_required);
+  const needsRegistrationCode = Boolean(platformSettings.registration_code_required);
   const isFormValid = Boolean(
     fullName
     && username
@@ -52,7 +77,8 @@ export default function RegisterPage({ settings }) {
     && validations.number
     && validations.special
   );
-  const platformName = settings?.platform_name || "Exam Platform";
+  const panelContent = platformSettings.loginPage;
+  const enabledFeatures = panelContent.features.filter(feature => feature.enabled !== false);
 
   const handleSubmit = async event => {
     event.preventDefault();
@@ -80,62 +106,91 @@ export default function RegisterPage({ settings }) {
   };
 
   return (
-    <div className="appShellSurface min-h-screen text-text-primary">
-      <div className="flex min-h-screen flex-col lg:flex-row">
-        <div className="relative hidden flex-1 overflow-hidden bg-gradient-to-br from-brand-primary via-indigo-500 to-info p-8 text-white lg:flex lg:flex-col lg:justify-center">
-          <div className="absolute inset-0 overflow-hidden">
-            <div className="absolute -right-32 -top-32 h-64 w-64 rounded-full bg-white/10 blur-3xl animate-float-slow" />
-            <div className="absolute -bottom-16 -left-16 h-48 w-48 rounded-full bg-white/10 blur-3xl" style={{ animationDelay: "2s" }} />
-            <div className="absolute bottom-1/4 right-1/3 h-32 w-32 rounded-full bg-white/5 blur-2xl" style={{ animationDelay: "4s" }} />
+    <div className="loginCyberScene min-h-screen bg-[#0d0f1a] text-white">
+      <div className="flex min-h-screen flex-col md:flex-row">
+        <aside className="loginCyberPanel relative hidden flex-1 overflow-hidden p-10 text-white md:flex md:flex-col md:justify-between xl:p-16">
+          <div className="pointer-events-none absolute inset-0">
+            <div className="absolute -left-28 top-20 h-80 w-80 rounded-full bg-indigo-500/20 blur-[120px]" />
+            <div className="absolute bottom-10 right-0 h-96 w-96 rounded-full bg-cyan-400/15 blur-[130px]" />
+            <div className="absolute right-1/3 top-1/3 h-64 w-64 rounded-full bg-purple-500/20 blur-[120px]" />
           </div>
 
-          <div className="relative z-10">
-            <div className="mb-8 flex items-center gap-3">
-              <PlatformLogo
-                src={settings?.logo_url}
-                name={platformName}
-                size="lg"
-                className="border-white/25 bg-white/15"
-                fallbackClassName="bg-brand-primary"
-              />
-              <h1 className="text-4xl font-bold">{platformName}</h1>
+          <div className="relative z-10 max-w-xl">
+            <div className="mb-8 inline-flex items-center gap-4">
+              {platformSettings.logoUrl ? (
+                <img
+                  src={platformSettings.logoUrl}
+                  alt={`${platformSettings.platformName} logo`}
+                  className="h-14 w-14 rounded-2xl border border-white/10 bg-white/5 object-contain p-1"
+                />
+              ) : (
+                <div className="relative grid h-14 w-14 place-items-center">
+                  <div className="absolute inset-0 rotate-45 rounded-2xl border border-indigo-300/70 bg-indigo-500/10 shadow-[0_0_36px_rgba(99,102,241,0.65)]" />
+                  <div className="absolute inset-2 rotate-45 rounded-xl bg-[#0f0c29]/70 shadow-inner shadow-cyan-300/20" />
+                  <Shield className="relative z-10 h-7 w-7 text-cyan-200 drop-shadow-[0_0_12px_rgba(103,232,249,0.75)]" />
+                </div>
+              )}
+              <div>
+                {settingsLoading ? (
+                  <div className="h-10 w-64 max-w-[36vw] animate-pulse rounded-xl bg-white/10" />
+                ) : (
+                  <h1 className="text-4xl font-black tracking-tight text-white">{panelContent.heading || platformSettings.platformName}</h1>
+                )}
+                <div className="loginBrandUnderline mt-3 h-0.5 rounded-full bg-gradient-to-r from-cyan-300 via-indigo-300 to-purple-300" />
+              </div>
             </div>
-            <p className="max-w-sm text-lg text-white/90">
-              Create your student account and move straight into a focused exam workspace.
+
+            <p className="mt-3 max-w-md text-base font-light italic text-cyan-300/70">
+              {panelContent.tagline}
             </p>
-            <div className="mt-12 space-y-4 text-sm text-white/85">
-              {[
-                "Secure account registration",
-                "Quick access to assigned exams",
-                "Live status, results, and feedback",
-                "Dark mode ready across the platform"
-              ].map(item => (
-                <p key={item} className="flex items-center gap-3">
-                  <span className="grid h-6 w-6 place-items-center rounded-full bg-white/20">
-                    <CheckCircle2 size={14} />
-                  </span>
-                  {item}
-                </p>
-              ))}
+            <p className="mt-5 max-w-md text-base leading-7 text-slate-300/80">
+              {panelContent.subheading}
+            </p>
+
+            <div className="mt-12 space-y-5">
+              {enabledFeatures.map((item, index) => {
+                const Icon = featureIconMap[item.icon] || Shield;
+                return (
+                  <div
+                    key={`${item.text}-${index}`}
+                    className="loginFeatureItem flex items-center gap-4 text-sm text-gray-300 transition-all duration-200 hover:translate-x-1 hover:text-white"
+                    style={{ animationDelay: `${120 + index * 100}ms` }}
+                  >
+                    <span className="grid h-10 w-10 place-items-center rounded-xl border border-white/10 bg-white/5 text-indigo-400 shadow-lg shadow-indigo-950/30">
+                      <Icon size={20} />
+                    </span>
+                    <span>{item.text}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
-        </div>
 
-        <div className="flex flex-1 flex-col justify-center px-4 py-12 transition-colors sm:px-6 lg:px-8">
-          <div className="mx-auto w-full max-w-md rounded-card border border-border bg-background-card p-6 shadow-elevated sm:p-8">
-            <div className="mb-8 flex items-center justify-center gap-2 lg:hidden">
-              <PlatformLogo src={settings?.logo_url} name={platformName} size="sm" />
-              <h2 className="text-2xl font-bold text-text-primary">{platformName}</h2>
+          {panelContent.securityBadgeEnabled && panelContent.securityBadgeText && (
+            <div className="relative z-10 inline-flex w-fit items-center gap-2 rounded-full border border-cyan-300/20 bg-white/5 px-4 py-2 text-xs font-semibold text-cyan-100/80 backdrop-blur-xl">
+              <Lock size={14} />
+              {panelContent.securityBadgeText}
+            </div>
+          )}
+        </aside>
+
+        <main className="flex flex-1 items-center justify-center bg-[#0d0f1a] px-4 py-6 sm:px-6 lg:px-10">
+          <section className="registerGlassCard relative mx-auto max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-white/10 bg-white/[0.04] px-5 py-6 shadow-[0_0_60px_rgba(99,102,241,0.12)] backdrop-blur-2xl before:absolute before:left-1/2 before:top-0 before:h-px before:w-2/3 before:-translate-x-1/2 before:bg-gradient-to-r before:from-transparent before:via-indigo-500 before:to-transparent sm:px-10 sm:py-8">
+            <div className="text-center">
+              <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl border border-indigo-500/30 bg-indigo-500/10 text-indigo-400">
+                <UserPlus className="h-6 w-6" />
+              </div>
+              <h1 className="mt-4 text-center text-2xl font-black text-white">Create student account</h1>
+              <p className="mx-auto mt-1 max-w-xs text-center text-sm text-gray-500">
+                Create your account to access assigned exams and results.
+              </p>
             </div>
 
-            <div className="mb-8 text-center">
-              <h1 className="text-3xl font-bold text-text-primary">Create student account</h1>
-              <p className="mt-2 text-text-secondary">Create your account to access assigned exams and results.</p>
-            </div>
+            <div className="mb-5 mt-5 h-px w-full bg-gradient-to-r from-transparent via-white/10 to-transparent" />
 
             <form className="space-y-5" onSubmit={handleSubmit}>
-              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                <Input
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <RegisterInput
                   label="Full Name"
                   name="name"
                   placeholder="John Doe"
@@ -143,8 +198,9 @@ export default function RegisterPage({ settings }) {
                   onChange={event => setFullName(event.target.value)}
                   autoComplete="name"
                   required
+                  icon={User}
                 />
-                <Input
+                <RegisterInput
                   label="Username"
                   name="username"
                   placeholder="john2026"
@@ -153,10 +209,11 @@ export default function RegisterPage({ settings }) {
                   helperText="At least 4 characters"
                   autoComplete="username"
                   required
+                  icon={AtSign}
                 />
               </div>
 
-              <Input
+              <RegisterInput
                 label="Email Address"
                 name="email"
                 type="email"
@@ -164,46 +221,76 @@ export default function RegisterPage({ settings }) {
                 value={email}
                 onChange={event => setEmail(event.target.value)}
                 autoComplete="email"
+                icon={Mail}
               />
 
-              <Input
+              <RegisterInput
                 label="Roll Number"
                 name="roll_no"
                 placeholder="e.g., 2026001"
                 value={rollNumber}
                 onChange={event => setRollNumber(event.target.value.toUpperCase())}
                 required
+                icon={Hash}
               />
 
               {needsRegistrationCode && (
-                <Input
+                <RegisterInput
                   label="Registration Code"
                   name="registration_code"
                   placeholder="Enter the code from your school"
                   value={registrationCode}
                   onChange={event => setRegistrationCode(event.target.value)}
                   required
+                  icon={ShieldCheck}
                 />
               )}
 
-              <PasswordField
-                label="Password"
-                name="password"
-                value={password}
-                show={showPassword}
-                onToggle={() => setShowPassword(current => !current)}
-                onChange={event => setPassword(event.target.value)}
-                autoComplete="new-password"
-              />
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <PasswordField
+                    label="Password"
+                    name="password"
+                    value={password}
+                    show={showPassword}
+                    onToggle={() => setShowPassword(current => !current)}
+                    onChange={event => setPassword(event.target.value)}
+                    autoComplete="new-password"
+                    icon={Lock}
+                  />
+                  <div className="mt-2 flex gap-1" aria-label={`Password strength: ${strength.level}`}>
+                    {[1, 2, 3, 4].map(bar => (
+                      <span
+                        key={bar}
+                        className={cn(
+                          "h-1 flex-1 rounded-full bg-white/10 transition-colors duration-200",
+                          passwordScore >= bar && strengthBarColor(passwordScore)
+                        )}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <PasswordField
+                  label="Confirm Password"
+                  name="confirm_password"
+                  value={confirmPassword}
+                  show={showConfirm}
+                  onToggle={() => setShowConfirm(current => !current)}
+                  onChange={event => setConfirmPassword(event.target.value)}
+                  autoComplete="new-password"
+                  error={confirmPassword && !passwordsMatch ? "Passwords do not match" : ""}
+                  icon={ShieldCheck}
+                />
+              </div>
 
               {password && (
-                <div className="space-y-3 rounded-lg border border-border/50 bg-background-elevated/30 p-4">
+                <div className="space-y-3 rounded-xl border border-white/10 bg-white/[0.03] p-4">
                   <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm font-semibold text-text-primary">Password strength</span>
-                    <span className="text-sm font-semibold text-text-secondary">{strength.level}</span>
+                    <span className="text-sm font-semibold text-white">Password strength</span>
+                    <span className="text-sm font-semibold text-gray-400">{strength.level}</span>
                   </div>
-                  <ProgressBar value={strength.percent} max={100} variant={strength.color} />
-                  <div className="grid grid-cols-1 gap-2 text-xs text-text-secondary sm:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-2 text-xs text-gray-500 sm:grid-cols-2">
                     <ValidationItem active={validations.length}>8+ characters</ValidationItem>
                     <ValidationItem active={validations.uppercase}>Uppercase letter</ValidationItem>
                     <ValidationItem active={validations.lowercase}>Lowercase letter</ValidationItem>
@@ -213,61 +300,107 @@ export default function RegisterPage({ settings }) {
                 </div>
               )}
 
-              <PasswordField
-                label="Confirm Password"
-                name="confirm_password"
-                value={confirmPassword}
-                show={showConfirm}
-                onToggle={() => setShowConfirm(current => !current)}
-                onChange={event => setConfirmPassword(event.target.value)}
-                autoComplete="new-password"
-                error={confirmPassword && !passwordsMatch ? "Passwords do not match" : ""}
-              />
-
-              <Button
+              <button
                 type="submit"
-                variant="primary"
-                size="md"
-                loading={submitting}
-                loadingLabel="Creating account..."
-                disabled={!isFormValid}
-                className="w-full"
+                disabled={!isFormValid || submitting}
+                className="registerCreateButton group mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 via-purple-500 to-cyan-500 px-5 py-3.5 text-sm font-bold tracking-wide text-white shadow-[0_0_30px_rgba(99,102,241,0.3)] transition-all duration-200 hover:scale-[1.02] hover:shadow-[0_0_50px_rgba(99,102,241,0.5)] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-70"
               >
-                <UserPlus size={18} /> Create Account
-              </Button>
+                {submitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Creating account...
+                  </>
+                ) : (
+                  <>
+                    <UserPlus className="h-4 w-4" />
+                    Create Account
+                  </>
+                )}
+              </button>
             </form>
 
-            <div className="mt-6 text-center text-sm text-text-secondary">
+            <div className="mt-5 text-center text-sm text-gray-600">
               Already have an account?{" "}
-              <Link to="/login" className="font-semibold text-brand-primary transition hover:text-brand-hover">
+              <Link to="/login" className="inline-flex items-center gap-1 font-medium text-indigo-400 underline-offset-4 transition-colors hover:text-indigo-300 hover:underline">
                 Sign in
+                <ArrowRight className="h-3.5 w-3.5" />
               </Link>
             </div>
-          </div>
-        </div>
+          </section>
+        </main>
       </div>
     </div>
   );
 }
 
-function PasswordField({ label, name, value, onChange, show, onToggle, error, autoComplete }) {
+function RegisterInput({
+  label,
+  name,
+  value,
+  onChange,
+  placeholder,
+  type = "text",
+  autoComplete,
+  helperText,
+  error,
+  required = false,
+  icon: Icon
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400">
+        {label}
+        {required && <span className="ml-0.5 text-indigo-400">*</span>}
+      </span>
+      <span className="relative block">
+        {Icon && <Icon className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />}
+        <input
+          name={name}
+          type={type}
+          placeholder={placeholder}
+          value={value}
+          onChange={onChange}
+          autoComplete={autoComplete}
+          required={required}
+          className={cn(
+            "w-full rounded-xl border bg-white/[0.04] px-4 py-3 pl-11 text-sm text-white outline-none transition-all duration-200 placeholder:text-gray-600 focus:shadow-[0_0_20px_rgba(99,102,241,0.12)]",
+            error
+              ? "border-red-500/50 focus:border-red-500/40 focus:ring-2 focus:ring-red-500/40"
+              : "border-white/[0.08] focus:border-indigo-500/40 focus:ring-2 focus:ring-indigo-500/60"
+          )}
+        />
+      </span>
+      {error ? (
+        <span className="ml-1 mt-1.5 flex items-center gap-1 text-[11px] text-red-400">
+          <AlertCircle className="h-3 w-3" />
+          {error}
+        </span>
+      ) : helperText ? (
+        <span className="ml-1 mt-1.5 block text-[11px] text-gray-600">{helperText}</span>
+      ) : null}
+    </label>
+  );
+}
+
+function PasswordField({ label, name, value, onChange, show, onToggle, error, autoComplete, icon }) {
   return (
     <div className="relative">
-      <Input
+      <RegisterInput
         label={label}
         name={name}
         type={show ? "text" : "password"}
-        placeholder="********"
+        placeholder="Password"
         value={value}
         onChange={onChange}
         error={error}
         autoComplete={autoComplete}
         required
+        icon={icon}
       />
       <button
         type="button"
         onClick={onToggle}
-        className="absolute right-3 top-10 grid h-8 w-8 place-items-center rounded-md text-text-muted transition hover:bg-background-elevated hover:text-text-primary"
+        className="absolute right-3.5 top-[35px] grid h-8 w-8 place-items-center rounded-lg text-gray-600 transition hover:bg-white/5 hover:text-gray-300"
         aria-label={show ? "Hide password" : "Show password"}
       >
         {show ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -279,10 +412,17 @@ function PasswordField({ label, name, value, onChange, show, onToggle, error, au
 function ValidationItem({ active, children }) {
   return (
     <span className="flex items-center gap-2">
-      <span className={cn("grid h-4 w-4 place-items-center rounded border", active ? "border-success bg-success text-white" : "border-border")}>
+      <span className={cn("grid h-4 w-4 place-items-center rounded border", active ? "border-emerald-400 bg-emerald-500 text-white" : "border-white/10")}>
         {active && <Check size={12} />}
       </span>
       {children}
     </span>
   );
+}
+
+function strengthBarColor(score) {
+  if (score <= 1) return "bg-red-500";
+  if (score === 2) return "bg-orange-400";
+  if (score === 3) return "bg-yellow-400";
+  return "bg-emerald-400";
 }

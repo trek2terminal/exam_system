@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { ArrowDown, ArrowUp, Bell, CheckCircle2, DatabaseBackup, Download, Megaphone, Plus, Save, Settings2, ShieldCheck, Trash2, Upload, UserPlus, X } from "lucide-react";
-import { Badge, Button, Card, CropModal, Input, PlatformLogo, Textarea, Toggle } from "../components/ui";
+import { ArrowDown, ArrowUp, BarChart2, Bell, BookOpen, CheckCircle2, Code2, DatabaseBackup, Download, GripVertical, Layers, Lock, Megaphone, Plus, Save, Shield, Settings2, ShieldCheck, Trash2, Upload, UserCheck, UserPlus, X, Zap } from "lucide-react";
+import { Badge, Button, Card, CropModal, Input, PlatformLogo, Select, Textarea, Toggle } from "../components/ui";
 import { notify } from "../components/ui/Toast";
 import { api } from "../services/api";
 import { useAppStore } from "../store/appStore";
@@ -15,16 +15,51 @@ const tabs = [
 ];
 
 const defaultLoginFeatures = [
-  "Real-time proctoring and monitoring",
-  "Multiple question types and formats",
-  "Instant results and detailed analytics",
-  "Code execution support with live testing"
+  { icon: "Shield", text: "Real-time proctoring and monitoring", enabled: true },
+  { icon: "BarChart2", text: "Multiple question types and formats", enabled: true },
+  { icon: "Code2", text: "Instant results and detailed analytics", enabled: true },
+  { icon: "Layers", text: "Code execution support with live testing", enabled: true },
+  { icon: "UserCheck", text: "Verified student identity checks", enabled: false },
+  { icon: "BookOpen", text: "Guided exam access for every learner", enabled: false }
 ];
 
+const loginFeatureIconOptions = ["Shield", "BarChart2", "Code2", "Layers", "UserCheck", "BookOpen", "Lock", "Zap"].map(icon => ({
+  value: icon,
+  label: icon
+}));
+
+const loginFeatureIcons = { Shield, BarChart2, Code2, Layers, UserCheck, BookOpen, Lock, Zap };
+
 function settingsFeatures(value) {
-  if (Array.isArray(value)) return value.filter(Boolean).slice(0, 6);
-  if (typeof value === "string") return value.split(/\r?\n/).map(item => item.trim()).filter(Boolean).slice(0, 6);
+  if (Array.isArray(value)) {
+    return value
+      .map((feature, index) => {
+        if (typeof feature === "string") {
+          return { icon: defaultLoginFeatures[index % defaultLoginFeatures.length].icon, text: feature.trim(), enabled: true };
+        }
+        return {
+          icon: feature?.icon || defaultLoginFeatures[index % defaultLoginFeatures.length].icon,
+          text: String(feature?.text || "").trim(),
+          enabled: feature?.enabled !== false
+        };
+      })
+      .filter(feature => feature.text)
+      .slice(0, 6);
+  }
+  if (typeof value === "string") {
+    return value.split(/\r?\n/).map((item, index) => ({
+      icon: defaultLoginFeatures[index % defaultLoginFeatures.length].icon,
+      text: item.trim(),
+      enabled: true
+    })).filter(feature => feature.text).slice(0, 6);
+  }
   return defaultLoginFeatures;
+}
+
+function settingsList(value) {
+  if (Array.isArray(value)) return value.map(item => String(item).trim()).filter(Boolean);
+  if (typeof value === "string") return value.split(/\r?\n/).map(item => item.trim()).filter(Boolean);
+  return [];
 }
 
 export default function AdminSettings() {
@@ -44,9 +79,12 @@ export default function AdminSettings() {
     platform_name: "Exam Platform",
     logo_url: "",
     welcome_message: "Welcome to the Exam Platform",
-    login_page_heading: "Assessment made simple.",
+    login_page_heading: "Exam Platform",
+    login_page_tagline: "The future of secure, intelligent assessment.",
     login_page_subheading: "Focused, secure, and ready for every exam session.",
     login_page_features: defaultLoginFeatures,
+    login_page_security_badge_text: "Secured by end-to-end encryption",
+    login_page_security_badge_enabled: true,
     quote_pool: [
       "One calm question at a time.",
       "Focus brings success.",
@@ -79,9 +117,12 @@ export default function AdminSettings() {
           logo_url: settings.logo_url || "",
           welcome_message: settings.welcome_message || current.welcome_message,
           login_page_heading: settings.login_page_heading || current.login_page_heading,
+          login_page_tagline: settings.login_page_tagline || settings.login_tagline || current.login_page_tagline,
           login_page_subheading: settings.login_page_subheading || current.login_page_subheading,
           login_page_features: settingsFeatures(settings.login_page_features),
-          quote_pool: settingsFeatures(settings.quote_pool || current.quote_pool)
+          login_page_security_badge_text: settings.login_page_security_badge_text || current.login_page_security_badge_text,
+          login_page_security_badge_enabled: settings.login_page_security_badge_enabled !== false,
+          quote_pool: settingsList(settings.quote_pool).length ? settingsList(settings.quote_pool) : current.quote_pool
         }));
         setRegistration(current => ({
           ...current,
@@ -133,10 +174,10 @@ export default function AdminSettings() {
     setHasChanges(true);
   };
 
-  const updateLoginFeature = (index, value) => {
+  const updateLoginFeature = (index, field, value) => {
     setGeneral(current => {
       const loginPageFeatures = [...current.login_page_features];
-      loginPageFeatures[index] = value;
+      loginPageFeatures[index] = { ...loginPageFeatures[index], [field]: value };
       return { ...current, login_page_features: loginPageFeatures };
     });
     setHasChanges(true);
@@ -145,7 +186,7 @@ export default function AdminSettings() {
   const addLoginFeature = () => {
     setGeneral(current => {
       if (current.login_page_features.length >= 6) return current;
-      return { ...current, login_page_features: [...current.login_page_features, ""] };
+      return { ...current, login_page_features: [...current.login_page_features, { icon: "Shield", text: "", enabled: true }] };
     });
     setHasChanges(true);
   };
@@ -177,8 +218,18 @@ export default function AdminSettings() {
         platform_name: general.platform_name,
         welcome_message: general.welcome_message,
         login_page_heading: general.login_page_heading,
+        login_page_tagline: general.login_page_tagline,
         login_page_subheading: general.login_page_subheading,
-        login_page_features: general.login_page_features.map(feature => feature.trim()).filter(Boolean),
+        login_page_features: general.login_page_features
+          .map(feature => ({
+            icon: feature.icon || "Shield",
+            text: String(feature.text || "").trim(),
+            enabled: feature.enabled !== false
+          }))
+          .filter(feature => feature.text)
+          .slice(0, 6),
+        login_page_security_badge_text: general.login_page_security_badge_text,
+        login_page_security_badge_enabled: general.login_page_security_badge_enabled,
         announcement_message: announcement.enabled ? announcement.message : "",
         quote_pool: general.quote_pool.join("\n"),
         max_violations_before_alert: security.violation_threshold,
@@ -418,6 +469,7 @@ function SettingsSection({
   backupLoading
 }) {
   if (sectionId === "general") {
+    const enabledFeatureCount = general.login_page_features.filter(feature => feature.enabled !== false && feature.text?.trim()).length;
     return (
       <Card className="p-6">
         <div className="space-y-5">
@@ -454,16 +506,22 @@ function SettingsSection({
                 <h3 className="text-base font-semibold text-text-primary">Login Page Content</h3>
                 <p className="text-sm text-text-secondary">Controls the left panel copy shown before users sign in.</p>
               </div>
-              <Badge variant="info">{general.login_page_features.length}/6 features</Badge>
+              <Badge variant="info">{enabledFeatureCount}/6 Features enabled</Badge>
             </div>
             <Input
               label="Heading"
               value={general.login_page_heading}
               onChange={event => onGeneralChange("login_page_heading", event.target.value)}
-              placeholder="Assessment made simple."
+              placeholder="Exam Platform"
             />
             <Input
-              label="Subheading"
+              label="Tagline"
+              value={general.login_page_tagline}
+              onChange={event => onGeneralChange("login_page_tagline", event.target.value)}
+              placeholder="The future of secure, intelligent assessment."
+            />
+            <Input
+              label="Description"
               value={general.login_page_subheading}
               onChange={event => onGeneralChange("login_page_subheading", event.target.value)}
               placeholder="Focused, secure, and ready for every exam session."
@@ -483,12 +541,24 @@ function SettingsSection({
               </div>
               <div className="space-y-2">
                 {general.login_page_features.map((feature, index) => (
-                  <div key={`login-feature-${index}`} className="grid gap-2 rounded-md border border-border bg-background-card p-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                  <div key={`login-feature-${index}`} className="grid gap-3 rounded-md border border-border bg-background-card p-3 lg:grid-cols-[auto_150px_minmax(0,1fr)_auto_auto] lg:items-center">
+                    <GripVertical className="hidden text-text-muted lg:block" size={17} aria-hidden="true" />
+                    <Select
+                      aria-label={`Login feature ${index + 1} icon`}
+                      value={feature.icon || "Shield"}
+                      onChange={value => onUpdateLoginFeature(index, "icon", value)}
+                      options={loginFeatureIconOptions}
+                    />
                     <Input
                       aria-label={`Login feature ${index + 1}`}
-                      value={feature}
-                      onChange={event => onUpdateLoginFeature(index, event.target.value)}
+                      value={feature.text || ""}
+                      onChange={event => onUpdateLoginFeature(index, "text", event.target.value)}
                       placeholder="Feature text"
+                    />
+                    <Toggle
+                      checked={feature.enabled !== false}
+                      onChange={checked => onUpdateLoginFeature(index, "enabled", checked)}
+                      label="Enabled"
                     />
                     <div className="flex items-center justify-end gap-1">
                       <Button
@@ -528,6 +598,19 @@ function SettingsSection({
                 ))}
               </div>
             </div>
+            <div className="grid gap-3 rounded-lg border border-border bg-background-card p-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+              <Input
+                label="Security Badge Text"
+                value={general.login_page_security_badge_text}
+                onChange={event => onGeneralChange("login_page_security_badge_text", event.target.value)}
+                placeholder="Secured by end-to-end encryption"
+              />
+              <Toggle
+                checked={general.login_page_security_badge_enabled}
+                onChange={checked => onGeneralChange("login_page_security_badge_enabled", checked)}
+                label="Show badge"
+              />
+            </div>
             <div className="overflow-hidden rounded-xl border border-border bg-gradient-to-br from-brand-primary via-indigo-500 to-info p-5 text-white shadow-sm">
               <div className="mb-6 flex items-center gap-3">
                 <PlatformLogo
@@ -539,20 +622,28 @@ function SettingsSection({
                 />
                 <strong className="truncate text-lg">{general.platform_name || "Exam Platform"}</strong>
               </div>
-              <h4 className="text-2xl font-bold leading-tight">{general.login_page_heading || "Assessment made simple."}</h4>
+              <h4 className="text-2xl font-bold leading-tight">{general.login_page_heading || "Exam Platform"}</h4>
+              <p className="mt-3 text-sm font-light italic text-cyan-100/80">{general.login_page_tagline || "The future of secure, intelligent assessment."}</p>
               <p className="mt-3 text-sm text-white/85">
                 {general.login_page_subheading || "Focused, secure, and ready for every exam session."}
               </p>
               <div className="mt-6 space-y-2 text-sm text-white/85">
-                {(general.login_page_features.length ? general.login_page_features : defaultLoginFeatures).filter(Boolean).map(feature => (
-                  <p key={feature} className="flex items-center gap-2">
+                {(general.login_page_features.length ? general.login_page_features : defaultLoginFeatures).filter(feature => feature.enabled !== false && feature.text).map(feature => {
+                  const Icon = loginFeatureIcons[feature.icon] || CheckCircle2;
+                  return (
+                  <p key={feature.text} className="flex items-center gap-2">
                     <span className="grid h-6 w-6 place-items-center rounded-full bg-white/20">
-                      <CheckCircle2 size={14} />
+                      <Icon size={14} />
                     </span>
-                    {feature}
+                    {feature.text}
                   </p>
-                ))}
+                );})}
               </div>
+              {general.login_page_security_badge_enabled && general.login_page_security_badge_text && (
+                <p className="mt-5 inline-flex rounded-full bg-white/15 px-3 py-1 text-xs font-semibold text-cyan-50">
+                  {general.login_page_security_badge_text}
+                </p>
+              )}
             </div>
           </div>
           <div className="space-y-3">

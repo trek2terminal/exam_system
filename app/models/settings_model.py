@@ -11,7 +11,12 @@ class PlatformSettings(db.Model):
     platform_name = db.Column(db.String(120), nullable=False, default="Exam System")
     welcome_message = db.Column(db.String(255), nullable=False, default="Calm assessment space")
     announcement_message = db.Column(db.Text, nullable=True)
-    login_page_heading = db.Column(db.Text, nullable=False, default="Assessment made simple.")
+    login_page_heading = db.Column(db.Text, nullable=False, default="Exam Platform")
+    login_page_tagline = db.Column(
+        db.Text,
+        nullable=False,
+        default="The future of secure, intelligent assessment.",
+    )
     login_page_subheading = db.Column(
         db.Text,
         nullable=False,
@@ -27,6 +32,12 @@ class PlatformSettings(db.Model):
             '"Code execution support with live testing"]'
         ),
     )
+    login_page_security_badge_text = db.Column(
+        db.String(160),
+        nullable=False,
+        default="Secured by end-to-end encryption",
+    )
+    login_page_security_badge_enabled = db.Column(db.Boolean, default=True, nullable=False)
     student_self_registration = db.Column(db.Boolean, default=False, nullable=False)
     registration_code_required = db.Column(db.Boolean, default=False, nullable=False)
     registration_code = db.Column(db.String(80), nullable=True)

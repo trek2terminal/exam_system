@@ -89,19 +89,35 @@ def _login_page_settings(settings):
         getattr(settings, "login_page_heading", None)
         or SettingsService.DEFAULT_LOGIN_PAGE_HEADING
     ).strip()
+    tagline = (
+        getattr(settings, "login_page_tagline", None)
+        or SettingsService.DEFAULT_LOGIN_PAGE_TAGLINE
+    ).strip()
     subheading = (
         getattr(settings, "login_page_subheading", None)
         or SettingsService.DEFAULT_LOGIN_PAGE_SUBHEADING
     ).strip()
     features = SettingsService.normalize_login_features(getattr(settings, "login_page_features", None))
-    return heading, subheading, features
+    security_badge_text = (
+        getattr(settings, "login_page_security_badge_text", None)
+        or SettingsService.DEFAULT_SECURITY_BADGE_TEXT
+    ).strip()
+    security_badge_enabled = bool(getattr(settings, "login_page_security_badge_enabled", True))
+    return heading, tagline, subheading, features, security_badge_text, security_badge_enabled
 
 
 def _settings_payload(settings):
     if not settings:
         return {}
     logo_path = getattr(settings, "logo_path", None)
-    login_heading, login_subheading, login_features = _login_page_settings(settings)
+    (
+        login_heading,
+        login_tagline,
+        login_subheading,
+        login_features,
+        security_badge_text,
+        security_badge_enabled,
+    ) = _login_page_settings(settings)
     return {
         "platform_name": settings.platform_name,
         "logo_path": logo_path,
@@ -109,11 +125,23 @@ def _settings_payload(settings):
         "welcome_message": settings.welcome_message,
         "announcement_message": getattr(settings, "announcement_message", None),
         "login_page_heading": login_heading,
+        "login_page_tagline": login_tagline,
         "login_page_subheading": login_subheading,
         "login_page_features": login_features,
+        "login_page_security_badge_text": security_badge_text,
+        "login_page_security_badge_enabled": security_badge_enabled,
         "login_heading": login_heading,
+        "login_tagline": login_tagline,
         "login_subheading": login_subheading,
         "login_features": login_features,
+        "login_page": {
+            "heading": login_heading,
+            "tagline": login_tagline,
+            "subheading": login_subheading,
+            "features": login_features,
+            "security_badge_text": security_badge_text,
+            "security_badge_enabled": security_badge_enabled,
+        },
         "quote_pool": SettingsService.get_quotes(settings),
         "student_self_registration": settings.student_self_registration,
         "registration_code_required": bool(getattr(settings, "registration_code_required", False)),
@@ -121,6 +149,29 @@ def _settings_payload(settings):
         "max_violations_before_alert": settings.max_violations_before_alert,
         "admin_lockout_count": getattr(settings, "admin_lockout_count", 3),
         "admin_idle_timeout_minutes": getattr(settings, "admin_idle_timeout_minutes", 120),
+    }
+
+
+def _public_settings_payload(settings):
+    payload = _settings_payload(settings)
+    return {
+        "platformName": payload.get("platform_name"),
+        "platform_name": payload.get("platform_name"),
+        "logoUrl": payload.get("logo_url"),
+        "logo_url": payload.get("logo_url"),
+        "tagline": payload.get("login_page_tagline"),
+        "welcomeMessage": payload.get("welcome_message"),
+        "welcome_message": payload.get("welcome_message"),
+        "registration_code_required": payload.get("registration_code_required"),
+        "loginPage": {
+            "heading": payload.get("login_page_heading"),
+            "tagline": payload.get("login_page_tagline"),
+            "subheading": payload.get("login_page_subheading"),
+            "features": payload.get("login_page_features", []),
+            "securityBadgeText": payload.get("login_page_security_badge_text"),
+            "securityBadgeEnabled": payload.get("login_page_security_badge_enabled"),
+        },
+        "login_page": payload.get("login_page"),
     }
 
 
@@ -1383,6 +1434,11 @@ def bootstrap():
             },
         }
     )
+
+
+@api_bp.route("/settings/public")
+def public_settings_api():
+    return jsonify({"ok": True, "settings": _public_settings_payload(SettingsService.get_settings())})
 
 
 def _admin_lockout_payload(user):
@@ -3214,8 +3270,11 @@ def admin_settings_api():
         "welcome_message": payload.get("welcome_message"),
         "announcement_message": payload.get("announcement_message"),
         "login_page_heading": payload.get("login_page_heading"),
+        "login_page_tagline": payload.get("login_page_tagline"),
         "login_page_subheading": payload.get("login_page_subheading"),
         "login_page_features": payload.get("login_page_features"),
+        "login_page_security_badge_text": payload.get("login_page_security_badge_text"),
+        "login_page_security_badge_enabled": "on" if payload.get("login_page_security_badge_enabled") else "",
         "quote_pool": payload.get("quote_pool"),
         "max_violations_before_alert": payload.get("max_violations_before_alert"),
         "student_self_registration": "on" if payload.get("student_self_registration") else "",

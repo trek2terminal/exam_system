@@ -15,14 +15,19 @@ class SettingsService:
         "A steady mind does better work than a rushed one.",
         "You do not need to be perfect. You only need to be present.",
     ]
-    DEFAULT_LOGIN_PAGE_HEADING = "Assessment made simple."
+    DEFAULT_LOGIN_PAGE_HEADING = "Exam Platform"
+    DEFAULT_LOGIN_PAGE_TAGLINE = "The future of secure, intelligent assessment."
     DEFAULT_LOGIN_PAGE_SUBHEADING = "Focused, secure, and ready for every exam session."
     DEFAULT_LOGIN_PAGE_FEATURES = [
-        "Real-time proctoring and monitoring",
-        "Multiple question types and formats",
-        "Instant results and detailed analytics",
-        "Code execution support with live testing",
+        {"icon": "Shield", "text": "Real-time proctoring and monitoring", "enabled": True},
+        {"icon": "BarChart2", "text": "Multiple question types and formats", "enabled": True},
+        {"icon": "Code2", "text": "Instant results and detailed analytics", "enabled": True},
+        {"icon": "Layers", "text": "Code execution support with live testing", "enabled": True},
+        {"icon": "UserCheck", "text": "Verified student identity checks", "enabled": False},
+        {"icon": "BookOpen", "text": "Guided exam access for every learner", "enabled": False},
     ]
+    DEFAULT_SECURITY_BADGE_TEXT = "Secured by end-to-end encryption"
+    FEATURE_ICON_ALLOWLIST = {"Shield", "BarChart2", "Code2", "Layers", "UserCheck", "BookOpen", "Lock", "Zap"}
 
     @staticmethod
     def normalize_login_features(value):
@@ -37,7 +42,23 @@ class SettingsService:
         else:
             items = []
 
-        features = [str(item).strip()[:160] for item in items if str(item).strip()]
+        features = []
+        for index, item in enumerate(items):
+            if isinstance(item, dict):
+                text = str(item.get("text") or item.get("label") or "").strip()[:160]
+                icon = str(item.get("icon") or "").strip()
+                enabled = bool(item.get("enabled", True))
+            else:
+                text = str(item).strip()[:160]
+                icon = ""
+                enabled = True
+            if not text:
+                continue
+            if icon not in SettingsService.FEATURE_ICON_ALLOWLIST:
+                icon = SettingsService.DEFAULT_LOGIN_PAGE_FEATURES[
+                    min(index, len(SettingsService.DEFAULT_LOGIN_PAGE_FEATURES) - 1)
+                ]["icon"]
+            features.append({"icon": icon, "text": text, "enabled": enabled})
         return features[:6] or list(SettingsService.DEFAULT_LOGIN_PAGE_FEATURES)
 
     @staticmethod
@@ -55,8 +76,11 @@ class SettingsService:
             welcome_message="Calm assessment space",
             announcement_message="",
             login_page_heading=SettingsService.DEFAULT_LOGIN_PAGE_HEADING,
+            login_page_tagline=SettingsService.DEFAULT_LOGIN_PAGE_TAGLINE,
             login_page_subheading=SettingsService.DEFAULT_LOGIN_PAGE_SUBHEADING,
             login_page_features=SettingsService.serialize_login_features(SettingsService.DEFAULT_LOGIN_PAGE_FEATURES),
+            login_page_security_badge_text=SettingsService.DEFAULT_SECURITY_BADGE_TEXT,
+            login_page_security_badge_enabled=True,
             student_self_registration=False,
             registration_code_required=False,
             registration_code=None,
@@ -77,8 +101,12 @@ class SettingsService:
         welcome_message = (data.get("welcome_message") or "Calm assessment space").strip()
         announcement_message = (data.get("announcement_message") or "").strip()
         login_page_heading = (data.get("login_page_heading") or SettingsService.DEFAULT_LOGIN_PAGE_HEADING).strip()
+        login_page_tagline = (data.get("login_page_tagline") or SettingsService.DEFAULT_LOGIN_PAGE_TAGLINE).strip()
         login_page_subheading = (
             data.get("login_page_subheading") or SettingsService.DEFAULT_LOGIN_PAGE_SUBHEADING
+        ).strip()
+        login_page_security_badge_text = (
+            data.get("login_page_security_badge_text") or SettingsService.DEFAULT_SECURITY_BADGE_TEXT
         ).strip()
         quote_pool = (data.get("quote_pool") or "").strip()
         registration_code = (data.get("registration_code") or "").strip()
@@ -108,6 +136,10 @@ class SettingsService:
             settings.login_page_heading = login_page_heading[:240]
         elif not getattr(settings, "login_page_heading", None):
             settings.login_page_heading = SettingsService.DEFAULT_LOGIN_PAGE_HEADING
+        if "login_page_tagline" in data:
+            settings.login_page_tagline = login_page_tagline[:240]
+        elif not getattr(settings, "login_page_tagline", None):
+            settings.login_page_tagline = SettingsService.DEFAULT_LOGIN_PAGE_TAGLINE
         if "login_page_subheading" in data:
             settings.login_page_subheading = login_page_subheading[:360]
         elif not getattr(settings, "login_page_subheading", None):
@@ -116,6 +148,12 @@ class SettingsService:
             settings.login_page_features = SettingsService.serialize_login_features(data.get("login_page_features"))
         elif not getattr(settings, "login_page_features", None):
             settings.login_page_features = SettingsService.serialize_login_features(SettingsService.DEFAULT_LOGIN_PAGE_FEATURES)
+        if "login_page_security_badge_text" in data:
+            settings.login_page_security_badge_text = login_page_security_badge_text[:160]
+        elif not getattr(settings, "login_page_security_badge_text", None):
+            settings.login_page_security_badge_text = SettingsService.DEFAULT_SECURITY_BADGE_TEXT
+        if "login_page_security_badge_enabled" in data:
+            settings.login_page_security_badge_enabled = data.get("login_page_security_badge_enabled") == "on"
         settings.student_self_registration = data.get("student_self_registration") == "on"
         settings.registration_code_required = data.get("registration_code_required") == "on"
         settings.registration_code = registration_code[:80] or None

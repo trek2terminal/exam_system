@@ -38,6 +38,10 @@ class MigrationService:
     def _has_index(table_name, index_name):
         if not MigrationService._has_table(table_name):
             return False
+        with db.engine.connect() as connection:
+            rows = connection.execute(text(f"PRAGMA index_list({table_name})")).mappings().all()
+            if index_name in {row["name"] for row in rows}:
+                return True
         indexes = MigrationService._inspector().get_indexes(table_name)
         return index_name in {index["name"] for index in indexes}
 
@@ -252,8 +256,19 @@ class MigrationService:
     @staticmethod
     def _migration_login_page_content():
         MigrationService._add_column_if_missing("platform_settings", "login_page_heading", "TEXT")
+        MigrationService._add_column_if_missing("platform_settings", "login_page_tagline", "TEXT")
         MigrationService._add_column_if_missing("platform_settings", "login_page_subheading", "TEXT")
         MigrationService._add_column_if_missing("platform_settings", "login_page_features", "TEXT")
+        MigrationService._add_column_if_missing(
+            "platform_settings",
+            "login_page_security_badge_text",
+            "VARCHAR(160)",
+        )
+        MigrationService._add_column_if_missing(
+            "platform_settings",
+            "login_page_security_badge_enabled",
+            "BOOLEAN NOT NULL DEFAULT 1",
+        )
 
         default_features = json.dumps(
             [
@@ -270,14 +285,18 @@ class MigrationService:
                     UPDATE platform_settings
                     SET
                         login_page_heading = COALESCE(NULLIF(login_page_heading, ''), :heading),
+                        login_page_tagline = COALESCE(NULLIF(login_page_tagline, ''), :tagline),
                         login_page_subheading = COALESCE(NULLIF(login_page_subheading, ''), :subheading),
-                        login_page_features = COALESCE(NULLIF(login_page_features, ''), :features)
+                        login_page_features = COALESCE(NULLIF(login_page_features, ''), :features),
+                        login_page_security_badge_text = COALESCE(NULLIF(login_page_security_badge_text, ''), :badge_text)
                     """
                 ),
                 {
-                    "heading": "Assessment made simple.",
+                    "heading": "Exam Platform",
+                    "tagline": "The future of secure, intelligent assessment.",
                     "subheading": "Focused, secure, and ready for every exam session.",
                     "features": default_features,
+                    "badge_text": "Secured by end-to-end encryption",
                 },
             )
 
@@ -515,7 +534,10 @@ class MigrationService:
                 for column_name in ("code_output", "execution_status", "execution_time_ms")
             )
         if version == "20260521_002_platform_settings_seed":
-            return PlatformSettings.query.first() is not None
+            if not MigrationService._has_table("platform_settings"):
+                return False
+            with db.engine.connect() as connection:
+                return connection.execute(text("SELECT 1 FROM platform_settings LIMIT 1")).first() is not None
         if version == "20260521_003_student_session_tokens":
             return (
                 MigrationService._has_column("student_sessions", "session_token")
@@ -604,8 +626,11 @@ class MigrationService:
         if version == "20260524_019_login_page_content":
             return (
                 MigrationService._has_column("platform_settings", "login_page_heading")
+                and MigrationService._has_column("platform_settings", "login_page_tagline")
                 and MigrationService._has_column("platform_settings", "login_page_subheading")
                 and MigrationService._has_column("platform_settings", "login_page_features")
+                and MigrationService._has_column("platform_settings", "login_page_security_badge_text")
+                and MigrationService._has_column("platform_settings", "login_page_security_badge_enabled")
             )
         if version == "20260525_020_student_group_join_codes":
             return MigrationService._has_column("student_groups", "join_code")
@@ -629,6 +654,11 @@ class MigrationService:
 
         for version, description, migration_fn in MigrationService.MIGRATIONS:
             if version in applied:
+                if not MigrationService._migration_already_satisfied(version):
+                    migration_fn()
+                    db.session.commit()
+                    if app:
+                        app.logger.info("Repaired schema migration %s", version)
                 continue
 
             if not MigrationService._migration_already_satisfied(version):
