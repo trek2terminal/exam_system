@@ -20,6 +20,8 @@ export function TopBar({ auth, notifications, theme, onToggleTheme, onMarkAllRea
   const breadcrumbs = breadcrumbFor(location.pathname, auth?.role);
   const unreadCount = notifications?.unread_count || 0;
   const unreadItems = useMemo(() => notifications?.recent || notifications?.items || [], [notifications]);
+  const profilePath = auth?.role ? `/${auth.role}/profile` : "/profile";
+  const settingsPath = auth?.role && auth.role !== "admin" ? `/${auth.role}/settings` : "/settings";
 
   useEffect(() => {
     function onDocClick(event) {
@@ -180,10 +182,10 @@ export function TopBar({ auth, notifications, theme, onToggleTheme, onMarkAllRea
                   <span className="block truncate text-xs text-text-muted">{userSubtitle(auth)}</span>
                 </div>
               </div>
-              <Link className="flex min-h-11 items-center gap-2 px-4 text-sm font-semibold text-text-secondary hover:bg-background-elevated hover:text-text-primary" to="/profile">
+              <Link className="flex min-h-11 items-center gap-2 px-4 text-sm font-semibold text-text-secondary hover:bg-background-elevated hover:text-text-primary" to={profilePath}>
                 <User size={17} /> Profile
               </Link>
-              <Link className="flex min-h-11 items-center gap-2 px-4 text-sm font-semibold text-text-secondary hover:bg-background-elevated hover:text-text-primary" to="/settings">
+              <Link className="flex min-h-11 items-center gap-2 px-4 text-sm font-semibold text-text-secondary hover:bg-background-elevated hover:text-text-primary" to={settingsPath}>
                 <Settings size={17} /> Settings
               </Link>
               <a className="flex min-h-11 items-center gap-2 border-t border-border px-4 text-sm font-semibold text-danger hover:bg-danger/10" href={logoutHref(auth?.role)}>

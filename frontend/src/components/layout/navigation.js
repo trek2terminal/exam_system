@@ -63,6 +63,12 @@ export function userSubtitle(auth) {
 }
 
 export function breadcrumbFor(pathname, role) {
+  if (pathname === "/profile" || /^\/(admin|teacher|student)\/profile(?:\/.*)?$/.test(pathname)) {
+    return ["Workspace", "Profile"];
+  }
+  if (pathname === "/settings" || /^\/(teacher|student)\/settings(?:\/.*)?$/.test(pathname)) {
+    return ["Workspace", "Settings"];
+  }
   const navItems = roleNavigation[role] || [];
   const active = [...navItems]
     .sort((left, right) => right.to.length - left.to.length)
@@ -92,6 +98,7 @@ export function normalizeReactHref(href, fallback = "/react/notifications") {
     [/^\/admin\/exams(?:\/.*)?$/, "/react/admin/exams"],
     [/^\/admin\/proctoring(?:\/.*)?$/, "/react/admin/proctoring"],
     [/^\/admin\/(?:violations|audit-logs|analytics|suspicious-activity|reports)(?:\/.*)?$/, "/react/admin/reports"],
+    [/^\/admin\/profile(?:\/.*)?$/, "/react/admin/profile"],
     [/^\/admin\/settings(?:\/.*)?$/, "/react/admin/settings"],
     [/^\/admin(?:\/)?$/, "/react/admin"],
     [/^\/teacher\/session\/(\d+)(?:\/.*)?$/, "/react/teacher/session/$1/review"],
@@ -102,6 +109,8 @@ export function normalizeReactHref(href, fallback = "/react/notifications") {
     [/^\/teacher\/question-bank(?:\/.*)?$/, "/react/teacher/question-bank"],
     [/^\/teacher\/proctoring(?:\/.*)?$/, "/react/teacher/proctoring"],
     [/^\/teacher\/reports(?:\/.*)?$/, "/react/teacher/reports"],
+    [/^\/teacher\/profile(?:\/.*)?$/, "/react/teacher/profile"],
+    [/^\/teacher\/settings(?:\/.*)?$/, "/react/teacher/settings"],
     [/^\/teacher(?:\/dashboard)?(?:\/)?$/, "/react/teacher"],
     [/^\/student\/exam\/([^/]+)(?:\/.*)?$/, "/react/exam/$1"],
     [/^\/student\/waiting\/([^/]+)(?:\/.*)?$/, "/react/student/waiting/$1"],
@@ -109,6 +118,8 @@ export function normalizeReactHref(href, fallback = "/react/notifications") {
     [/^\/student\/submitted\/([^/]+)(?:\/.*)?$/, "/react/student/submitted/$1"],
     [/^\/student\/join(?:\/.*)?$/, "/react/student/join"],
     [/^\/student\/results(?:\/.*)?$/, "/react/student/results"],
+    [/^\/student\/profile(?:\/.*)?$/, "/react/student/profile"],
+    [/^\/student\/settings(?:\/.*)?$/, "/react/student/settings"],
     [/^\/student(?:\/dashboard)?(?:\/)?$/, "/react/student"],
     [/^\/login(?:\/)?$/, "/react/login"],
     [/^\/admin\/login(?:\/)?$/, "/react/admin/login"],

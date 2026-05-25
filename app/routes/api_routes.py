@@ -510,6 +510,8 @@ def _user_payload(user):
         "email": user.email,
         "role": user.role,
         "roll_number": user.roll_number,
+        "class_name": user.class_name,
+        "batch": user.batch,
         "is_active": bool(user.is_active),
         "is_verified": bool(user.is_verified),
         "department": user.department,
@@ -519,6 +521,68 @@ def _user_payload(user):
         "created_at": _iso_datetime(user.created_at),
         "updated_at": _iso_datetime(user.updated_at),
         "edit_href": f"/react/admin/users?edit={user.id}",
+    }
+
+
+def _account_preferences(user):
+    defaults = {
+        "exam_reminders": True,
+        "announcement_banners": True,
+    }
+    raw_preferences = getattr(user, "account_preferences", None)
+    if not raw_preferences:
+        return defaults
+    try:
+        loaded = json.loads(raw_preferences)
+    except (TypeError, ValueError):
+        return defaults
+    if not isinstance(loaded, dict):
+        return defaults
+    return {
+        "exam_reminders": bool(loaded.get("exam_reminders", defaults["exam_reminders"])),
+        "announcement_banners": bool(loaded.get("announcement_banners", defaults["announcement_banners"])),
+    }
+
+
+def _account_stats(user):
+    if user.role == "student":
+        roll_no = (user.roll_number or session.get("roll_no") or "").strip().upper()
+        submitted_statuses = ["submitted", "evaluated", "terminated", "auto_submitted"]
+        exams_taken = StudentSession.query.filter(
+            db.func.upper(StudentSession.roll_no) == roll_no,
+            StudentSession.status.in_(submitted_statuses),
+        ).count() if roll_no else 0
+        results_available = (
+            Result.query.join(StudentSession, Result.session_id == StudentSession.id)
+            .filter(db.func.upper(StudentSession.roll_no) == roll_no, Result.published.is_(True))
+            .count()
+            if roll_no else 0
+        )
+        batches_joined = StudentGroupMember.query.filter_by(student_id=user.id).count()
+        return {
+            "exams_taken": exams_taken,
+            "results_available": results_available,
+            "batches_joined": batches_joined,
+        }
+    if user.role == "teacher":
+        active_group_ids = [group.id for group in StudentGroup.query.filter_by(created_by=user.id).all()]
+        students_taught = 0
+        if active_group_ids:
+            students_taught = (
+                db.session.query(db.func.count(db.distinct(StudentGroupMember.student_id)))
+                .filter(StudentGroupMember.group_id.in_(active_group_ids))
+                .scalar()
+                or 0
+            )
+        return {
+            "exams_created": ExamSet.query.filter_by(created_by=user.id).count(),
+            "students_taught": students_taught,
+            "active_batches": len(active_group_ids),
+        }
+    return {
+        "total_students": User.query.filter_by(role="student").count(),
+        "total_teachers": User.query.filter_by(role="teacher").count(),
+        "exams_on_platform": ExamSet.query.count(),
     }
 
 
@@ -1971,6 +2035,36 @@ def account_profile_api():
     return jsonify({"ok": True, "message": "Profile updated.", "user": _user_payload(user)})
 
 
+@api_bp.route("/account", methods=["GET"])
+def account_api():
+    user, error_response = _current_session_user()
+    if error_response:
+        return error_response
+
+    details = {}
+    if user.role == "student":
+        details["batches"] = [
+            membership.group.name
+            for membership in StudentGroupMember.query.filter_by(student_id=user.id)
+            .join(StudentGroup)
+            .order_by(StudentGroup.name.asc())
+            .all()
+        ]
+
+    return jsonify({
+        "ok": True,
+        "user": _user_payload(user),
+        "details": details,
+        "preferences": _account_preferences(user),
+        "stats": _account_stats(user),
+        "session": {
+            "last_login": _iso_datetime(user.last_login),
+            "active_sessions": 1 if session.get("auth_session_token") else 0,
+            "started_at": _iso_datetime(user.active_session_started_at),
+        },
+    })
+
+
 @api_bp.route("/account/avatar", methods=["POST"])
 @rate_limit("admin_action")
 def account_avatar_api():
@@ -1982,9 +2076,9 @@ def account_avatar_api():
     if not upload or not upload.filename:
         return jsonify({"ok": False, "message": "Choose a profile image to upload."}), 400
 
-    max_bytes = 6 * 1024 * 1024
+    max_bytes = 10 * 1024 * 1024
     if request.content_length and request.content_length > max_bytes + 8192:
-        return jsonify({"ok": False, "message": "Profile image must be 6 MB or smaller."}), 400
+        return jsonify({"ok": False, "message": "Profile image must be 10 MB or smaller."}), 400
 
     filename = secure_filename(upload.filename)
     extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
@@ -2023,6 +2117,51 @@ def account_avatar_api():
                 current_app.logger.warning("Could not remove old profile image %s", old_abs_path)
 
     return jsonify({"ok": True, "message": "Profile image uploaded.", "user": _user_payload(user)})
+
+
+@api_bp.route("/account/preferences", methods=["PATCH", "POST"])
+@rate_limit("admin_action")
+def account_preferences_api():
+    user, error_response = _current_session_user()
+    if error_response:
+        return error_response
+
+    payload = _get_json_payload()
+    preferences = {
+        "exam_reminders": bool(payload.get("exam_reminders")),
+        "announcement_banners": bool(payload.get("announcement_banners")),
+    }
+    user.account_preferences = json.dumps(preferences)
+    db.session.commit()
+    return jsonify({"ok": True, "message": "Preferences saved.", "preferences": preferences})
+
+
+@api_bp.route("/account/deactivate", methods=["POST"])
+@rate_limit("admin_action")
+def account_deactivate_api():
+    user, error_response = _current_session_user()
+    if error_response:
+        return error_response
+    if user.role == "student":
+        return jsonify({"ok": False, "message": "Students cannot deactivate their own account."}), 403
+
+    user.is_active = False
+    user.clear_active_session_token(session.get("auth_session_token"))
+    db.session.add(
+        AuditLog(
+            user_id=user.id,
+            action="deactivate_own_account",
+            resource_type="user",
+            resource_id=user.id,
+            status="success",
+            ip_address=get_client_ip(),
+            user_agent=request.headers.get("User-Agent"),
+        )
+    )
+    db.session.commit()
+    role = user.role
+    session.clear()
+    return jsonify({"ok": True, "message": "Account deactivated.", "redirect": f"/{role}/login"})
 
 
 @api_bp.route("/account/password", methods=["POST"])
@@ -2188,6 +2327,10 @@ def student_dashboard_api():
     else:
         greeting = "Good evening"
 
+    show_announcements = True
+    if student_user:
+        show_announcements = _account_preferences(student_user).get("announcement_banners", True)
+
     return jsonify(
         {
             "ok": True,
@@ -2207,7 +2350,7 @@ def student_dashboard_api():
                 "needs_batch_join": not bool(student_group_memberships),
             },
             "quote": SettingsService.random_quote(settings),
-            "announcement_message": settings.announcement_message if settings else None,
+            "announcement_message": settings.announcement_message if settings and show_announcements else None,
             "server_time": _iso_datetime(now),
             "stats": stats,
             "exams": cards,

@@ -909,7 +909,7 @@ export default function App() {
     try {
       // transient transition class for smooth theme change
       document.documentElement.classList.add('theme-transition');
-      window.setTimeout(() => document.documentElement.classList.remove('theme-transition'), 300);
+      window.setTimeout(() => document.documentElement.classList.remove('theme-transition'), 220);
       window.localStorage.setItem("examTheme", theme);
       if (theme === 'dark') {
         document.documentElement.classList.add('dark');
@@ -1273,7 +1273,7 @@ export default function App() {
           path="/profile"
           element={role ? (
             <PageSuspense label="Loading profile...">
-              <AccountSettings auth={bootstrap?.auth} />
+              <AccountSettings auth={bootstrap?.auth} mode="profile" />
             </PageSuspense>
           ) : (
             <LoginPanel settings={bootstrap?.settings} />
@@ -1283,7 +1283,40 @@ export default function App() {
           path="/settings"
           element={role ? (
             <PageSuspense label="Loading settings...">
-              <AccountSettings auth={bootstrap?.auth} />
+              <AccountSettings auth={bootstrap?.auth} mode="settings" />
+            </PageSuspense>
+          ) : (
+            <LoginPanel settings={bootstrap?.settings} />
+          )}
+        />
+        {["admin", "teacher", "student"].map(accountRole => (
+          <Route
+            key={`${accountRole}-profile`}
+            path={`/${accountRole}/profile`}
+            element={role === accountRole ? (
+              <PageSuspense label="Loading profile...">
+                <AccountSettings auth={bootstrap?.auth} mode="profile" />
+              </PageSuspense>
+            ) : (
+              <LoginPanel settings={bootstrap?.settings} />
+            )}
+          />
+        ))}
+        <Route
+          path="/student/settings"
+          element={role === "student" ? (
+            <PageSuspense label="Loading settings...">
+              <AccountSettings auth={bootstrap?.auth} mode="settings" />
+            </PageSuspense>
+          ) : (
+            <LoginPanel settings={bootstrap?.settings} />
+          )}
+        />
+        <Route
+          path="/teacher/settings"
+          element={role === "teacher" ? (
+            <PageSuspense label="Loading settings...">
+              <AccountSettings auth={bootstrap?.auth} mode="settings" />
             </PageSuspense>
           ) : (
             <LoginPanel settings={bootstrap?.settings} />

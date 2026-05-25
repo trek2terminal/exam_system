@@ -37,6 +37,7 @@ class User(db.Model):
     email = db.Column(db.String(120), unique=True, nullable=True, index=True)
     phone = db.Column(db.String(20), nullable=True)
     profile_picture = db.Column(db.String(255), nullable=True)
+    account_preferences = db.Column(db.Text, nullable=True)
 
     # Teacher specific fields
     department = db.Column(db.String(100), nullable=True)

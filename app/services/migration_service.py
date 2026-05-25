@@ -404,6 +404,10 @@ class MigrationService:
             connection.execute(text("CREATE INDEX IF NOT EXISTS ix_drafts_updated_at ON drafts (updated_at)"))
 
     @staticmethod
+    def _migration_user_account_preferences():
+        MigrationService._add_column_if_missing("users", "account_preferences", "TEXT")
+
+    @staticmethod
     def _migration_platform_settings_seed():
         if PlatformSettings.query.first():
             return
@@ -551,6 +555,11 @@ class MigrationService:
             "Add admin and teacher form drafts",
             _migration_drafts_table.__func__,
         ),
+        (
+            "20260525_026_user_account_preferences",
+            "Add personal account preferences",
+            _migration_user_account_preferences.__func__,
+        ),
     ]
 
     @staticmethod
@@ -686,6 +695,8 @@ class MigrationService:
                 and MigrationService._has_column("drafts", "draft_data")
                 and MigrationService._has_index("drafts", "ix_drafts_updated_at")
             )
+        if version == "20260525_026_user_account_preferences":
+            return MigrationService._has_column("users", "account_preferences")
         return False
 
     @staticmethod
