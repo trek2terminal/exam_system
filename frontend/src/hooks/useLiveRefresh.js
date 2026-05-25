@@ -1,11 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 export function useLiveRefresh(refreshFn, { enabled = true, intervalMs = 30000 } = {}) {
   const refreshRef = useRef(refreshFn);
   const inFlightRef = useRef(false);
   const pendingRef = useRef(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [pulse, setPulse] = useState(false);
 
   useEffect(() => {
     refreshRef.current = refreshFn;
@@ -23,17 +21,13 @@ export function useLiveRefresh(refreshFn, { enabled = true, intervalMs = 30000 }
     }
 
     inFlightRef.current = true;
-    setRefreshing(true);
     try {
       await refreshRef.current(true);
-      setPulse(true);
-      window.setTimeout(() => setPulse(false), 420);
     } finally {
       inFlightRef.current = false;
-      setRefreshing(false);
       if (pendingRef.current) {
         pendingRef.current = false;
-        window.setTimeout(runRefresh, 250);
+        window.setTimeout(runRefresh, 450);
       }
     }
   }, [enabled]);
@@ -43,7 +37,7 @@ export function useLiveRefresh(refreshFn, { enabled = true, intervalMs = 30000 }
     let debounceTimer;
     const scheduleRefresh = () => {
       window.clearTimeout(debounceTimer);
-      debounceTimer = window.setTimeout(runRefresh, 350);
+      debounceTimer = window.setTimeout(runRefresh, 650);
     };
     const onVisible = () => {
       if (document.visibilityState !== "hidden") scheduleRefresh();
@@ -61,5 +55,5 @@ export function useLiveRefresh(refreshFn, { enabled = true, intervalMs = 30000 }
     };
   }, [enabled, intervalMs, runRefresh]);
 
-  return { refreshing, pulse };
+  return { refreshing: false, pulse: false };
 }

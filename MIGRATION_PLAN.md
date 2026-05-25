@@ -735,3 +735,18 @@ Current status:
 - Source changes are ready for verification in lint/build.
 - Database migration must run before using join codes on an existing database: `python run.py migrate`.
 - Runtime QA recommended: create a batch, copy its code, log in as a student, join the batch from the dashboard, assign that batch to an exam, start/join the exam, and confirm the student appears in the proctoring Exam Lobby.
+
+## Latest Implementation Batch 32 - 2026-05-25
+
+Completed in this batch:
+- Reduced realtime refresh flicker by removing the global opacity/translate animation from the whole main content area.
+- Replaced the full-page flash with a subtle "sync comet" line under the top bar and a small "Synced" pill.
+- Coalesced realtime refresh bursts in `useRealtimeBridge` so multiple Socket.IO events do not trigger overlapping app refreshes.
+- Limited automatic dashboard-store refreshes to routes that actually render dashboard data, while keeping bootstrap/top-bar data synced silently.
+- Removed unused React state updates from `useLiveRefresh`, so background page refreshes no longer force extra render passes just to toggle an internal pulse flag.
+- Added reduced-motion handling for the realtime sync indicator.
+- Verified `npm.cmd run lint` and `npm.cmd run build`.
+
+Current status:
+- Realtime refreshes should now feel smoother and less flickery.
+- Runtime browser QA is still recommended with two active roles to tune the sync indicator duration if it feels too subtle or too visible.

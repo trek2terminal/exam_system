@@ -22,25 +22,54 @@ function announceRealtimeChange(detail) {
   window.clearTimeout(window.__examLiveUpdateTimer);
   window.__examLiveUpdateTimer = window.setTimeout(() => {
     document.documentElement.classList.remove("live-data-updated");
-  }, 900);
+  }, 1200);
 }
 
 export function useRealtimeBridge(role) {
   const loadBootstrap = useAppStore(state => state.loadBootstrap);
   const loadDashboard = useAppStore(state => state.loadDashboard);
   const refreshTimerRef = useRef(null);
+  const refreshInFlightRef = useRef(false);
+  const queuedRefreshRef = useRef(false);
 
   useEffect(() => {
     if (!role) return undefined;
 
     const socket = createRealtimeSocket();
+    const shouldRefreshDashboard = () => {
+      const path = window.location.pathname.replace(/^\/react/, "") || "/";
+      return (
+        path === "/student"
+        || path === "/student/exams"
+        || path === "/teacher"
+        || path === "/teacher/exams"
+      );
+    };
+
+    const runShellRefresh = async () => {
+      if (refreshInFlightRef.current) {
+        queuedRefreshRef.current = true;
+        return;
+      }
+      refreshInFlightRef.current = true;
+      try {
+        await loadBootstrap({ silent: true });
+        if (shouldRefreshDashboard()) {
+          await loadDashboard(role);
+        }
+      } finally {
+        refreshInFlightRef.current = false;
+        if (queuedRefreshRef.current) {
+          queuedRefreshRef.current = false;
+          refreshTimerRef.current = window.setTimeout(runShellRefresh, 900);
+        }
+      }
+    };
+
     const refreshShell = (detail, announce = true) => {
       if (announce) announceRealtimeChange(detail);
       window.clearTimeout(refreshTimerRef.current);
-      refreshTimerRef.current = window.setTimeout(async () => {
-        await loadBootstrap({ silent: true });
-        await loadDashboard(role);
-      }, 450);
+      refreshTimerRef.current = window.setTimeout(runShellRefresh, 800);
     };
 
     const handleChange = payload => refreshShell(payload || {});

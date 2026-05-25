@@ -73,26 +73,47 @@
   transition: background-color 220ms ease, color 220ms ease, border-color 220ms ease, box-shadow 220ms ease;
 }
 
-html.live-data-updated main {
-  animation: liveRefreshPulse 420ms cubic-bezier(0.16, 1, 0.3, 1);
+html.live-data-updated body::before {
+  content: "";
+  position: fixed;
+  left: clamp(12px, 18vw, 260px);
+  right: 24px;
+  top: 64px;
+  z-index: 89;
+  height: 2px;
+  border-radius: 9999px;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      90deg,
+      transparent 0%,
+      rgb(var(--color-info) / 0.2) 18%,
+      rgb(var(--color-brand-primary) / 0.82) 48%,
+      rgb(var(--color-success) / 0.72) 68%,
+      transparent 100%
+    );
+  filter: drop-shadow(0 0 8px rgb(var(--color-brand-primary) / 0.42));
+  transform-origin: left center;
+  animation: liveSyncComet 1200ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 html.live-data-updated body::after {
-  content: "Live update synced";
+  content: "Synced";
   position: fixed;
   right: 24px;
   top: 78px;
   z-index: 90;
-  border: 1px solid rgb(var(--color-success) / 0.28);
+  border: 1px solid rgb(var(--color-success) / 0.2);
   border-radius: 9999px;
-  background: rgb(var(--color-background-card) / 0.94);
+  background: rgb(var(--color-background-card) / 0.86);
   color: rgb(var(--color-success));
   box-shadow: var(--shadow-elevated);
-  padding: 8px 12px;
-  font-size: 12px;
+  padding: 6px 10px;
+  font-size: 11px;
   font-weight: 800;
+  letter-spacing: 0.02em;
   pointer-events: none;
-  animation: liveRefreshBadge 900ms ease both;
+  animation: liveRefreshBadge 1200ms ease both;
   backdrop-filter: blur(14px);
 }
 
@@ -102,16 +123,37 @@ html.live-data-updated body::after {
     top: 72px;
     white-space: nowrap;
   }
+
+  html.live-data-updated body::before {
+    left: 16px;
+    right: 16px;
+    top: 64px;
+  }
 }
 
-@keyframes liveRefreshPulse {
-  from {
-    opacity: 0.82;
-    transform: translateY(4px);
+@keyframes liveSyncComet {
+  0% {
+    opacity: 0;
+    transform: scaleX(0.02);
   }
-  to {
+  18% {
     opacity: 1;
-    transform: translateY(0);
+  }
+  78% {
+    opacity: 0.85;
+    transform: scaleX(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scaleX(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.live-data-updated body::before,
+  html.live-data-updated body::after {
+    animation: none;
+    opacity: 1;
   }
 }
 
