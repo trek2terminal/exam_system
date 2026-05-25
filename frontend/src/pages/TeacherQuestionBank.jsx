@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { FilePlus2, Pencil, Search, Trash2, Upload } from "lucide-react";
 import { Badge, Button, Card, ConfirmationDialog, EmptyState, Input, Modal, Select, Textarea } from "../components/ui";
 import { notify } from "../components/ui/Toast";
 import { api } from "../services/api";
+import { useLiveRefresh } from "../hooks/useLiveRefresh";
 
 const typeOptions = [
   { value: "all", label: "All Types" },
@@ -76,8 +77,8 @@ export default function TeacherQuestionBank() {
   const [editOptions, setEditOptions] = useState(["", "", "", ""]);
   const [importingId, setImportingId] = useState(null);
 
-  const loadBank = async () => {
-    setLoading(true);
+  const loadBank = useCallback(async (soft = false) => {
+    if (!soft) setLoading(true);
     try {
       const { data } = await api.get("/teacher/question-bank");
       setItems((data.items || []).map(normalizeItem));
@@ -87,11 +88,12 @@ export default function TeacherQuestionBank() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadBank();
-  }, []);
+  }, [loadBank]);
+  useLiveRefresh(loadBank, { intervalMs: 25000 });
 
   const filteredItems = useMemo(() => {
     const query = search.trim().toLowerCase();

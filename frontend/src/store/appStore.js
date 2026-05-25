@@ -9,8 +9,9 @@ export const useAppStore = create(set => ({
   clearSession() {
     set({ bootstrap: null, dashboard: null, error: null, loading: false });
   },
-  async loadBootstrap() {
-    set({ loading: true, error: null });
+  async loadBootstrap(options = {}) {
+    if (!options.silent) set({ loading: true, error: null });
+    else set({ error: null });
     try {
       const { data } = await api.get("/bootstrap");
       set({ bootstrap: data, loading: false });

@@ -32,6 +32,7 @@ import { api } from "../services/api";
 import { notify } from "../components/ui/Toast";
 import { cn } from "../components/ui/utils";
 import { timeAgo } from "../utils/dateFormat";
+import { useLiveRefresh } from "../hooks/useLiveRefresh";
 
 const donutColors = {
   draft: "rgb(var(--color-warning))",
@@ -129,6 +130,7 @@ export default function AdminDashboard() {
   useEffect(() => {
     loadDashboard();
   }, [loadDashboard]);
+  useLiveRefresh(loadDashboard, { intervalMs: 20000 });
 
   const stats = useMemo(() => dashboard?.stats || {}, [dashboard?.stats]);
   const participationTrend = useMemo(() => normalizeTrend(dashboard?.participation_trend), [dashboard?.participation_trend]);

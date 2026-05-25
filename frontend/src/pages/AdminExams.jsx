@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Archive, BookOpenCheck, CheckCircle2, Eye, FileText, Search, Trash2, XCircle } from "lucide-react";
 import { Badge, Button, Card, ConfirmationDialog, DateInput, EmptyState, Input, Select, SkeletonCard, StatCard, Table } from "../components/ui";
 import { api } from "../services/api";
 import { notify } from "../components/ui/Toast";
 import { formatDateShort } from "../utils/dateFormat";
+import { useLiveRefresh } from "../hooks/useLiveRefresh";
 
 function statusVariant(status) {
   if (status === "active" || status === "published") return "success";
@@ -35,27 +36,24 @@ export default function AdminExams() {
   const [pendingAction, setPendingAction] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      try {
-        const { data } = await api.get("/admin/exams", { params: { per_page: 100 } });
-        if (!cancelled) {
-          setStats(data.stats || {});
-          setExams(data.exams || []);
-          setTeachers(data.teachers || []);
-        }
-      } catch (error) {
-        notify.error(error.message || "Could not load exams.");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+  const loadExams = useCallback(async (soft = false) => {
+    if (!soft) setLoading(true);
+    try {
+      const { data } = await api.get("/admin/exams", { params: { per_page: 100 } });
+      setStats(data.stats || {});
+      setExams(data.exams || []);
+      setTeachers(data.teachers || []);
+    } catch (error) {
+      notify.error(error.message || "Could not load exams.");
+    } finally {
+      setLoading(false);
     }
-    load();
-    return () => {
-      cancelled = true;
-    };
   }, []);
+
+  useEffect(() => {
+    loadExams();
+  }, [loadExams]);
+  useLiveRefresh(loadExams, { intervalMs: 25000 });
 
   const filteredExams = useMemo(() => {
     const query = search.trim().toLowerCase();

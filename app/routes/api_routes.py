@@ -28,7 +28,7 @@ from app.services.notification_service import NotificationService
 from app.services.result_service import ResultService
 from app.services.security_service import SecurityService
 from app.services.settings_service import SettingsService
-from app.socketio.realtime_events import emit_to_proctors, emit_to_session
+from app.socketio.realtime_events import emit_data_changed, emit_to_proctors, emit_to_session
 from app.routes.teacher_routes import _save_question_images
 from app.utils.export_utils import csv_response, format_datetime
 from app.utils.helpers import create_submission_pdf, current_session_matches_user, parse_options
@@ -36,6 +36,50 @@ from app.utils.network import get_client_ip
 from app.utils.rate_limiter import rate_limit
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
+
+REALTIME_MUTATION_METHODS = {"POST", "PATCH", "PUT", "DELETE"}
+REALTIME_MUTATION_EXCLUDES = (
+    "/api/auth/session-status",
+    "/api/student/session/",
+)
+REALTIME_STUDENT_SESSION_ALLOWED_SUFFIXES = (
+    "/precheck",
+    "/pause-request",
+    "/submit",
+    "/violation",
+)
+
+
+def _should_emit_realtime_change(response):
+    if request.method not in REALTIME_MUTATION_METHODS:
+        return False
+    if response.status_code >= 400:
+        return False
+    if not session.get("role"):
+        return False
+
+    path = request.path or ""
+    if path.startswith("/api/student/session/"):
+        return path.endswith(REALTIME_STUDENT_SESSION_ALLOWED_SUFFIXES)
+    return not any(path.startswith(prefix) for prefix in REALTIME_MUTATION_EXCLUDES)
+
+
+@api_bp.after_request
+def emit_realtime_mutation(response):
+    if not _should_emit_realtime_change(response):
+        return response
+    try:
+        emit_data_changed({
+            "role": session.get("role"),
+            "user_id": session.get("user_id") or session.get("admin_id") or session.get("teacher_id") or session.get("student_user_id"),
+            "method": request.method,
+            "path": request.path,
+            "resource": request.path.replace("/api/", "", 1).split("/", 1)[0],
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+        })
+    except Exception:
+        current_app.logger.exception("Realtime mutation broadcast failed.")
+    return response
 
 
 def _login_page_settings(settings):

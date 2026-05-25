@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Download, FileSpreadsheet, FileText } from "lucide-react";
 import { Badge, Button, Card, EmptyState, Input, Select } from "../components/ui";
 import { api } from "../services/api";
 import { notify } from "../components/ui/Toast";
+import { useLiveRefresh } from "../hooks/useLiveRefresh";
 
 export default function TeacherReports() {
   const [exams, setExams] = useState([]);
@@ -10,21 +11,24 @@ export default function TeacherReports() {
   const [sessionId, setSessionId] = useState("");
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    async function loadExams() {
-      try {
-        const { data } = await api.get("/teacher/dashboard");
-        const loaded = data.exams || [];
-        setExams(loaded);
-        setSelectedExamId(loaded[0]?.id ? String(loaded[0].id) : "");
-      } catch {
-        notify.error("Could not load teacher exams");
-      } finally {
-        setLoading(false);
-      }
+  const loadExams = useCallback(async (soft = false) => {
+    if (!soft) setLoading(true);
+    try {
+      const { data } = await api.get("/teacher/dashboard");
+      const loaded = data.exams || [];
+      setExams(loaded);
+      setSelectedExamId(current => current || (loaded[0]?.id ? String(loaded[0].id) : ""));
+    } catch {
+      notify.error("Could not load teacher exams");
+    } finally {
+      setLoading(false);
     }
-    loadExams();
   }, []);
+
+  useEffect(() => {
+    loadExams();
+  }, [loadExams]);
+  useLiveRefresh(loadExams, { intervalMs: 25000 });
 
   const examOptions = useMemo(() => exams.map(exam => ({
     value: String(exam.id),

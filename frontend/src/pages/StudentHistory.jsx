@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Eye, History } from "lucide-react";
 import { Badge, Button, Card, EmptyState, Skeleton, Table } from "../components/ui";
 import { api } from "../services/api";
 import { formatDate } from "../utils/dateFormat";
+import { useLiveRefresh } from "../hooks/useLiveRefresh";
 
 function resultStatus(result, passingPercentage = 40) {
   if (!result) return { label: "-", variant: "secondary" };
@@ -15,17 +16,20 @@ export default function StudentHistory() {
   const [dashboard, setDashboard] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const loadHistory = async () => {
-      try {
-        const { data } = await api.get("/student/dashboard");
-        setDashboard(data);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadHistory();
+  const loadHistory = useCallback(async (soft = false) => {
+    if (!soft) setLoading(true);
+    try {
+      const { data } = await api.get("/student/dashboard");
+      setDashboard(data);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadHistory();
+  }, [loadHistory]);
+  useLiveRefresh(loadHistory, { intervalMs: 25000 });
 
   const rows = useMemo(() => (
     (dashboard?.exams || [])

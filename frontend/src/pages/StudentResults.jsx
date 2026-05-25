@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ChevronDown, ChevronUp, Download, CheckCircle2, XCircle, FileText, MessageSquare, X } from "lucide-react";
 import Editor from "@monaco-editor/react";
 import { Badge, Button, Card, Skeleton } from "../components/ui";
 import { api } from "../services/api";
 import { formatDateShort } from "../utils/dateFormat";
+import { useLiveRefresh } from "../hooks/useLiveRefresh";
 
 export default function StudentResults() {
   const [results, setResults] = useState([]);
@@ -11,19 +12,22 @@ export default function StudentResults() {
   const [expandedQuestion, setExpandedQuestion] = useState(null);
   const [lightboxImage, setLightboxImage] = useState(null);
 
-  useEffect(() => {
-    const loadResults = async () => {
-      try {
-        const { data } = await api.get("/student/results");
-        setResults(data.results || []);
-      } catch (error) {
-        console.error("Failed to load results:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadResults();
+  const loadResults = useCallback(async (soft = false) => {
+    if (!soft) setLoading(true);
+    try {
+      const { data } = await api.get("/student/results");
+      setResults(data.results || []);
+    } catch {
+      // Keep the previous results on transient realtime refresh failures.
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadResults();
+  }, [loadResults]);
+  useLiveRefresh(loadResults, { intervalMs: 25000 });
 
   if (loading) {
     return (

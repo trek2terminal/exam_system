@@ -73,6 +73,64 @@
   transition: background-color 220ms ease, color 220ms ease, border-color 220ms ease, box-shadow 220ms ease;
 }
 
+html.live-data-updated main {
+  animation: liveRefreshPulse 420ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+html.live-data-updated body::after {
+  content: "Live update synced";
+  position: fixed;
+  right: 24px;
+  top: 78px;
+  z-index: 90;
+  border: 1px solid rgb(var(--color-success) / 0.28);
+  border-radius: 9999px;
+  background: rgb(var(--color-background-card) / 0.94);
+  color: rgb(var(--color-success));
+  box-shadow: var(--shadow-elevated);
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 800;
+  pointer-events: none;
+  animation: liveRefreshBadge 900ms ease both;
+  backdrop-filter: blur(14px);
+}
+
+@media (max-width: 767px) {
+  html.live-data-updated body::after {
+    right: 16px;
+    top: 72px;
+    white-space: nowrap;
+  }
+}
+
+@keyframes liveRefreshPulse {
+  from {
+    opacity: 0.82;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes liveRefreshBadge {
+  0% {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.96);
+  }
+  18%,
+  72% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+}
+
 /* Notification dropdown styles */
 .notifDropdown {
   position: absolute;

@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Bell, CheckCircle2, Info, MailCheck } from "lucide-react";
 import { Badge, Button, Card, EmptyState } from "../components/ui";
 import { api } from "../services/api";
 import { notify } from "../components/ui/Toast";
 import { normalizeReactHref } from "../components/layout/navigation";
 import { timeAgo } from "../utils/dateFormat";
+import { useLiveRefresh } from "../hooks/useLiveRefresh";
 
 function notificationIcon(type) {
   if (String(type).includes("warning") || String(type).includes("violation")) return AlertTriangle;
@@ -27,27 +28,23 @@ export default function NotificationsPage({ notifications, auth, onMarkAllRead }
   const [unreadCount, setUnreadCount] = useState(notifications?.unread_count || 0);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    async function loadNotifications() {
-      setLoading(true);
-      try {
-        const { data } = await api.get("/notifications", { params: { filter, per_page: 50 } });
-        if (!cancelled) {
-          setItems(data.items || []);
-          setUnreadCount(data.unread_count || 0);
-        }
-      } catch (error) {
-        notify.warning(error.message || "Could not refresh notifications.");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+  const loadNotifications = useCallback(async (soft = false) => {
+    if (!soft) setLoading(true);
+    try {
+      const { data } = await api.get("/notifications", { params: { filter, per_page: 50 } });
+      setItems(data.items || []);
+      setUnreadCount(data.unread_count || 0);
+    } catch (error) {
+      notify.warning(error.message || "Could not refresh notifications.");
+    } finally {
+      setLoading(false);
     }
-    loadNotifications();
-    return () => {
-      cancelled = true;
-    };
   }, [filter]);
+
+  useEffect(() => {
+    loadNotifications();
+  }, [loadNotifications]);
+  useLiveRefresh(loadNotifications, { intervalMs: 20000 });
 
   const filteredItems = useMemo(() => {
     return items.filter(item => {

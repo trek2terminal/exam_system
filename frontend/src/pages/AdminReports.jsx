@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, Download, FileBarChart, FileText, ShieldAlert } from "lucide-react";
 import { Badge, Button, Card, DateInput, EmptyState, Select, Table } from "../components/ui";
 import { api } from "../services/api";
 import { notify } from "../components/ui/Toast";
 import { formatDate } from "../utils/dateFormat";
+import { useLiveRefresh } from "../hooks/useLiveRefresh";
 
 function exportAuditRows(rows) {
   const header = ["timestamp", "admin_user", "formatted_message", "resource_type", "resource_id", "ip_address", "status"];
@@ -31,31 +32,27 @@ export default function AdminReports() {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
 
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      try {
-        const [{ data }, examsResponse, auditResponse] = await Promise.all([
-          api.get("/admin/dashboard"),
-          api.get("/admin/exams", { params: { per_page: 100 } }),
-          api.get("/admin/audit-log", { params: { per_page: 50 } })
-        ]);
-        const options = (examsResponse.data.exams || []).map(exam => ({ value: String(exam.id), label: exam.exam_name }));
-        if (!cancelled) {
-          setDashboard(data);
-          setExamOptions(options);
-          setSelectedExamId(options[0]?.value || "");
-          setAuditRows(auditResponse.data.items || []);
-        }
-      } catch {
-        notify.warning("Some report selectors could not be loaded.");
-      }
+  const loadReports = useCallback(async () => {
+    try {
+      const [{ data }, examsResponse, auditResponse] = await Promise.all([
+        api.get("/admin/dashboard"),
+        api.get("/admin/exams", { params: { per_page: 100 } }),
+        api.get("/admin/audit-log", { params: { per_page: 50 } })
+      ]);
+      const options = (examsResponse.data.exams || []).map(exam => ({ value: String(exam.id), label: exam.exam_name }));
+      setDashboard(data);
+      setExamOptions(options);
+      setSelectedExamId(current => current || options[0]?.value || "");
+      setAuditRows(auditResponse.data.items || []);
+    } catch {
+      notify.warning("Some report selectors could not be loaded.");
     }
-    load();
-    return () => {
-      cancelled = true;
-    };
   }, []);
+
+  useEffect(() => {
+    loadReports();
+  }, [loadReports]);
+  useLiveRefresh(loadReports, { intervalMs: 25000 });
 
   const violationExportHref = useMemo(() => {
     const params = new window.URLSearchParams();

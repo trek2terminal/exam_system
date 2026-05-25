@@ -699,3 +699,21 @@ Current status:
 - No known lint/build/source-level bugs after this pass.
 - New package installed: `react-image-crop`.
 - Runtime browser QA is still recommended for crop drag behavior, mobile table scrolling, and the proctoring sound toggle in a real browser session.
+
+## Latest Implementation Batch 30 - 2026-05-25
+
+Completed in this batch:
+- Added authenticated global realtime update rooms to the Flask-SocketIO layer.
+- Added a lightweight `app:data_changed` broadcast after successful API mutations, filtered to avoid high-frequency autosave, heartbeat, code execution, and question-status refresh storms.
+- Added a React `useRealtimeBridge` hook mounted at top-level `App.jsx`; it listens for global data changes plus existing exam/proctoring Socket.IO events.
+- Added a shared `useLiveRefresh` hook with debounce, focus/visibility refresh, and polling fallback for environments where Socket.IO is delayed or unavailable.
+- Made bootstrap refresh silent during realtime sync so the whole app no longer flashes the full loading screen.
+- Wired automatic live refresh into Admin Dashboard, Users, Groups, Exams, Reports, Teacher Question Bank, Teacher Reports, Teacher Review list, Student Results, Student History, and Notifications.
+- Added a subtle live-update pulse and "Live update synced" badge animation for desktop and mobile.
+- Verified backend syntax with `python -B -m py_compile app/socketio/realtime_events.py app/routes/api_routes.py`.
+- Verified `npm.cmd run lint` and `npm.cmd run build`.
+
+Current status:
+- Realtime source wiring is build-clean.
+- Pages now refresh automatically after successful admin/teacher/student API changes, with Socket.IO first and polling/focus fallback.
+- Runtime QA still recommended with two browsers logged in as different roles to confirm same-machine live updates and production Socket.IO proxy behavior.

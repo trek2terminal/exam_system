@@ -14,6 +14,7 @@ import { Badge, Button, Card, EmptyState, Input, Modal, Textarea } from "./compo
 import { api } from "./services/api";
 import { notify } from "./components/ui/Toast";
 import { formatDate } from "./utils/dateFormat";
+import { useLiveRefresh } from "./hooks/useLiveRefresh";
 
 function scoreLabel(result) {
   if (!result) return "-";
@@ -35,8 +36,8 @@ function TeacherExamReview() {
   const [similarityLoading, setSimilarityLoading] = useState(false);
   const [similarityFlags, setSimilarityFlags] = useState([]);
 
-  const loadReview = useCallback(async () => {
-    setLoading(true);
+  const loadReview = useCallback(async (soft = false) => {
+    if (!soft) setLoading(true);
     setError("");
     try {
       const response = await api.get(`/teacher/exam/${examId}/review`);
@@ -51,6 +52,7 @@ function TeacherExamReview() {
   useEffect(() => {
     loadReview();
   }, [loadReview]);
+  useLiveRefresh(loadReview, { intervalMs: 20000 });
 
   const publishAll = async publish => {
     setSaving(true);

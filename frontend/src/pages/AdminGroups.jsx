@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Plus, Search, Trash2, X } from "lucide-react";
 import { Badge, Button, Card, ConfirmationDialog, EmptyState, Input, Textarea } from "../components/ui";
 import { api } from "../services/api";
 import { notify } from "../components/ui/Toast";
+import { useLiveRefresh } from "../hooks/useLiveRefresh";
 
 export default function AdminGroups() {
   const [groups, setGroups] = useState([]);
@@ -13,8 +14,8 @@ export default function AdminGroups() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [adminPassword, setAdminPassword] = useState("");
 
-  const loadGroups = async () => {
-    setLoading(true);
+  const loadGroups = useCallback(async (soft = false) => {
+    if (!soft) setLoading(true);
     try {
       const { data } = await api.get("/admin/groups");
       setGroups(data.groups || []);
@@ -23,11 +24,12 @@ export default function AdminGroups() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadGroups();
-  }, []);
+  }, [loadGroups]);
+  useLiveRefresh(loadGroups, { intervalMs: 25000 });
 
   const filteredGroups = groups.filter(group => group.name.toLowerCase().includes(search.toLowerCase()));
 

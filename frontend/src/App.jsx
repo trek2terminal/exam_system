@@ -24,6 +24,7 @@ import { useAppStore } from "./store/appStore";
 import { api } from "./services/api";
 import { notify } from "./components/ui/Toast";
 import { useSessionWatcher } from "./hooks/useSessionWatcher";
+import { useRealtimeBridge } from "./hooks/useRealtimeBridge";
 import { formatDate } from "./utils/dateFormat";
 
 const ExamInterface = lazy(() => import("./ExamInterface.jsx"));
@@ -658,6 +659,7 @@ export default function App() {
   const location = useLocation();
   const role = bootstrap?.auth?.role;
   const { endedSession, goToLogin } = useSessionWatcher(role);
+  useRealtimeBridge(role);
   const [theme, setTheme] = useState(() => {
     try {
       const stored = window.localStorage.getItem("examTheme");

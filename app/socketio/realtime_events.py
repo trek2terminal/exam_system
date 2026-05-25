@@ -42,6 +42,18 @@ def session_room(session_id):
     return f"student-session:{session_id}"
 
 
+def app_updates_room():
+    return "app:updates"
+
+
+def role_updates_room(role):
+    return f"app:role:{role}"
+
+
+def user_updates_room(user_id):
+    return f"app:user:{user_id}"
+
+
 def emit_to_proctors(exam_id, event_name, payload):
     if realtime_enabled():
         socketio.emit(event_name, payload, room=proctor_room(exam_id))
@@ -50,6 +62,29 @@ def emit_to_proctors(exam_id, event_name, payload):
 def emit_to_session(student_session, event_name, payload):
     if realtime_enabled() and student_session:
         socketio.emit(event_name, payload, room=session_room(student_session.id))
+
+
+def emit_data_changed(payload=None):
+    if not realtime_enabled():
+        return
+    clean_payload = payload or {}
+    socketio.emit("app:data_changed", clean_payload, room=app_updates_room())
+
+
+def _current_user_context():
+    role = session.get("role")
+    user_id = (
+        session.get("user_id")
+        or session.get("admin_id")
+        or session.get("teacher_id")
+        or session.get("student_user_id")
+    )
+    if not role or not user_id:
+        return None
+    user = User.query.get(user_id)
+    if not user or not user.is_active or not current_session_matches_user(user):
+        return None
+    return {"role": role, "user_id": user_id}
 
 
 def _parse_positive_int(value):
@@ -105,7 +140,12 @@ if SOCKETIO_AVAILABLE:
 
     @socketio.on("connect")
     def handle_connect():
-        emit("realtime:connected", {"ok": True})
+        context = _current_user_context()
+        if context:
+            join_room(app_updates_room())
+            join_room(role_updates_room(context["role"]))
+            join_room(user_updates_room(context["user_id"]))
+        emit("realtime:connected", {"ok": True, **(context or {})})
 
     @socketio.on("proctor:join")
     def handle_proctor_join(data):

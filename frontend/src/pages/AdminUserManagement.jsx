@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Download, Edit2, Eye, RotateCcw, Upload, Plus, ShieldCheck, UserX } from "lucide-react";
 import { Avatar, Badge, Button, Card, ConfirmationDialog, Input, Modal, Select, Table, Textarea, Tooltip } from "../components/ui";
 import { api } from "../services/api";
 import { notify } from "../components/ui/Toast";
 import { formatDate, formatDateShort } from "../utils/dateFormat";
+import { useLiveRefresh } from "../hooks/useLiveRefresh";
 
 function parseCsv(text) {
   const lines = text.split(/\r?\n/).filter(Boolean);
@@ -65,8 +66,8 @@ export default function AdminUserManagement() {
     return () => window.clearTimeout(timeoutId);
   }, [searchTerm]);
 
-  const loadUsers = async () => {
-    setLoading(true);
+  const loadUsers = useCallback(async (soft = false) => {
+    if (!soft) setLoading(true);
     try {
       const { data } = await api.get("/admin/users");
       setUsers(data.users || []);
@@ -76,11 +77,12 @@ export default function AdminUserManagement() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadUsers();
-  }, []);
+  }, [loadUsers]);
+  useLiveRefresh(loadUsers, { intervalMs: 25000 });
 
   const filteredUsers = useMemo(() => {
     const query = debouncedSearch.trim().toLowerCase();
