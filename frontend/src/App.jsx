@@ -64,6 +64,13 @@ const rolePaths = {
   student: "/student"
 };
 
+function getGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good Morning";
+  if (hour < 17) return "Good Afternoon";
+  return "Good Evening";
+}
+
 function formatCountdown(totalSeconds) {
   const seconds = Math.max(Math.floor(totalSeconds || 0), 0);
   const days = Math.floor(seconds / 86400);
@@ -171,6 +178,11 @@ function StudentDashboard({ dashboard }) {
   const stats = dashboard?.stats || {};
   const exams = dashboard?.exams || [];
   const student = dashboard?.student || {};
+  const greeting = getGreeting();
+  const announcementMessage = dashboard?.announcement_message?.trim();
+  const announcementText = announcementMessage
+    ? announcementMessage.replace(/^good\s+(morning|afternoon|evening)/i, greeting)
+    : "";
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -179,13 +191,6 @@ function StudentDashboard({ dashboard }) {
     return () => window.clearInterval(intervalId);
   }, []);
 
-  const getTimeBasedGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return "Good morning";
-    if (hour < 18) return "Good afternoon";
-    return "Good evening";
-  };
-
   return (
     <div className="space-y-6">
       {/* Greeting Banner */}
@@ -193,9 +198,8 @@ function StudentDashboard({ dashboard }) {
         <div className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-brand-primary/5 blur-3xl" />
         <div className="absolute -bottom-8 -left-8 h-24 w-24 rounded-full bg-info/5 blur-3xl" />
         <div className="relative z-10">
-          <h1 className="text-3xl font-bold text-text-primary md:text-4xl">Student Workspace</h1>
-          <p className="mt-2 text-lg text-text-secondary">
-            {getTimeBasedGreeting()}, {student.name || "Student"}. {dashboard?.quote?.text || dashboard?.quote || "One calm question at a time."}
+          <p className="text-lg text-text-secondary">
+            {greeting}, {student.name || "Student"}. {dashboard?.quote?.text || dashboard?.quote || "One calm question at a time."}
           </p>
           <div className="mt-4 flex items-center gap-6">
             <div>
@@ -212,15 +216,15 @@ function StudentDashboard({ dashboard }) {
       </div>
 
       {/* Announcement Banner */}
-      {dashboard?.announcement_message && (
-        <div className="flex items-start gap-4 rounded-card border border-warning/30 bg-warning/5 p-4 md:p-5">
-          <Bell size={20} className="mt-1 shrink-0 text-warning" />
+      {announcementText && (
+        <div className="flex items-center gap-4 rounded-card border border-warning/30 bg-warning/5 p-4 md:p-5">
+          <Bell size={20} className="shrink-0 text-warning" />
           <div className="flex-1 min-w-0">
-            <p className="font-semibold text-text-primary">{dashboard.announcement_message}</p>
+            <p className="font-semibold text-text-primary">{announcementText}</p>
           </div>
           <button
             type="button"
-            className="shrink-0 text-text-muted transition hover:text-text-primary"
+            className="grid h-8 w-8 shrink-0 place-items-center self-center text-text-muted transition hover:text-text-primary"
             onClick={e => e.currentTarget.parentElement.remove()}
             aria-label="Dismiss announcement"
           >
@@ -236,7 +240,7 @@ function StudentDashboard({ dashboard }) {
       />
 
       {/* Stats Row */}
-      <section className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      <section className="grid grid-cols-2 gap-4 min-[900px]:grid-cols-4">
         <StatCard icon={BookOpenCheck} label="Assigned" value={stats.assigned || 0} variant="default" />
         <StatCard icon={Play} label="Available" value={stats.available || 0} variant="default" />
         <StatCard icon={Clock3} label="Upcoming" value={stats.upcoming || 0} variant="default" />
@@ -389,7 +393,7 @@ function StudentBatchJoinPanel({ joinedBatches = [], needsBatchJoin = false, onJ
         )}
       </div>
 
-      <form onSubmit={joinBatch} className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+      <form onSubmit={joinBatch} className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
         <div className="space-y-3">
           <Input
             label="Search batches"
@@ -397,11 +401,11 @@ function StudentBatchJoinPanel({ joinedBatches = [], needsBatchJoin = false, onJ
             onChange={event => setQuery(event.target.value)}
             placeholder="Search or scroll to find your batch"
           />
-          <div className="max-h-64 overflow-y-auto rounded-lg border border-border bg-background-base p-2">
+          <div className="max-h-56 overflow-y-auto rounded-lg border border-border bg-background-base p-2">
             {loading ? (
               <p className="px-3 py-4 text-sm text-text-muted">Loading batches...</p>
             ) : visibleBatches.length === 0 ? (
-              <div className="px-3 py-6 text-center text-sm text-text-muted">
+              <div className="flex min-h-40 flex-col items-center justify-center px-3 py-6 text-center text-sm text-text-muted">
                 <Search size={24} className="mx-auto mb-2" />
                 No matching batches found.
               </div>
@@ -431,7 +435,7 @@ function StudentBatchJoinPanel({ joinedBatches = [], needsBatchJoin = false, onJ
           </div>
         </div>
 
-        <div className="rounded-lg border border-border bg-background-surface p-4">
+        <div className="self-start rounded-lg border border-border bg-background-surface p-4">
           <div className="mb-4">
             <p className="text-xs font-semibold uppercase text-text-muted">Selected batch</p>
             <p className="mt-1 text-lg font-semibold text-text-primary">{selectedBatch?.name || "Choose a batch"}</p>
