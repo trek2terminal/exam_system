@@ -9,11 +9,40 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.lib.utils import ImageReader, simpleSplit
 from reportlab.pdfgen import canvas
+from reportlab.platypus import Spacer, Table, TableStyle
 
 from app.models.exam_model import Question
 from app.models.submission_model import Answer
 from app.models.result_model import Result
 from app.services.exam_service import ExamService
+from app.services.settings_service import SettingsService
+from app.utils.pdf_base import (
+    BRAND_LIGHT,
+    BRAND_PRIMARY,
+    BORDER,
+    DANGER,
+    SUCCESS,
+    SURFACE,
+    TEXT_MUTED,
+    TEXT_PRIMARY,
+    TEXT_SECONDARY,
+    WARNING,
+    WHITE,
+    PDF_STYLES,
+    build_pdf,
+    clean_text,
+    code_box,
+    draw_star,
+    horizontal_rule,
+    image_flowable,
+    info_table,
+    landscape_a4,
+    marks_bar,
+    page_break,
+    paragraph,
+    section_heading,
+    status_badge,
+)
 
 
 def _active_user(user_id, expected_role):
@@ -226,153 +255,269 @@ def draw_wrapped_text(pdf, text, x, y, width, font_name="Helvetica", font_size=1
 
 
 def create_submission_pdf(student_session, include_unpublished_feedback=False):
-    """Generate detailed PDF report of student submission"""
-    buffer = BytesIO()
-    pdf = canvas.Canvas(buffer, pagesize=A4)
-    page_width, page_height = A4
-    left = 18 * mm
-    right_width = page_width - (2 * left)
-    y = page_height - 20 * mm
-
+    """Generate a standardized result/answer sheet PDF."""
     exam = student_session.exam_set
     questions = ExamService.get_session_questions(student_session)
     answers = Answer.query.filter_by(session_id=student_session.id).all()
-    answers_map = {a.question_id: a.answer_text for a in answers}
-    code_output_map = {a.question_id: a.code_output for a in answers if getattr(a, "code_output", None)}
-
+    answers_map = {answer.question_id: answer for answer in answers}
     result = Result.query.filter_by(session_id=student_session.id).first()
     result_visible = bool(result and (result.published or include_unpublished_feedback))
-    marks_map = {}
-    remarks_map = {}
-    if result_visible:
-        for qm in result.question_marks:
-            marks_map[qm.question_id] = qm.marks_awarded
-            remarks_map[qm.question_id] = qm.teacher_remark or ""
+    marks_map = {mark.question_id: mark for mark in result.question_marks} if result_visible else {}
+    doc_type = "ANSWER SHEET" if include_unpublished_feedback else "RESULT SHEET"
 
-    def heading(text, size=16):
-        nonlocal y
-        pdf.setFont("Helvetica-Bold", size)
-        pdf.drawString(left, y, text)
-        y -= 10 * mm
+    def question_category(question):
+        if question.question_type == "mcq":
+            return "MCQ"
+        if question.question_type == "coding":
+            return "Code"
+        return "Written"
 
-    def ensure_pdf_space(required_height):
-        nonlocal y
-        if y - required_height < 30 * mm:
-            pdf.showPage()
-            y = page_height - 20 * mm
-
-    def draw_question_images(question):
-        nonlocal y
-        image_paths = question.image_paths_as_list() if hasattr(question, "image_paths_as_list") else []
-        if not image_paths:
-            return
-
-        static_root = current_app.static_folder
-        for image_path in image_paths:
-            disk_path = os.path.join(static_root, image_path.replace("/", os.sep))
-            if not os.path.exists(disk_path):
-                y = draw_wrapped_text(pdf, f"[Question image missing: {image_path}]", left, y, right_width, font_size=9)
-                y -= 2 * mm
-                continue
-
-            try:
-                image = ImageReader(disk_path)
-                image_width, image_height = image.getSize()
-                draw_width = min(right_width, 115 * mm)
-                draw_height = draw_width * (image_height / image_width)
-                if draw_height > 75 * mm:
-                    draw_height = 75 * mm
-                    draw_width = draw_height * (image_width / image_height)
-
-                ensure_pdf_space(draw_height + 8 * mm)
-                pdf.drawImage(image, left, y - draw_height, width=draw_width, height=draw_height, preserveAspectRatio=True, mask="auto")
-                y -= draw_height + 5 * mm
-            except Exception:
-                y = draw_wrapped_text(pdf, f"[Question image could not be rendered: {image_path}]", left, y, right_width, font_size=9)
-                y -= 2 * mm
-
-    # Header
-    heading("Exam Submission Report", 18)
-    pdf.setFont("Helvetica", 11)
-    pdf.drawString(left, y, f"Student: {student_session.student_name} | Roll No: {student_session.roll_no}")
-    y -= 6 * mm
-    pdf.drawString(left, y, f"Exam: {exam.exam_name} | Subject: {exam.subject}")
-    y -= 6 * mm
-    pdf.drawString(left, y, f"Access Code: {exam.access_code} | Date: {datetime.utcnow().strftime('%d %b %Y %H:%M')}")
-    y -= 12 * mm
-    if result_visible:
-        pdf.setFont("Helvetica-Bold", 11)
-        pdf.drawString(
-            left,
-            y,
-            f"Result: {result.total_marks_obtained} / {result.total_marks} ({result.percentage}%)",
+    def add_question(story, question):
+        answer = answers_map.get(question.id)
+        question_mark = marks_map.get(question.id)
+        awarded = question_mark.marks_awarded if question_mark else 0
+        header = Table(
+            [[
+                paragraph(f"Q{question.question_number}", "H3"),
+                status_badge(question.question_type, BRAND_PRIMARY),
+                paragraph(f"{awarded if result_visible else '-'} / {question.marks} marks", "H3"),
+            ]],
+            colWidths=[250, 100, 120],
         )
-        y -= 7 * mm
-        if result.teacher_remarks:
-            pdf.setFont("Helvetica-Bold", 10)
-            pdf.drawString(left, y, "Overall Teacher Remark:")
-            y -= 5 * mm
-            y = draw_wrapped_text(pdf, result.teacher_remarks, left, y, right_width, font_size=10, leading=13)
-            y -= 4 * mm
-
-    # Questions & Answers
-    for q in questions:
-        if y < 50 * mm:
-            pdf.showPage()
-            y = page_height - 20 * mm
-
-        pdf.setFont("Helvetica-Bold", 11)
-        pdf.drawString(left, y, f"Q{q.question_number}. ({q.marks} marks) - {q.question_type.upper()}")
-        y -= 6 * mm
-
-        y = draw_wrapped_text(pdf, q.question_text, left, y, right_width, font_size=10, leading=14)
-        y -= 4 * mm
-
-        draw_question_images(q)
-
-        if getattr(q, "code_snippet", None):
-            pdf.setFont("Helvetica-Bold", 10)
-            pdf.drawString(left, y, "Question Code Snippet:")
-            y -= 5 * mm
-            y = draw_wrapped_text(pdf, q.code_snippet, left, y, right_width, font_name="Courier", font_size=8.5, leading=11)
-            y -= 3 * mm
-
-        pdf.setFont("Helvetica-Bold", 10)
-        pdf.drawString(left, y, "Student Answer:")
-        y -= 5 * mm
-
-        answer_text = answers_map.get(q.id, "[No answer submitted]")
-        y = draw_wrapped_text(pdf, answer_text, left, y, right_width, font_size=10, leading=13)
-
-        if result_visible and getattr(q, "model_answer", None):
-            pdf.setFont("Helvetica-Bold", 10)
-            y -= 3 * mm
-            pdf.drawString(left, y, "Model Answer:")
-            y -= 5 * mm
-            y = draw_wrapped_text(pdf, q.model_answer, left, y, right_width, font_size=10, leading=13)
-
-        if q.question_type == "coding" and code_output_map.get(q.id):
-            pdf.setFont("Helvetica-Bold", 10)
-            y -= 3 * mm
-            pdf.drawString(left, y, "Last Code Output:")
-            y -= 5 * mm
-            y = draw_wrapped_text(pdf, code_output_map[q.id], left, y, right_width, font_size=9, leading=12)
-
-        # Show marks if evaluated
+        header.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE")]))
+        story.extend([header, Spacer(1, 6), paragraph(question.question_text), Spacer(1, 6)])
+        for image_path in question.image_paths_as_list():
+            image = image_flowable(image_path)
+            if image:
+                story.extend([image, Spacer(1, 6)])
+        if question.code_snippet:
+            story.extend([paragraph("Question Code Snippet", "LABEL"), code_box(question.code_snippet), Spacer(1, 6)])
+        answer_text = answer.answer_text if answer and answer.answer_text else "[No answer submitted]"
+        story.append(paragraph("Your Answer", "LABEL"))
+        if question.question_type == "coding":
+            story.append(code_box(answer_text))
+            if answer and answer.code_output:
+                story.extend([Spacer(1, 4), paragraph("Captured Output", "LABEL"), code_box(answer.code_output)])
+        else:
+            story.append(code_box(answer_text) if len(answer_text) > 180 else paragraph(answer_text))
+        if question.question_type == "mcq" and question.correct_answer and answer_text != question.correct_answer:
+            story.append(paragraph(f"Correct Answer: {question.correct_answer}", "BODY_SMALL"))
         if result_visible:
-            awarded = marks_map.get(q.id, 0)
-            pdf.setFont("Helvetica-Bold", 10)
-            y -= 3 * mm
-            pdf.drawString(left, y, f"Marks Awarded: {awarded} / {q.marks}")
-            y -= 5 * mm
+            story.extend([Spacer(1, 6), paragraph(f"Marks Awarded: {awarded} / {question.marks}", "LABEL"), marks_bar(awarded, question.marks)])
+            if question_mark and question_mark.teacher_remark:
+                story.extend([Spacer(1, 6), paragraph("Feedback", "LABEL"), paragraph(question_mark.teacher_remark, "BODY_SMALL")])
+            if question.model_answer:
+                story.extend([Spacer(1, 6), paragraph("Model Answer", "LABEL"), code_box(question.model_answer)])
+        story.extend([Spacer(1, 10), horizontal_rule(), Spacer(1, 10)])
 
-            remark = remarks_map.get(q.id, "")
-            if remark:
-                pdf.setFont("Helvetica", 10)
-                y = draw_wrapped_text(pdf, f"Teacher Remark: {remark}", left, y, right_width, font_size=10)
+    def build_story(story):
+        story.append(paragraph(exam.exam_name, "H1"))
+        story.append(horizontal_rule())
+        story.append(Spacer(1, 10))
+        story.append(
+            info_table(
+                [
+                    (("Exam Date", exam.activated_at or exam.created_at), ("Student Name", student_session.student_name)),
+                    (("Duration", f"{exam.duration_minutes} minutes"), ("Roll Number", student_session.roll_no)),
+                    (("Total Questions", len(questions)), ("Submitted At", student_session.submitted_at or "-")),
+                    (("Total Marks", exam.total_marks), ("Attempt", student_session.session_code)),
+                ]
+            )
+        )
+        story.append(Spacer(1, 12))
+        if include_unpublished_feedback:
+            story.append(section_heading("Teacher Review Copy"))
+            story.append(info_table([(("Reviewed By", getattr(result.evaluator, "name", "-") if result else "-"), ("Review Date", result.updated_at if result else "-"))]))
+            story.append(Spacer(1, 12))
+        if result_visible:
+            passed = float(result.percentage or 0) >= int(getattr(exam, "passing_percentage", 40) or 40)
+            score_card = Table(
+                [[
+                    paragraph(f"{result.total_marks_obtained} / {result.total_marks}", "H1"),
+                    paragraph(f"{result.percentage}%", "H2"),
+                    "" if include_unpublished_feedback else status_badge("PASSED" if passed else "FAILED", SUCCESS if passed else DANGER),
+                ]],
+                colWidths=[180, 120, 120],
+            )
+            score_card.setStyle(
+                TableStyle(
+                    [
+                        ("BACKGROUND", (0, 0), (-1, -1), BRAND_LIGHT),
+                        ("BOX", (0, 0), (-1, -1), 1, BRAND_PRIMARY),
+                        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                        ("TOPPADDING", (0, 0), (-1, -1), 12),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 12),
+                    ]
+                )
+            )
+            story.extend([score_card, Spacer(1, 8), marks_bar(result.total_marks_obtained, result.total_marks), Spacer(1, 14)])
+        story.append(section_heading("Answer Review"))
+        story.append(Spacer(1, 10))
+        for question in questions:
+            add_question(story, question)
+        summary = {"MCQ": [0, 0], "Written": [0, 0], "Code": [0, 0]}
+        for question in questions:
+            category = question_category(question)
+            summary[category][0] += 1
+            summary[category][1] += question.marks
+        rows = [["Category", "Questions", "Marks"]] + [[key, values[0], values[1]] for key, values in summary.items()] + [["Total", len(questions), sum(q.marks for q in questions)]]
+        table = Table(rows, colWidths=[180, 120, 120])
+        table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), BRAND_PRIMARY), ("TEXTCOLOR", (0, 0), (-1, 0), WHITE), ("GRID", (0, 0), (-1, -1), 0.5, BORDER), ("BACKGROUND", (0, -1), (-1, -1), BRAND_LIGHT)]))
+        story.extend([section_heading("Result Summary"), Spacer(1, 8), table])
 
-        y -= 8 * mm
+    safe_roll = "".join(ch if ch.isalnum() else "_" for ch in student_session.roll_no or "student")
+    return build_pdf(
+        f"{doc_type.lower().replace(' ', '_')}_{safe_roll}.pdf",
+        build_story,
+        doc_type,
+        {"watermark": "Teacher Review Copy" if include_unpublished_feedback else None},
+    )
 
+
+def create_exam_report_pdf(exam, sessions, questions):
+    results = [student_session.result for student_session in sessions if student_session.result]
+    evaluated = len(results)
+    average_score = round(sum(result.percentage or 0 for result in results) / evaluated, 1) if evaluated else 0
+    pass_threshold = int(getattr(exam, "passing_percentage", 40) or 40)
+    pass_count = sum(1 for result in results if float(result.percentage or 0) >= pass_threshold)
+    pass_rate = round((pass_count / evaluated) * 100, 1) if evaluated else 0
+
+    def build_story(story):
+        story.append(paragraph(exam.exam_name, "H1"))
+        story.append(Spacer(1, 8))
+        story.append(
+            info_table(
+                [
+                    (("Created By Teacher", getattr(exam.creator, "name", "-")), ("Total Enrolled", len(sessions))),
+                    (("Published Date", exam.activated_at or "-"), ("Total Submitted", sum(1 for item in sessions if item.status in {"submitted", "evaluated", "terminated", "auto_submitted"}))),
+                    (("Duration", f"{exam.duration_minutes} minutes"), ("Average Score", f"{average_score}%")),
+                    (("Total Questions", len(questions)), ("Pass Rate", f"{pass_rate}%")),
+                ]
+            )
+        )
+        story.extend([Spacer(1, 16), section_heading("Score Distribution"), Spacer(1, 8)])
+        ranges = [(0, 20), (21, 40), (41, 60), (61, 80), (81, 100)]
+        counts = []
+        for start, end in ranges:
+            counts.append(sum(1 for result in results if start <= float(result.percentage or 0) <= end))
+        max_count = max(counts or [1]) or 1
+        chart_rows = [["Range", "Students", "Distribution"]]
+        for (start, end), count in zip(ranges, counts):
+            blocks = "#" * max(1, round((count / max_count) * 20)) if count else ""
+            chart_rows.append([f"{start}-{end}%", count, blocks])
+        chart = Table(chart_rows, colWidths=[100, 80, 300])
+        chart.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), BRAND_PRIMARY), ("TEXTCOLOR", (0, 0), (-1, 0), WHITE), ("GRID", (0, 0), (-1, -1), 0.5, BORDER)]))
+        story.append(chart)
+        story.extend([page_break(), section_heading("All Student Results"), Spacer(1, 8)])
+        rows = [["Name", "Roll", "Submitted At", "Score", "Percentage", "Status"]]
+        for student_session in sessions:
+            result = student_session.result
+            percent = float(result.percentage or 0) if result else 0
+            rows.append(
+                [
+                    student_session.student_name,
+                    student_session.roll_no,
+                    student_session.submitted_at or "-",
+                    f"{result.total_marks_obtained}/{result.total_marks}" if result else "Not evaluated",
+                    f"{percent}%" if result else "-",
+                    "Pass" if result and percent >= pass_threshold else "Fail" if result else "Pending",
+                ]
+            )
+        table = Table(rows, colWidths=[110, 70, 110, 80, 75, 70], repeatRows=1)
+        table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), BRAND_PRIMARY), ("TEXTCOLOR", (0, 0), (-1, 0), WHITE), ("GRID", (0, 0), (-1, -1), 0.5, BORDER), ("BOX", (0, 0), (-1, -1), 1, BRAND_PRIMARY)]))
+        story.append(table)
+        story.extend([page_break(), section_heading("Violation Summary"), Spacer(1, 8)])
+        violation_rows = [["Student Name", "Roll", "Violation Count", "Types", "Outcome"]]
+        for student_session in sessions:
+            violations = getattr(student_session, "violation_logs", []) or []
+            if not violations and not student_session.focus_violations:
+                continue
+            types = ", ".join(sorted({item.violation_type.replace("_", " ").title() for item in violations})) or "Focus"
+            violation_rows.append([student_session.student_name, student_session.roll_no, student_session.focus_violations, types, student_session.status])
+        if len(violation_rows) == 1:
+            story.append(paragraph("No violations recorded for this exam.", "BODY_SMALL"))
+        else:
+            violation_table = Table(violation_rows, colWidths=[120, 70, 80, 170, 80], repeatRows=1)
+            violation_table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), BRAND_PRIMARY), ("TEXTCOLOR", (0, 0), (-1, 0), WHITE), ("GRID", (0, 0), (-1, -1), 0.5, BORDER)]))
+            story.append(violation_table)
+        story.extend([Spacer(1, 16), section_heading("Question Difficulty Analysis"), Spacer(1, 8)])
+        analysis_rows = [["Q#", "Type", "Max Marks", "Avg Score", "Avg %", "Difficulty Tag"]]
+        for question in questions:
+            scores = []
+            for result in results:
+                mark = next((item for item in result.question_marks if item.question_id == question.id), None)
+                if mark:
+                    scores.append(mark.marks_awarded)
+            avg = round(sum(scores) / len(scores), 1) if scores else 0
+            avg_percent = round((avg / question.marks) * 100, 1) if question.marks else 0
+            tag = "Easy" if avg_percent >= 70 else "Medium" if avg_percent >= 40 else "Hard"
+            analysis_rows.append([question.question_number, question.question_type, question.marks, avg, f"{avg_percent}%", tag])
+        analysis_table = Table(analysis_rows, colWidths=[45, 80, 80, 80, 80, 120], repeatRows=1)
+        analysis_table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), BRAND_PRIMARY), ("TEXTCOLOR", (0, 0), (-1, 0), WHITE), ("GRID", (0, 0), (-1, -1), 0.5, BORDER)]))
+        story.append(analysis_table)
+
+    return build_pdf(f"exam_report_{exam.id}.pdf", build_story, "EXAM REPORT", {})
+
+
+def create_result_certificate_pdf(result, admin_name="Platform Administrator"):
+    student_session = result.session
+    exam = student_session.exam_set
+    teacher_name = getattr(exam.creator, "name", None) or "Examiner"
+    passing = int(getattr(exam, "passing_percentage", 40) or 40)
+    passed = float(result.percentage or 0) >= passing
+    settings = SettingsService.get_settings()
+    platform_name = getattr(settings, "platform_name", None) or "Exam System"
+    generated_at = datetime.utcnow()
+    buffer = BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=landscape_a4())
+    width, height = landscape_a4()
+    pdf.setStrokeColor(BRAND_PRIMARY)
+    pdf.setLineWidth(3)
+    pdf.rect(36, 36, width - 72, height - 72)
+    pdf.setStrokeColor(BRAND_LIGHT)
+    pdf.setLineWidth(1)
+    pdf.rect(44, 44, width - 88, height - 88)
+    pdf.setFillColor(BRAND_PRIMARY)
+    pdf.setFont("Helvetica-Bold", 18)
+    pdf.drawCentredString(width / 2, height - 96, platform_name)
+    pdf.setFillColor(WARNING if passed else BRAND_PRIMARY)
+    pdf.setFont("Helvetica-Bold", 12)
+    pdf.drawCentredString(width / 2, height - 124, "MERIT CERTIFICATE" if passed else "PARTICIPATION CERTIFICATE")
+    if passed:
+        draw_star(pdf, width / 2 - 210, height / 2 + 32, 18)
+    pdf.setFillColor(TEXT_SECONDARY)
+    pdf.setFont("Helvetica", 12)
+    pdf.drawCentredString(width / 2, height / 2 + 70, "This is to certify that")
+    pdf.setFillColor(TEXT_PRIMARY)
+    pdf.setFont("Helvetica-Bold", 24)
+    pdf.drawCentredString(width / 2, height / 2 + 36, student_session.student_name)
+    pdf.setFillColor(TEXT_SECONDARY)
+    pdf.setFont("Helvetica", 12)
+    pdf.drawCentredString(width / 2, height / 2 + 8, "has successfully completed")
+    pdf.setFillColor(BRAND_PRIMARY)
+    pdf.setFont("Helvetica-Bold", 16)
+    pdf.drawCentredString(width / 2, height / 2 - 24, exam.exam_name)
+    pdf.setFillColor(SUCCESS)
+    pdf.setFont("Helvetica-Bold", 18)
+    pdf.drawCentredString(width / 2, height / 2 - 58, f"with a score of {result.total_marks_obtained}/{result.total_marks} ({result.percentage}%)")
+    pdf.setFillColor(TEXT_MUTED)
+    pdf.setFont("Helvetica-Oblique", 8)
+    pdf.drawCentredString(width / 2, height / 2 - 82, f"on {(result.published_at or generated_at).strftime('%b %d, %Y')}")
+    left_x, right_x, sig_y = 145, width - 300, 112
+    pdf.setStrokeColor(TEXT_MUTED)
+    pdf.line(left_x, sig_y, left_x + 180, sig_y)
+    pdf.line(right_x, sig_y, right_x + 180, sig_y)
+    pdf.setFillColor(TEXT_SECONDARY)
+    pdf.setFont("Helvetica", 8)
+    pdf.drawCentredString(left_x + 90, sig_y - 14, "Examiner / Teacher")
+    pdf.drawCentredString(left_x + 90, sig_y - 27, teacher_name)
+    pdf.drawCentredString(right_x + 90, sig_y - 14, "Platform Administrator")
+    pdf.drawCentredString(right_x + 90, sig_y - 27, admin_name)
+    cert_no = f"CERT-{generated_at.year}-{exam.id}-{student_session.id}"
+    pdf.setFillColor(TEXT_MUTED)
+    pdf.drawCentredString(width / 2, 82, f"Certificate No: {cert_no}")
+    pdf.drawCentredString(width / 2, 66, f"{platform_name} | Generated {generated_at.strftime('%b %d, %Y')}")
     pdf.showPage()
     pdf.save()
     buffer.seek(0)

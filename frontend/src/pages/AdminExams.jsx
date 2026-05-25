@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Archive, BookOpenCheck, CheckCircle2, Eye, FileText, Search, Trash2, XCircle } from "lucide-react";
+import { BookOpenCheck, CheckCircle2, Eye, FileText, PencilLine, Search, Trash2, XCircle } from "lucide-react";
 import { Badge, Button, Card, ConfirmationDialog, DateInput, EmptyState, Input, Select, SkeletonCard, StatCard, Table } from "../components/ui";
 import { api } from "../services/api";
 import { notify } from "../components/ui/Toast";
@@ -35,6 +35,7 @@ export default function AdminExams() {
   const [teachers, setTeachers] = useState([]);
   const [pendingAction, setPendingAction] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [deleteAdminPassword, setDeleteAdminPassword] = useState("");
 
   const loadExams = useCallback(async (soft = false) => {
     if (!soft) setLoading(true);
@@ -78,11 +79,12 @@ export default function AdminExams() {
 
   const runAction = async () => {
     if (!pendingAction) return;
+    if (pendingAction.type === "delete" && !deleteAdminPassword.trim()) return;
     setActionLoading(true);
     try {
       if (pendingAction.type === "delete") {
         const { data } = await api.delete(`/admin/exams/${pendingAction.exam.id}`, {
-          data: { confirm_word: "DELETE" }
+          data: { confirm_word: "DELETE", admin_password: deleteAdminPassword }
         });
         notify.success(data.message || "Exam deleted");
         setExams(current => {
@@ -98,7 +100,7 @@ export default function AdminExams() {
         setExams(current => {
           const next = current.map(exam => (
             exam.id === pendingAction.exam.id
-              ? (data.exam || { ...exam, status: pendingAction.type === "activate" ? "active" : "closed" })
+              ? (data.exam || { ...exam, status: pendingAction.type === "activate" ? "active" : pendingAction.type === "deactivate" ? "draft" : "closed" })
               : exam
           ));
           setStats(statsFromExams(next));
@@ -106,6 +108,7 @@ export default function AdminExams() {
         });
       }
       setPendingAction(null);
+      setDeleteAdminPassword("");
     } catch (error) {
       notify.error(error.message || "Could not update exam");
     } finally {
@@ -210,8 +213,13 @@ export default function AdminExams() {
                     </Button>
                   )}
                   {row.status === "active" && (
-                    <Button variant="warning" size="sm" onClick={() => setPendingAction({ type: "close", exam: row })}>
-                      <Archive size={16} /> Archive
+                    <Button variant="warning" size="sm" onClick={() => setPendingAction({ type: "deactivate", exam: row })}>
+                      <PencilLine size={16} /> Deactivate
+                    </Button>
+                  )}
+                  {row.status === "active" && (
+                    <Button variant="danger" size="sm" onClick={() => setPendingAction({ type: "close", exam: row })}>
+                      <XCircle size={16} /> End
                     </Button>
                   )}
                   <Button as="a" href={`/api/admin/exams/${row.id}/report.pdf`} variant="secondary" size="sm">
@@ -231,20 +239,23 @@ export default function AdminExams() {
 
       <ConfirmationDialog
         open={!!pendingAction}
-        title={pendingAction?.type === "activate" ? "Publish Exam?" : pendingAction?.type === "delete" ? "Delete Exam?" : "Archive Exam?"}
-        description={confirmationDescription(pendingAction)}
-        confirmLabel={pendingAction?.type === "activate" ? "Publish" : pendingAction?.type === "delete" ? "Delete Exam" : "Archive"}
-        confirmWord={pendingAction?.type === "activate" ? undefined : "DELETE"}
-        variant={pendingAction?.type === "activate" ? "success" : "danger"}
+        title={pendingAction?.type === "activate" ? "Publish Exam?" : pendingAction?.type === "delete" ? "Delete Exam?" : pendingAction?.type === "deactivate" ? "Deactivate Exam?" : "End Exam?"}
+        description={confirmationDescription(pendingAction, deleteAdminPassword, setDeleteAdminPassword)}
+        confirmLabel={pendingAction?.type === "activate" ? "Publish" : pendingAction?.type === "delete" ? "Delete Exam" : pendingAction?.type === "deactivate" ? "Deactivate" : "End Exam"}
+        confirmWord={pendingAction?.type === "delete" ? "DELETE" : undefined}
+        variant={pendingAction?.type === "activate" ? "success" : pendingAction?.type === "deactivate" ? "warning" : "danger"}
         onConfirm={runAction}
         loading={actionLoading}
-        onClose={() => setPendingAction(null)}
+        onClose={() => {
+          setPendingAction(null);
+          setDeleteAdminPassword("");
+        }}
       />
     </div>
   );
 }
 
-function confirmationDescription(pendingAction) {
+function confirmationDescription(pendingAction, deleteAdminPassword, setDeleteAdminPassword) {
   if (!pendingAction) return "";
   if (pendingAction.type === "activate") {
     return "Students will be able to join this draft exam if the normal access rules allow it.";
@@ -254,8 +265,22 @@ function confirmationDescription(pendingAction) {
       <div className="space-y-2">
         <p>This permanently deletes the exam, its questions, enrollments, sessions, answers, results, and violation logs.</p>
         <p className="font-semibold text-danger">This cannot be undone.</p>
+        <Input
+          label="Admin Password"
+          type="password"
+          value={deleteAdminPassword}
+          onChange={event => setDeleteAdminPassword(event.target.value)}
+          autoComplete="current-password"
+          required
+        />
       </div>
     );
+  }
+  if (pendingAction.type === "deactivate") {
+    return "Students will see that this exam is temporarily inactive. The exam returns to Draft so it can be edited, then published again.";
+  }
+  if (pendingAction.type === "close") {
+    return "Students will no longer be able to join or submit. Use Deactivate instead if you need to edit and publish again.";
   }
   return "Students will no longer be able to join this exam.";
 }
@@ -300,8 +325,13 @@ function ExamMobileCard({ exam, index, onAction }) {
           </Button>
         )}
         {exam.status === "active" && (
-          <Button variant="warning" className="w-full" onClick={() => onAction({ type: "close", exam })}>
-            <Archive size={16} /> Archive
+          <Button variant="warning" className="w-full" onClick={() => onAction({ type: "deactivate", exam })}>
+            <PencilLine size={16} /> Deactivate
+          </Button>
+        )}
+        {exam.status === "active" && (
+          <Button variant="danger" className="w-full" onClick={() => onAction({ type: "close", exam })}>
+            <XCircle size={16} /> End Exam
           </Button>
         )}
         <div className="grid grid-cols-2 gap-2">

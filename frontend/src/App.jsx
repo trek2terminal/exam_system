@@ -15,7 +15,8 @@ import {
   Radio,
   Search,
   Trophy,
-  Users
+  Users,
+  XCircle
 } from "lucide-react";
 import { PageLayout } from "./components/layout/PageLayout";
 import { SessionEndedOverlay } from "./components/SessionEndedOverlay";
@@ -440,6 +441,7 @@ function StudentBatchJoinPanel({ joinedBatches = [], needsBatchJoin = false, onJ
             onChange={event => setJoinCode(event.target.value.toUpperCase())}
             placeholder="Enter code"
             autoComplete="off"
+            required
           />
           <Button type="submit" variant="primary" className="mt-4 w-full" loading={joining} loadingLabel="Joining...">
             <KeyRound size={17} /> Join Batch
@@ -572,9 +574,16 @@ function StudentExamCard({ exam, elapsedSeconds }) {
       {/* Action buttons */}
       <div className="flex flex-col gap-2 p-4">
         {action.disabled ? (
-          <Button variant="secondary" size="sm" disabled className="w-full">
-            {action.label || "Unavailable"}
-          </Button>
+          <>
+            {action.message && (
+              <div className="rounded-md border border-warning/30 bg-warning/5 px-3 py-2 text-sm text-warning">
+                {action.message}
+              </div>
+            )}
+            <Button variant="secondary" size="sm" disabled className="w-full">
+              {action.label || "Unavailable"}
+            </Button>
+          </>
         ) : action.method === "post" ? (
           <Button
             type="button"
@@ -611,7 +620,32 @@ function StudentExamCard({ exam, elapsedSeconds }) {
 }
 
 function TeacherDashboard({ dashboard }) {
-  const exams = dashboard?.exams || [];
+  const loadDashboard = useAppStore(state => state.loadDashboard);
+  const [localExams, setLocalExams] = useState(dashboard?.exams || []);
+
+  useEffect(() => {
+    setLocalExams(dashboard?.exams || []);
+  }, [dashboard?.exams]);
+
+  const updateExamStatus = async (exam, action) => {
+    if (action === "close" && !window.confirm("End this exam? Students will no longer be able to join or submit.")) {
+      return;
+    }
+    try {
+      const { data } = await api.post(`/teacher/exams/${exam.id}/status`, { action });
+      notify.success(data.message || "Exam updated.");
+      setLocalExams(current => current.map(item => (
+        item.id === exam.id
+          ? { ...item, status: data.exam?.status || (action === "deactivate" ? "draft" : action === "close" ? "closed" : "active") }
+          : item
+      )));
+      loadDashboard();
+    } catch (error) {
+      notify.error(error.message || "Could not update exam.");
+    }
+  };
+
+  const exams = localExams;
   const stats = {
     total: exams.length,
     published: exams.filter(exam => ["active", "published"].includes(exam.status)).length,
@@ -652,7 +686,7 @@ function TeacherDashboard({ dashboard }) {
         {exams.length > 0 ? (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             {exams.map((exam, index) => (
-              <TeacherExamCard exam={exam} key={exam.id} index={index} />
+              <TeacherExamCard exam={exam} key={exam.id} index={index} onStatusChange={updateExamStatus} />
             ))}
           </div>
         ) : (
@@ -675,7 +709,7 @@ function teacherExamTone(status) {
   return { badge: "warning", strip: "bg-warning" };
 }
 
-function TeacherExamCard({ exam, index }) {
+function TeacherExamCard({ exam, index, onStatusChange }) {
   const tone = teacherExamTone(exam.status);
   const submitted = exam.submitted_count ?? exam.session_count ?? 0;
   const pending = exam.pending_review_count ?? 0;
@@ -713,6 +747,21 @@ function TeacherExamCard({ exam, index }) {
           <Button variant="secondary" size="sm" as={Link} to={`/teacher/exam/${exam.id}/edit`}>
             <Edit3 size={16} /> Edit
           </Button>
+          {exam.status === "draft" && (
+            <Button variant="success" size="sm" onClick={() => onStatusChange(exam, "activate")}>
+              <CheckCircle2 size={16} /> Publish
+            </Button>
+          )}
+          {exam.status === "active" && (
+            <Button variant="warning" size="sm" onClick={() => onStatusChange(exam, "deactivate")}>
+              <DoorOpen size={16} /> Deactivate
+            </Button>
+          )}
+          {exam.status === "active" && (
+            <Button variant="danger" size="sm" onClick={() => onStatusChange(exam, "close")}>
+              <XCircle size={16} /> End
+            </Button>
+          )}
           <Button variant="primary" size="sm" as={Link} to={`/teacher/exam/${exam.id}/review`}>
             <FileText size={16} /> Review
           </Button>

@@ -84,7 +84,8 @@
                 {% if exam.status == 'draft' %}
                 <button class="btn primary small" onclick="activateExam({{ exam.id }})">Activate</button>
                 {% elif exam.status == 'active' %}
-                <button class="btn danger small" onclick="closeExam({{ exam.id }})">Close</button>
+                <button class="btn warning small" onclick="deactivateExam({{ exam.id }})">Deactivate</button>
+                <button class="btn danger small" onclick="closeExam({{ exam.id }})">End</button>
                 {% endif %}
                 <button class="btn secondary small" onclick="window.location.href='{{ url_for('teacher.exam_results', exam_id=exam.id) }}'">Results</button>
               </div>
@@ -154,7 +155,7 @@
   }
 
   async function closeExam(examId) {
-    if (!confirm('Are you sure you want to close this exam? Students will no longer be able to submit.')) {
+    if (!confirm('End this exam? Students will no longer be able to join or submit.')) {
       return;
     }
 
@@ -165,13 +166,35 @@
       const data = await response.json();
 
       if (response.ok && data.ok) {
-        showToast(data.message || 'Exam closed successfully!', 'success');
+        showToast(data.message || 'Exam ended successfully!', 'success');
         setTimeout(() => window.location.reload(), 1000);
       } else {
-        showToast(data.message || 'Failed to close exam', 'error');
+        showToast(data.message || 'Failed to end exam', 'error');
       }
     } catch (error) {
-      showToast('Error closing exam', 'error');
+      showToast('Error ending exam', 'error');
+    }
+  }
+
+  async function deactivateExam(examId) {
+    if (!confirm('Deactivate this exam for editing? Students will see it as temporarily inactive until it is activated again.')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/teacher/exam/${examId}/deactivate`, {
+        method: 'POST'
+      });
+      const data = await response.json();
+
+      if (response.ok && data.ok) {
+        showToast(data.message || 'Exam deactivated successfully!', 'success');
+        setTimeout(() => window.location.reload(), 1000);
+      } else {
+        showToast(data.message || 'Failed to deactivate exam', 'error');
+      }
+    } catch (error) {
+      showToast('Error deactivating exam', 'error');
     }
   }
 </script>

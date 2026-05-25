@@ -38,7 +38,8 @@
                             {% if exam.status == 'draft' %}
                                 <button onclick="activateExam({{ exam.id }})" class="btn-link success">Activate</button>
                             {% elif exam.status == 'active' %}
-                                <button onclick="closeExam({{ exam.id }})" class="btn-link danger">Close</button>
+                                <button onclick="deactivateExam({{ exam.id }})" class="btn-link warning">Deactivate</button>
+                                <button onclick="closeExam({{ exam.id }})" class="btn-link danger">End</button>
                             {% endif %}
                         </div>
                     </div>
@@ -229,6 +230,16 @@
     color: white;
 }
 
+.btn-link.warning {
+    border-color: var(--warning);
+    color: var(--warning);
+}
+
+.btn-link.warning:hover {
+    background: var(--warning);
+    color: white;
+}
+
 .empty-state {
     text-align: center;
     padding: 3rem 2rem;
@@ -260,18 +271,34 @@ async function activateExam(examId) {
 }
 
 async function closeExam(examId) {
-    if (!confirm('Close this exam? Students will no longer be able to join.')) return;
+    if (!confirm('End this exam? Students will no longer be able to join or submit.')) return;
     try {
         const response = await fetch(`/admin/exams/${examId}/close`, { method: 'POST' });
         const data = await response.json();
         if (response.ok && data.ok) {
-            showToast(data.message || 'Exam closed.', 'success');
+            showToast(data.message || 'Exam ended.', 'success');
             setTimeout(() => location.reload(), 700);
         } else {
-            showToast(data.message || 'Could not close exam.', 'error');
+            showToast(data.message || 'Could not end exam.', 'error');
         }
     } catch (error) {
-        showToast('Could not close exam.', 'error');
+        showToast('Could not end exam.', 'error');
+    }
+}
+
+async function deactivateExam(examId) {
+    if (!confirm('Deactivate this exam for editing? Students will see it as temporarily inactive until it is activated again.')) return;
+    try {
+        const response = await fetch(`/admin/exams/${examId}/deactivate`, { method: 'POST' });
+        const data = await response.json();
+        if (response.ok && data.ok) {
+            showToast(data.message || 'Exam deactivated.', 'success');
+            setTimeout(() => location.reload(), 700);
+        } else {
+            showToast(data.message || 'Could not deactivate exam.', 'error');
+        }
+    } catch (error) {
+        showToast('Could not deactivate exam.', 'error');
     }
 }
 </script>

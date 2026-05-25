@@ -14,7 +14,7 @@ from werkzeug.utils import secure_filename
 
 from app.models.audit_model import AuditLog, ViolationLog
 from app.models.database import db
-from app.models.exam_model import ExamEnrollment, ExamSet, Question, QuestionBankItem, generate_access_code
+from app.models.exam_model import ExamEnrollment, ExamSet, Question, QuestionBankItem
 from app.models.group_model import StudentGroup, StudentGroupMember, generate_group_join_code
 from app.models.notification_model import Notification
 from app.models.result_model import QuestionMark, Result
@@ -30,8 +30,10 @@ from app.services.security_service import SecurityService
 from app.services.settings_service import SettingsService
 from app.socketio.realtime_events import emit_data_changed, emit_to_proctors, emit_to_session
 from app.routes.teacher_routes import _save_question_images
+from app.utils.csv_base import build_csv_response, build_student_import_template_response
 from app.utils.export_utils import csv_response, format_datetime
-from app.utils.helpers import create_submission_pdf, current_session_matches_user, parse_options
+from app.utils.helpers import create_exam_report_pdf, create_result_certificate_pdf, create_submission_pdf, current_session_matches_user, parse_options
+from app.utils.pdf_base import pdf_response
 from app.utils.network import get_client_ip
 from app.utils.rate_limiter import rate_limit
 
@@ -290,11 +292,12 @@ def _require_attempt(session_code, payload=None, require_active=False, require_w
 
     if require_active:
         time_state = ExamService.enforce_time_window(student_session)
+        exam = student_session.exam_set
         if time_state == "ended":
             return None, _locked_session_response(student_session)
-        if time_state == "not_started":
+        if exam.status != "active" or time_state == "not_started":
             return None, _forbidden_session_response(
-                "This exam has not opened yet.",
+                "This exam is temporarily inactive while changes are being made." if exam.status == "draft" else "This exam has not opened yet.",
                 redirect=f"/react/student/waiting/{student_session.session_code}",
             )
 
@@ -314,6 +317,16 @@ def _parse_int_field(payload, field_name):
         return None
     try:
         return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_float_field(payload, field_name):
+    value = payload.get(field_name)
+    if value in (None, ""):
+        return None
+    try:
+        return float(value)
     except (TypeError, ValueError):
         return None
 
@@ -460,6 +473,8 @@ def _question_bank_payload(item):
         "code_language": item.code_language or "python",
         "time_limit_seconds": item.time_limit_seconds,
         "execution_time_limit_seconds": item.execution_time_limit_seconds,
+        "source": getattr(item, "source", None) or "manual",
+        "exam_title": getattr(item, "exam_title", None),
         "created_at": _iso_datetime(item.created_at),
         "updated_at": _iso_datetime(item.updated_at),
     }
@@ -669,7 +684,7 @@ def _react_attempt_destination(student_session):
         return {"state": "precheck", "redirect": f"/react/student/precheck/{student_session.session_code}"}
     if exam.status == "active":
         return {"state": "exam", "redirect": f"/react/exam/{student_session.session_code}"}
-    return {"state": "waiting", "redirect": f"/react/student/waiting/{student_session.session_code}"}
+    return {"state": "inactive", "redirect": f"/react/student/waiting/{student_session.session_code}"}
 
 
 def _parse_datetime_local_value(raw_value):
@@ -688,6 +703,7 @@ def _parse_datetime_local_value(raw_value):
 
 
 def _exam_editor_payload(exam):
+    ExamService.recalculate_exam_total_marks(exam.id)
     questions = Question.query.filter_by(exam_set_id=exam.id).order_by(Question.question_number.asc()).all()
     return {
         "id": exam.id,
@@ -704,8 +720,8 @@ def _exam_editor_payload(exam):
         "randomize_delivery": bool(exam.random_question_count),
         "shuffle_questions": bool(exam.shuffle_questions),
         "shuffle_options": bool(exam.shuffle_options),
-        "access_mode": "access_code" if exam.access_code else "open",
-        "access_code": exam.access_code,
+        "access_mode": getattr(exam, "access_mode", None) or ("access_code" if exam.access_code else "open"),
+        "access_code": exam.access_code if (getattr(exam, "access_mode", None) or "open") == "access_code" else "",
         "start_time": exam.start_time.strftime("%Y-%m-%dT%H:%M") if exam.start_time else "",
         "end_time": exam.end_time.strftime("%Y-%m-%dT%H:%M") if exam.end_time else "",
         "questions": [
@@ -850,7 +866,20 @@ def _sync_enrollment_sessions(exam_id, roll_no, student_name, extra_time_minutes
         student_session.extra_time_minutes = extra_time_minutes
 
 
-def _upsert_exam_enrollment(exam, teacher, roll_no, student_name="", extra_time_minutes=0):
+def _existing_exam_enrollment(exam_id, roll_no):
+    normalized_roll = ExamEnrollment.normalize_roll_no(roll_no)
+    if not normalized_roll:
+        return None
+    return (
+        ExamEnrollment.query.filter(
+            ExamEnrollment.exam_set_id == exam_id,
+            db.func.upper(ExamEnrollment.roll_no) == normalized_roll,
+        )
+        .first()
+    )
+
+
+def _upsert_exam_enrollment(exam, teacher, roll_no, student_name="", extra_time_minutes=0, allow_update=True):
     normalized_roll = ExamEnrollment.normalize_roll_no(roll_no)
     if not normalized_roll:
         return None, "Roll number is required."
@@ -858,14 +887,14 @@ def _upsert_exam_enrollment(exam, teacher, roll_no, student_name="", extra_time_
     student = _find_student_by_identifier(normalized_roll)
     clean_name = (student_name or "").strip() or (student.name if student else "")
     clean_extra = _parse_extra_minutes(extra_time_minutes)
-    enrollment = (
-        ExamEnrollment.query.filter(
-            ExamEnrollment.exam_set_id == exam.id,
-            db.func.upper(ExamEnrollment.roll_no) == normalized_roll,
-        )
-        .first()
-    )
+    enrollment = _existing_exam_enrollment(exam.id, normalized_roll)
     if enrollment:
+        if not allow_update:
+            return enrollment, {
+                "error": "duplicate",
+                "message": "This student is already enrolled in this exam.",
+                "student_name": enrollment.student_name or clean_name or normalized_roll,
+            }
         enrollment.student_name = clean_name
         enrollment.extra_time_minutes = clean_extra
     else:
@@ -899,6 +928,7 @@ def _apply_teacher_enrollment_payload(exam, teacher, payload):
                 roll_no,
                 student.name,
                 payload.get("extra_time_minutes", 0),
+                allow_update=False,
             )
             if error:
                 errors.append(error)
@@ -912,6 +942,7 @@ def _apply_teacher_enrollment_payload(exam, teacher, payload):
             payload.get("roll_no"),
             payload.get("student_name", ""),
             payload.get("extra_time_minutes", 0),
+            allow_update=False,
         )
         if error:
             errors.append(error)
@@ -1052,6 +1083,16 @@ def _student_exam_action_payload(exam, student_session, attempts_remaining, wind
             "method": "get",
             "variant": "secondary",
             "disabled": True,
+        }
+
+    if exam.status == "draft":
+        return {
+            "label": "Temporarily inactive",
+            "href": None,
+            "method": "get",
+            "variant": "secondary",
+            "disabled": True,
+            "message": "This exam is temporarily inactive while changes are being made. Please wait for it to be published again.",
         }
 
     if student_session and student_session.status in {"active", "paused"} and window.get("is_open"):
@@ -1754,9 +1795,9 @@ def account_avatar_api():
     if not upload or not upload.filename:
         return jsonify({"ok": False, "message": "Choose a profile image to upload."}), 400
 
-    max_bytes = 2 * 1024 * 1024
+    max_bytes = 6 * 1024 * 1024
     if request.content_length and request.content_length > max_bytes + 8192:
-        return jsonify({"ok": False, "message": "Profile image must be 2 MB or smaller."}), 400
+        return jsonify({"ok": False, "message": "Profile image must be 6 MB or smaller."}), 400
 
     filename = secure_filename(upload.filename)
     extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
@@ -2060,6 +2101,8 @@ def react_start_exam_api(exam_id):
     exam = ExamSet.query.get_or_404(exam_id)
     if not _student_is_enrolled(exam.id, roll_no):
         return jsonify({"ok": False, "message": "This exam is not assigned to your roll number."}), 403
+    if exam.status == "draft":
+        return jsonify({"ok": False, "message": "This exam is temporarily inactive while changes are being made. Please wait for it to be published again."}), 403
     if exam.status == "closed":
         return jsonify({"ok": False, "message": "This exam has been closed by the teacher."}), 403
 
@@ -2088,10 +2131,12 @@ def react_join_exam_api():
         return jsonify({"ok": False, "message": "Exam access code is required."}), 400
 
     exam = ExamSet.query.filter_by(access_code=access_code).first()
-    if not exam:
+    if not exam or getattr(exam, "access_mode", "open") != "access_code":
         return jsonify({"ok": False, "message": "Invalid exam access code."}), 404
     if _exam_requires_enrollment(exam.id) and not _student_is_enrolled(exam.id, roll_no):
         return jsonify({"ok": False, "message": "This exam is assigned by roll number and is not available for your login."}), 403
+    if exam.status == "draft":
+        return jsonify({"ok": False, "message": "This exam is temporarily inactive while changes are being made. Please wait for it to be published again."}), 403
     if exam.status == "closed":
         existing_session = _latest_student_attempt(exam.id, roll_no)
         if existing_session and ExamSessionGuard.is_locked(existing_session):
@@ -2239,7 +2284,10 @@ def teacher_exam_enrollments_api(exam_id):
         payload = _get_json_payload()
         added, errors = _apply_teacher_enrollment_payload(exam, exam.creator, payload)
         if errors and not added:
-            return jsonify({"ok": False, "message": errors[0], "errors": errors}), 400
+            first_error = errors[0]
+            if isinstance(first_error, dict) and first_error.get("error") == "duplicate":
+                return jsonify({"ok": False, **first_error}), 409
+            return jsonify({"ok": False, "message": first_error, "errors": errors}), 400
         db.session.commit()
 
     enrollments = (
@@ -2299,16 +2347,16 @@ def teacher_reports_all_results_csv_api():
             .all()
         )
 
-    headers = [
+    columns = [
         "Exam",
         "Subject",
         "Set Code",
         "Student Name",
-        "Roll No",
+        "Roll Number",
         "Session Status",
         "Started At",
         "Submitted At",
-        "Marks Obtained",
+        "Marks Awarded",
         "Total Marks",
         "Percentage",
         "Published",
@@ -2316,7 +2364,14 @@ def teacher_reports_all_results_csv_api():
         "Violation Count",
         "Teacher Remarks",
     ]
-    return csv_response("teacher_results.csv", headers, [_teacher_result_export_base_row(item) for item in sessions])
+    return build_csv_response(
+        "Exam Results",
+        teacher,
+        [_teacher_result_export_base_row(item) for item in sessions],
+        columns,
+        filename=f"Teacher_ExamResults_{datetime.utcnow().strftime('%Y%m%d')}.csv",
+        extra_metadata=[("Teacher", teacher.name), ("Total Students", len(sessions))],
+    )
 
 
 @api_bp.route("/teacher/reports/exams/<int:exam_id>/results.csv")
@@ -2333,28 +2388,38 @@ def teacher_reports_exam_results_csv_api(exam_id):
     questions = Question.query.filter_by(exam_set_id=exam.id).order_by(Question.question_number.asc()).all()
 
     headers = [
-        "Exam",
-        "Subject",
-        "Set Code",
         "Student Name",
-        "Roll No",
-        "Session Status",
-        "Started At",
-        "Submitted At",
-        "Marks Obtained",
+        "Roll Number",
+        "Email",
+        "Submission Date",
+        "Submission Time",
         "Total Marks",
+        "Marks Awarded",
         "Percentage",
-        "Published",
-        "Published At",
-        "Violation Count",
-        "Teacher Remarks",
+        "Pass/Fail",
     ]
     for question in questions:
-        headers.extend([f"Q{question.question_number} Marks", f"Q{question.question_number} Remark"])
+        headers.extend([f"Q{question.question_number} ({question.marks}pts)", f"Q{question.question_number} Remark"])
 
     rows = []
     for student_session in sessions:
-        row = _teacher_result_export_base_row(student_session)
+        result = student_session.result
+        submitted_at = student_session.submitted_at
+        student = _find_student_by_identifier(student_session.roll_no)
+        pass_fail = "N/A"
+        if result:
+            pass_fail = "Pass" if float(result.percentage or 0) >= _exam_passing_percentage(exam) else "Fail"
+        row = [
+            student_session.student_name,
+            student_session.roll_no,
+            student.email if student else "",
+            submitted_at.strftime("%Y-%m-%d") if submitted_at else "",
+            submitted_at.strftime("%H:%M:%S") if submitted_at else "",
+            result.total_marks if result else exam.total_marks,
+            result.total_marks_obtained if result else "",
+            result.percentage if result else "",
+            pass_fail,
+        ]
         marks_by_question = {}
         if student_session.result:
             marks_by_question = {question_mark.question_id: question_mark for question_mark in student_session.result.question_marks}
@@ -2368,8 +2433,20 @@ def teacher_reports_exam_results_csv_api(exam_id):
             )
         rows.append(row)
 
-    safe_name = "".join(ch if ch.isalnum() else "_" for ch in exam.set_code or str(exam.id))
-    return csv_response(f"results_{safe_name}.csv", headers, rows)
+    safe_name = "".join(ch if ch.isalnum() else "_" for ch in exam.exam_name or str(exam.id))
+    return build_csv_response(
+        "Exam Results",
+        exam.creator,
+        rows,
+        headers,
+        filename=f"ExamResults_{safe_name}_{datetime.utcnow().strftime('%Y%m%d')}.csv",
+        extra_metadata=[
+            ("Exam", exam.exam_name),
+            ("Teacher", exam.creator.name if exam.creator else ""),
+            ("Total Students", len(sessions)),
+            ("Published", "Yes" if any(item.result and item.result.published for item in sessions) else "No"),
+        ],
+    )
 
 
 @api_bp.route("/teacher/reports/sessions/<int:session_id>/answer.pdf")
@@ -2381,7 +2458,7 @@ def teacher_reports_answer_pdf_api(session_id):
 
     pdf_buffer = create_submission_pdf(student_session, include_unpublished_feedback=True)
     filename = f"answer_sheet_{student_session.roll_no}_{student_session.session_code}.pdf"
-    return send_file(pdf_buffer, mimetype="application/pdf", as_attachment=True, download_name=filename)
+    return pdf_response(pdf_buffer, filename)
 
 
 def _json_exam_question_rows(payload):
@@ -2398,7 +2475,7 @@ def _json_exam_question_rows(payload):
         if q_type == "code":
             q_type = "coding"
         try:
-            marks = int(question.get("max_marks") or question.get("marks") or 1)
+            marks = float(question.get("max_marks") or question.get("marks") or 1)
         except (TypeError, ValueError):
             marks = 1
         options = parse_options(question.get("options") or [])
@@ -2409,14 +2486,14 @@ def _json_exam_question_rows(payload):
                 "number": index,
                 "text": text,
                 "type": q_type,
-                "marks": max(marks, 1),
+                "marks": max(marks, 0.01),
                 "options": options,
                 "answer": (question.get("correct_answer") or "").strip(),
                 "model_answer": (question.get("model_answer") or "").strip(),
                 "image_paths": question.get("image_paths") or [],
                 "code_snippet": (question.get("code_snippet") or "").strip(),
                 "code_language": (question.get("code_language") or "").strip() or None,
-                "time_limit_seconds": max(int(question.get("time_limit_seconds") or 0), 0),
+                "time_limit_seconds": 0,
                 "execution_time_limit_seconds": min(max(int(question.get("execution_time_limit_seconds") or 10), 1), 60),
             }
         )
@@ -2434,7 +2511,6 @@ def _multipart_exam_question_rows():
     q_existing_images = request.form.getlist("existing_image_paths")
     q_code_snippets = request.form.getlist("code_snippet")
     q_code_languages = request.form.getlist("code_language")
-    q_time_limits = request.form.getlist("time_limit_seconds")
     q_execution_time_limits = request.form.getlist("execution_time_limit_seconds")
 
     rows = []
@@ -2448,7 +2524,7 @@ def _multipart_exam_question_rows():
             number = index + 1
         q_type = (q_types[index] if index < len(q_types) else "short").strip().lower()
         try:
-            marks = int(q_marks[index]) if index < len(q_marks) and q_marks[index].strip() else 1
+            marks = float(q_marks[index]) if index < len(q_marks) and q_marks[index].strip() else 1
         except ValueError:
             marks = 1
         options = parse_options(q_options[index] if index < len(q_options) else "")
@@ -2462,10 +2538,6 @@ def _multipart_exam_question_rows():
                 existing_images = []
         image_paths = existing_images + _save_question_images(request.files.getlist(f"question_images_{index}"))
         try:
-            time_limit_seconds = int(q_time_limits[index]) if index < len(q_time_limits) and q_time_limits[index].strip() else 0
-        except ValueError:
-            time_limit_seconds = 0
-        try:
             execution_time_limit_seconds = (
                 int(q_execution_time_limits[index])
                 if index < len(q_execution_time_limits) and q_execution_time_limits[index].strip()
@@ -2478,18 +2550,50 @@ def _multipart_exam_question_rows():
                 "number": number,
                 "text": text,
                 "type": q_type,
-                "marks": max(marks, 1),
+                "marks": max(marks, 0.01),
                 "options": options,
                 "answer": (q_answers[index] if index < len(q_answers) else "").strip(),
                 "model_answer": (q_model_answers[index] if index < len(q_model_answers) else "").strip(),
                 "image_paths": image_paths,
                 "code_snippet": (q_code_snippets[index] if index < len(q_code_snippets) else "").strip(),
                 "code_language": (q_code_languages[index] if index < len(q_code_languages) else "").strip() or None,
-                "time_limit_seconds": max(time_limit_seconds, 0),
+                "time_limit_seconds": 0,
                 "execution_time_limit_seconds": min(max(execution_time_limit_seconds, 1), 60),
             }
         )
     return rows
+
+
+def _auto_add_exam_questions_to_bank(exam, teacher, question_rows):
+    added_count = 0
+    existing_identities = {
+        _question_identity(item.question_type, item.question_text)
+        for item in QuestionBankItem.query.filter_by(teacher_id=teacher.id).all()
+    }
+    for row in question_rows:
+        identity = _question_identity(row["type"], row["text"])
+        if identity in existing_identities:
+            continue
+        item = QuestionBankItem(
+            teacher_id=teacher.id,
+            question_text=row["text"],
+            question_type=row["type"],
+            marks=row["marks"],
+            correct_answer=row["answer"],
+            model_answer=row["model_answer"],
+            code_snippet=row["code_snippet"],
+            code_language=row["code_language"],
+            time_limit_seconds=0,
+            execution_time_limit_seconds=row["execution_time_limit_seconds"],
+            source="auto",
+            exam_title=exam.exam_name,
+        )
+        item.set_options(row["options"])
+        item.set_image_paths(row["image_paths"])
+        db.session.add(item)
+        existing_identities.add(identity)
+        added_count += 1
+    return added_count
 
 
 def _save_teacher_exam_from_request(teacher, exam=None):
@@ -2497,36 +2601,55 @@ def _save_teacher_exam_from_request(teacher, exam=None):
     payload = {} if is_multipart else _get_json_payload()
 
     if exam and exam.status == "active":
-        return None, (jsonify({"ok": False, "message": "Cannot edit an active exam. Close it first."}), 400)
+        return None, (jsonify({"ok": False, "message": "Deactivate this published exam before editing it."}), 400)
 
     exam_name = (request.form.get("exam_name") if is_multipart else payload.get("exam_name") or payload.get("name") or "").strip()
     set_code = (request.form.get("set_code") if is_multipart else payload.get("set_code") or "").strip().upper()
     subject = (request.form.get("subject") if is_multipart else payload.get("subject") or "").strip()
     duration_raw = request.form.get("duration_minutes") if is_multipart else payload.get("duration_minutes")
     passing_percentage = _parse_int_field(request.form if is_multipart else payload, "passing_percentage")
+    access_mode = (
+        request.form.get("access_mode") if is_multipart else payload.get("access_mode") or "open"
+    ).strip().lower()
     access_code = (request.form.get("access_code") if is_multipart else payload.get("access_code") or "").strip().upper()
     start_time = _parse_datetime_local_value(request.form.get("start_time") if is_multipart else payload.get("start_time"))
-    end_time = _parse_datetime_local_value(request.form.get("end_time") if is_multipart else payload.get("end_time"))
     shuffle_questions = request.form.get("shuffle_questions") == "on" if is_multipart else bool(payload.get("shuffle_questions"))
     shuffle_options = request.form.get("shuffle_options") == "on" if is_multipart else bool(payload.get("shuffle_options"))
     attempt_limit = _parse_int_field(request.form if is_multipart else payload, "attempt_limit")
     random_question_count = _parse_int_field(request.form if is_multipart else payload, "random_question_count")
 
-    if not exam_name or not set_code or not subject:
-        return None, (jsonify({"ok": False, "message": "Exam name, set code, and subject are required."}), 400)
+    if not exam_name or not subject:
+        return None, (jsonify({"ok": False, "message": "Exam name and subject are required."}), 400)
     duration_minutes = _parse_int_field({"duration_minutes": duration_raw}, "duration_minutes") or 0
     if duration_minutes <= 0:
         return None, (jsonify({"ok": False, "message": "Duration must be a positive number."}), 400)
     if passing_percentage is None:
         passing_percentage = getattr(exam, "passing_percentage", 40) if exam else 40
     passing_percentage = min(max(int(passing_percentage), 0), 100)
-    if start_time and end_time and end_time <= start_time:
-        return None, (jsonify({"ok": False, "message": "End time must be after start time."}), 400)
+    end_time = ExamService.calculate_end_time(start_time, duration_minutes)
+    if not set_code:
+        try:
+            set_code = exam.set_code if exam and exam.set_code else ExamService.generate_unique_set_code()
+        except ValueError as exc:
+            return None, (jsonify({"ok": False, "message": str(exc)}), 400)
     duplicate = ExamSet.query.filter(ExamSet.set_code == set_code)
     if exam:
         duplicate = duplicate.filter(ExamSet.id != exam.id)
     if duplicate.first():
         return None, (jsonify({"ok": False, "message": "Set code already exists. Choose another."}), 400)
+    if access_mode == "access_code":
+        if not access_code:
+            try:
+                access_code = ExamService.generate_unique_access_code()
+            except ValueError as exc:
+                return None, (jsonify({"ok": False, "message": str(exc)}), 400)
+        duplicate_access = ExamSet.query.filter(ExamSet.access_code == access_code)
+        if exam:
+            duplicate_access = duplicate_access.filter(ExamSet.id != exam.id)
+        if duplicate_access.first():
+            return None, (jsonify({"ok": False, "message": "Access code already exists. Choose another."}), 400)
+    else:
+        access_code = exam.access_code if exam and exam.access_code else ExamService.generate_unique_access_code(length=10)
 
     try:
         question_rows = _multipart_exam_question_rows() if is_multipart else _json_exam_question_rows(payload)
@@ -2535,14 +2658,12 @@ def _save_teacher_exam_from_request(teacher, exam=None):
     if not question_rows:
         return None, (jsonify({"ok": False, "message": "Add at least one question."}), 400)
 
-    total_marks = sum(row["marks"] for row in question_rows)
     if exam:
         Question.query.filter_by(exam_set_id=exam.id).delete()
         exam.exam_name = exam_name
         exam.set_code = set_code
         exam.subject = subject
         exam.duration_minutes = duration_minutes
-        exam.total_marks = total_marks
         exam.passing_percentage = passing_percentage
         exam.start_time = start_time
         exam.end_time = end_time
@@ -2550,17 +2671,18 @@ def _save_teacher_exam_from_request(teacher, exam=None):
         exam.shuffle_options = shuffle_options
         exam.random_question_count = max(random_question_count or 0, 0)
         exam.attempt_limit = max(attempt_limit if attempt_limit is not None else 1, 0)
-        if access_code:
-            exam.access_code = access_code
+        exam.access_mode = access_mode
+        exam.access_code = access_code
     else:
         exam = ExamSet(
             exam_name=exam_name,
             set_code=set_code,
             subject=subject,
             duration_minutes=duration_minutes,
-            total_marks=total_marks,
+            total_marks=0,
             passing_percentage=passing_percentage,
-            access_code=access_code or generate_access_code(),
+            access_mode=access_mode,
+            access_code=access_code,
             status="draft",
             created_by=teacher.id,
             start_time=start_time,
@@ -2599,19 +2721,25 @@ def _save_teacher_exam_from_request(teacher, exam=None):
     if enrollment_payload["enrollment_lines"] or enrollment_payload["group_id"] or enrollment_payload["group_ids"]:
         _, enrollment_errors = _apply_teacher_enrollment_payload(exam, teacher, enrollment_payload)
         if enrollment_errors:
+            first_error = enrollment_errors[0]
+            if isinstance(first_error, dict):
+                first_error = first_error.get("message", "Enrollment could not be saved.")
             return None, (
                 jsonify(
                     {
                         "ok": False,
-                        "message": enrollment_errors[0],
+                        "message": first_error,
                         "errors": enrollment_errors,
                     }
                 ),
                 400,
             )
 
+    db.session.flush()
+    ExamService.recalculate_exam_total_marks(exam.id, commit=False)
+    bank_added_count = _auto_add_exam_questions_to_bank(exam, teacher, question_rows)
     db.session.commit()
-    return exam, None
+    return {"exam": exam, "bank_added_count": bank_added_count}, None
 
 
 @api_bp.route("/teacher/exams", methods=["POST"])
@@ -2620,10 +2748,23 @@ def teacher_create_exam_api():
     teacher, error_response = _require_teacher_api()
     if error_response:
         return error_response
-    exam, save_error = _save_teacher_exam_from_request(teacher)
+    saved, save_error = _save_teacher_exam_from_request(teacher)
     if save_error:
         return save_error
-    return jsonify({"ok": True, "message": "Exam saved successfully.", "exam": _exam_editor_payload(exam)}), 201
+    message = "Exam saved successfully."
+    if saved["bank_added_count"]:
+        message = f"Exam saved successfully. {saved['bank_added_count']} new questions added to your question bank."
+    return (
+        jsonify(
+            {
+                "ok": True,
+                "message": message,
+                "bank_added_count": saved["bank_added_count"],
+                "exam": _exam_editor_payload(saved["exam"]),
+            }
+        ),
+        201,
+    )
 
 
 @api_bp.route("/teacher/exams/<int:exam_id>", methods=["GET", "PATCH"])
@@ -2634,10 +2775,52 @@ def teacher_exam_editor_api(exam_id):
         return error_response
     if request.method == "GET":
         return jsonify(_exam_editor_payload(exam))
-    saved_exam, save_error = _save_teacher_exam_from_request(exam.creator, exam=exam)
+    saved, save_error = _save_teacher_exam_from_request(exam.creator, exam=exam)
     if save_error:
         return save_error
-    return jsonify({"ok": True, "message": "Exam saved successfully.", "exam": _exam_editor_payload(saved_exam)})
+    message = "Exam saved successfully."
+    if saved["bank_added_count"]:
+        message = f"Exam saved successfully. {saved['bank_added_count']} new questions added to your question bank."
+    return jsonify(
+        {
+            "ok": True,
+            "message": message,
+            "bank_added_count": saved["bank_added_count"],
+            "exam": _exam_editor_payload(saved["exam"]),
+        }
+    )
+
+
+@api_bp.route("/teacher/exams/<int:exam_id>/status", methods=["POST"])
+@rate_limit("admin_action")
+def teacher_exam_status_api(exam_id):
+    exam, error_response = _require_teacher_owner(exam_id=exam_id)
+    if error_response:
+        return error_response
+
+    payload = _get_json_payload()
+    action = (payload.get("action") or "").strip().lower()
+    if action in {"activate", "publish", "published"}:
+        if exam.status != "draft":
+            return jsonify({"ok": False, "message": "Only draft exams can be published."}), 400
+        if not exam.questions:
+            return jsonify({"ok": False, "message": "Add at least one question before publishing."}), 400
+        exam.activate()
+        message = f"{exam.exam_name} published."
+    elif action in {"deactivate", "deactive", "draft"}:
+        if exam.status != "active":
+            return jsonify({"ok": False, "message": "Only published exams can be deactivated."}), 400
+        exam.deactivate()
+        message = f"{exam.exam_name} deactivated. You can edit it now."
+    elif action in {"close", "end", "ended", "closed"}:
+        if exam.status != "active":
+            return jsonify({"ok": False, "message": "Only published exams can be ended."}), 400
+        exam.close()
+        message = f"{exam.exam_name} ended. Students can no longer join or submit."
+    else:
+        return jsonify({"ok": False, "message": "Unsupported exam status action."}), 400
+
+    return jsonify({"ok": True, "message": message, "exam": _exam_editor_payload(exam)})
 
 
 @api_bp.route("/teacher/exam/<int:exam_id>/similarity")
@@ -2813,7 +2996,7 @@ def teacher_session_review_api(session_id):
         for question in questions:
             item = marks_by_question.get(question.id, {})
             try:
-                marks_awarded = int(item.get("marks_awarded", 0) or 0)
+                marks_awarded = float(item.get("marks_awarded", 0) or 0)
             except (TypeError, ValueError):
                 return jsonify({"ok": False, "message": f"Q{question.question_number} marks must be a number."}), 400
             if marks_awarded < 0 or marks_awarded > question.marks:
@@ -3321,9 +3504,9 @@ def admin_import_students_api():
     created_users = []
 
     for index, row in enumerate(rows, start=2):
-        name = _row_payload_value(row, "name", "full_name", "student_name")
+        name = _row_payload_value(row, "name", "full_name", "full name", "student_name")
         email = _row_payload_value(row, "email", "email_address") or None
-        roll_no = _row_payload_value(row, "roll", "roll_no", "roll_number", "registration").upper()
+        roll_no = _row_payload_value(row, "roll", "roll_no", "roll_number", "roll number", "registration").upper()
         username = _row_payload_value(row, "username", "user_name") or roll_no or (email.split("@")[0] if email else "")
         password = _row_payload_value(row, "password", "temporary_password")
 
@@ -3380,6 +3563,14 @@ def admin_import_students_api():
             "users": [_user_payload(user) for user in created_users],
         }
     )
+
+
+@api_bp.route("/admin/students/import-template")
+def admin_students_import_template_api():
+    admin, error_response = _require_admin_api()
+    if error_response:
+        return error_response
+    return build_student_import_template_response(admin)
 
 
 @api_bp.route("/admin/users/<int:user_id>", methods=["PATCH"])
@@ -3564,12 +3755,31 @@ def admin_exam_status_api(exam_id):
         exam.activate()
         audit_action = "activate_exam_api"
         message = f"Exam {exam.exam_name} activated."
-    elif action in {"close", "archive", "archived"}:
+    elif action in {"deactivate", "deactive", "draft"}:
+        if exam.status != "active":
+            return jsonify({"ok": False, "message": "Only active exams can be deactivated."}), 400
+        exam.deactivate()
+        for enrollment in ExamEnrollment.query.filter_by(exam_set_id=exam.id).all():
+            student = User.query.filter(
+                User.role == "student",
+                db.func.upper(User.roll_number) == (enrollment.roll_no or "").upper(),
+            ).first()
+            if student:
+                NotificationService.notify_user(
+                    student.id,
+                    f"{exam.exam_name} is temporarily inactive while changes are being made.",
+                    notification_type="exam_deactivated",
+                    related_entity_type="exam",
+                    related_entity_id=exam.id,
+                )
+        audit_action = "deactivate_exam_api"
+        message = "Exam deactivated. It is now editable as a draft."
+    elif action in {"close", "end", "ended", "closed", "archive", "archived"}:
         if exam.status == "closed":
             return jsonify({"ok": False, "message": "Exam is already closed."}), 400
         exam.close()
         audit_action = "close_exam_api"
-        message = "Exam closed."
+        message = "Exam ended. Students can no longer join or submit."
     else:
         return jsonify({"ok": False, "message": "Unsupported exam status action."}), 400
 
@@ -3593,6 +3803,8 @@ def admin_exam_delete_api(exam_id):
         return error_response
 
     payload = _get_json_payload()
+    if not _admin_password_matches(payload):
+        return jsonify({"ok": False, "message": "Admin password confirmation failed."}), 403
     if payload.get("confirm_word") != "DELETE":
         return jsonify({"ok": False, "message": "Type DELETE to delete this exam."}), 400
 
@@ -3643,73 +3855,8 @@ def admin_exam_report_pdf_api(exam_id):
     )
     questions = Question.query.filter_by(exam_set_id=exam.id).order_by(Question.question_number.asc()).all()
 
-    import io
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib.units import mm
-    from reportlab.lib.utils import simpleSplit
-    from reportlab.pdfgen import canvas
-
-    buffer = io.BytesIO()
-    pdf = canvas.Canvas(buffer, pagesize=A4)
-    width, height = A4
-    left = 16 * mm
-    y = height - 18 * mm
-    usable_width = width - (2 * left)
-
-    def page_break(required=20 * mm):
-        nonlocal y
-        if y < required:
-            pdf.showPage()
-            y = height - 18 * mm
-
-    def line(text, font="Helvetica", size=10, leading=6 * mm):
-        nonlocal y
-        pdf.setFont(font, size)
-        for part in simpleSplit(str(text or "-"), font, size, usable_width):
-            page_break()
-            pdf.drawString(left, y, part)
-            y -= leading
-
-    pdf.setFont("Helvetica-Bold", 17)
-    pdf.drawString(left, y, f"Exam Report: {exam.exam_name}")
-    y -= 10 * mm
-    line(f"Subject: {exam.subject} | Set: {exam.set_code} | Status: {exam.status}", size=10)
-    line(f"Duration: {exam.duration_minutes} minutes | Total Marks: {exam.total_marks} | Access Code: {exam.access_code}", size=10)
-    if exam.start_time or exam.end_time:
-        line(f"Window: {format_datetime(exam.start_time) if exam.start_time else 'Open'} to {format_datetime(exam.end_time) if exam.end_time else 'No end'}", size=10)
-    y -= 4 * mm
-
-    total_sessions = len(sessions)
-    submitted = sum(1 for item in sessions if item.status in LOCKED_SESSION_STATUSES)
-    active = sum(1 for item in sessions if item.status == "active")
-    violations = sum(item.focus_violations for item in sessions)
-    line("Summary", font="Helvetica-Bold", size=13)
-    line(f"Sessions: {total_sessions} | Submitted/Locked: {submitted} | Active: {active} | Total Violations: {violations}")
-    y -= 4 * mm
-
-    line("Questions", font="Helvetica-Bold", size=13)
-    for question in questions:
-        page_break(35 * mm)
-        line(f"Q{question.question_number}. [{question.question_type.upper()}] {question.marks} marks", font="Helvetica-Bold")
-        line(question.question_text, size=9, leading=5 * mm)
-    y -= 4 * mm
-
-    line("Student Sessions", font="Helvetica-Bold", size=13)
-    for student_session in sessions:
-        result = student_session.result
-        score = f"{result.total_marks_obtained}/{result.total_marks} ({result.percentage}%)" if result else "Not evaluated"
-        page_break(20 * mm)
-        line(
-            f"{student_session.student_name} | Roll {student_session.roll_no} | {student_session.status} | Score: {score} | Violations: {student_session.focus_violations}",
-            size=9,
-            leading=5 * mm,
-        )
-
-    pdf.showPage()
-    pdf.save()
-    buffer.seek(0)
     safe_code = "".join(ch if ch.isalnum() else "_" for ch in (exam.set_code or str(exam.id)))
-    return send_file(buffer, as_attachment=True, download_name=f"exam_report_{safe_code}.pdf", mimetype="application/pdf")
+    return pdf_response(create_exam_report_pdf(exam, sessions, questions), f"exam_report_{safe_code}.pdf")
 
 
 @api_bp.route("/admin/audit-log")
@@ -3742,6 +3889,38 @@ def admin_audit_log_api():
                 "total": pagination.total,
             },
         }
+    )
+
+
+@api_bp.route("/admin/audit-log/export.csv")
+def admin_audit_log_export_api():
+    admin, error_response = _require_admin_api()
+    if error_response:
+        return error_response
+    logs = AuditLog.query.order_by(AuditLog.created_at.desc()).all()
+    headers = ["Date", "Time", "Actor", "Actor Role", "Action", "Target", "IP Address", "Status"]
+    rows = []
+    for item in logs:
+        created_at = item.created_at
+        rows.append(
+            [
+                created_at.strftime("%Y-%m-%d") if created_at else "",
+                created_at.strftime("%H:%M:%S") if created_at else "",
+                item.user.name if item.user else "System",
+                item.user.role if item.user else "system",
+                _audit_formatted_message(item),
+                f"{item.resource_type}:{item.resource_id}" if item.resource_id else item.resource_type,
+                item.ip_address,
+                item.status,
+            ]
+        )
+    return build_csv_response(
+        "Audit Log",
+        admin,
+        rows,
+        headers,
+        filename=f"AuditLog_{datetime.utcnow().strftime('%Y%m%d')}.csv",
+        extra_metadata=[("Total Entries", len(rows))],
     )
 
 
@@ -3857,9 +4036,6 @@ def admin_group_delete_api(group_id):
     admin, error_response = _require_admin_api()
     if error_response:
         return error_response
-    payload = _get_json_payload()
-    if not _admin_password_matches(payload):
-        return jsonify({"ok": False, "message": "Admin password confirmation failed."}), 403
     group = StudentGroup.query.get_or_404(group_id)
     db.session.delete(group)
     db.session.commit()
@@ -3877,7 +4053,7 @@ def teacher_question_bank_api():
         payload = request.form if is_multipart else _get_json_payload()
         question_text = (payload.get("question_text") or "").strip()
         question_type = (payload.get("question_type") or "short").strip().lower()
-        marks = _parse_int_field(payload, "marks") or 1
+        marks = _parse_float_field(payload, "marks") or 1
         options = parse_options(payload.get("options") or [])
         if is_multipart:
             try:
@@ -3918,17 +4094,18 @@ def teacher_question_bank_api():
             teacher_id=teacher.id,
             question_text=question_text,
             question_type=question_type,
-            marks=max(marks, 1),
+            marks=max(marks, 0.01),
             correct_answer=(payload.get("correct_answer") or "").strip(),
             model_answer=(payload.get("model_answer") or "").strip(),
             explanation=(payload.get("explanation") or "").strip(),
             code_snippet=(payload.get("code_snippet") or "").strip(),
             code_language=(payload.get("code_language") or "").strip() or None,
-            time_limit_seconds=max(_parse_int_field(payload, "time_limit_seconds") or 0, 0),
+            time_limit_seconds=0,
             execution_time_limit_seconds=min(
                 max(_parse_int_field(payload, "execution_time_limit_seconds") or 10, 1),
                 60,
             ),
+            source="manual",
         )
         item.set_options(options)
         item.set_image_paths(image_paths)
@@ -3960,14 +4137,14 @@ def teacher_question_bank_item_api(item_id):
     if "question_type" in payload:
         item.question_type = (payload.get("question_type") or "short").strip().lower()
     if "marks" in payload:
-        item.marks = max(_parse_int_field(payload, "marks") or 1, 1)
+        item.marks = max(_parse_float_field(payload, "marks") or 1, 0.01)
     if "options" in payload:
         item.set_options(parse_options(payload.get("options") or []))
     for field in ["correct_answer", "model_answer", "explanation", "code_snippet", "code_language"]:
         if field in payload:
             setattr(item, field, (payload.get(field) or "").strip() or None)
     if "time_limit_seconds" in payload:
-        item.time_limit_seconds = max(_parse_int_field(payload, "time_limit_seconds") or 0, 0)
+        item.time_limit_seconds = 0
     if "execution_time_limit_seconds" in payload:
         item.execution_time_limit_seconds = min(
             max(_parse_int_field(payload, "execution_time_limit_seconds") or 10, 1),
@@ -4010,7 +4187,7 @@ def teacher_import_question_bank_api(exam_id):
     if error_response:
         return error_response
     if exam.status == "active":
-        return jsonify({"ok": False, "message": "Cannot import bank questions while the exam is active. Close it first."}), 400
+        return jsonify({"ok": False, "message": "Cannot import bank questions while the exam is active. Deactivate it first."}), 400
 
     payload = _get_json_payload()
     raw_ids = payload.get("bank_item_ids") or payload.get("bank_item_id") or []
@@ -4062,7 +4239,7 @@ def teacher_import_question_bank_api(exam_id):
             model_answer=item.model_answer,
             code_snippet=item.code_snippet,
             code_language=item.code_language,
-            time_limit_seconds=item.time_limit_seconds,
+            time_limit_seconds=0,
             execution_time_limit_seconds=item.execution_time_limit_seconds,
         )
         question.set_options(item.options_as_list())
@@ -4086,7 +4263,7 @@ def teacher_import_question_bank_api(exam_id):
         )
 
     db.session.flush()
-    exam.total_marks = sum(q.marks for q in Question.query.filter_by(exam_set_id=exam.id).all())
+    ExamService.recalculate_exam_total_marks(exam.id, commit=False)
     db.session.commit()
     skipped_count = len(skipped_items)
     message = f"Imported {len(imported_questions)} question(s)."
@@ -4118,13 +4295,27 @@ def student_result_pdf_api(result_id):
     safe_roll = re.sub(r"[^A-Za-z0-9_-]+", "_", student_session.roll_no or "student").strip("_") or "student"
     safe_exam = re.sub(r"[^A-Za-z0-9_-]+", "_", student_session.exam_set.set_code or str(student_session.exam_set_id)).strip("_") or "exam"
     filename = f"result_{safe_roll}_{safe_exam}.pdf"
-    return send_file(
-        pdf_buffer,
-        mimetype="application/pdf",
-        as_attachment=True,
-        download_name=filename,
-        max_age=0,
+    return pdf_response(pdf_buffer, filename)
+
+
+@api_bp.route("/student/results/<int:exam_id>/certificate")
+def student_result_certificate_api(exam_id):
+    _student_name, roll_no, error_response = _require_student_api_details()
+    if error_response:
+        return error_response
+    result = (
+        Result.query.join(StudentSession, Result.session_id == StudentSession.id)
+        .filter(
+            db.func.upper(StudentSession.roll_no) == (roll_no or "").strip().upper(),
+            StudentSession.exam_set_id == exam_id,
+            Result.published.is_(True),
+        )
+        .order_by(Result.published_at.desc(), Result.updated_at.desc())
+        .first_or_404()
     )
+    safe_roll = re.sub(r"[^A-Za-z0-9_-]+", "_", result.session.roll_no or "student").strip("_") or "student"
+    safe_exam = re.sub(r"[^A-Za-z0-9_-]+", "_", result.session.exam_set.set_code or str(exam_id)).strip("_") or "exam"
+    return pdf_response(create_result_certificate_pdf(result), f"certificate_{safe_roll}_{safe_exam}.pdf")
 
 
 @api_bp.route("/student/results")
@@ -4175,6 +4366,7 @@ def student_results_api():
                 "teacher_remarks": result.teacher_remarks,
                 **_result_status_payload(result, exam),
                 "pdf_url": _student_result_pdf_url(result),
+                "certificate_url": f"/api/student/results/{exam.id}/certificate",
                 "questions": [
                     _result_question_payload(
                         question,
@@ -4243,6 +4435,7 @@ def student_result_detail_api(exam_id):
                 "teacher_remarks": result.teacher_remarks,
                 **_result_status_payload(result, exam),
                 "pdf_url": _student_result_pdf_url(result),
+                "certificate_url": f"/api/student/results/{exam.id}/certificate",
                 "questions": [
                     _result_question_payload(
                         question,
@@ -4565,6 +4758,7 @@ def session_status(session_code):
                 "end_time": _iso_datetime(exam.end_time),
             },
             "exam_status": exam.status,
+            "message": "This exam is temporarily inactive while changes are being made. Please wait for it to be published again." if exam.status == "draft" else None,
             "session_status": student_session.status,
             "time_state": time_state,
             "remaining_seconds": remaining_seconds,
@@ -4607,7 +4801,7 @@ def exam_state(session_code):
         return _locked_session_response(student_session)
     if exam.status != "active" or time_state == "not_started":
         return _forbidden_session_response(
-            "This exam has not opened yet.",
+            "This exam is temporarily inactive while changes are being made." if exam.status == "draft" else "This exam has not opened yet.",
             redirect=f"/react/student/waiting/{session_code}",
         )
     if not student_session.start_time:

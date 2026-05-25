@@ -10,8 +10,8 @@ class Result(db.Model):
     session_id = db.Column(db.Integer, db.ForeignKey("student_sessions.id"), unique=True, nullable=False)
     session = db.relationship("StudentSession", backref=db.backref("result", uselist=False))
 
-    total_marks_obtained = db.Column(db.Integer, default=0)
-    total_marks = db.Column(db.Integer, default=0)          # Total possible marks
+    total_marks_obtained = db.Column(db.Float, default=0)
+    total_marks = db.Column(db.Float, default=0)          # Total possible marks
     percentage = db.Column(db.Float, default=0.0)
 
     teacher_remarks = db.Column(db.Text, nullable=True)
@@ -50,7 +50,7 @@ class QuestionMark(db.Model):
     question_id = db.Column(db.Integer, db.ForeignKey("questions.id"), nullable=False)
     question = db.relationship("Question")
 
-    marks_awarded = db.Column(db.Integer, default=0)
+    marks_awarded = db.Column(db.Float, default=0)
     teacher_remark = db.Column(db.Text, nullable=True)
 
     def __repr__(self):

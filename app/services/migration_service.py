@@ -54,6 +54,18 @@ class MigrationService:
         return True
 
     @staticmethod
+    def _create_index_sql_if_missing(table_name, index_name, columns_sql, unique=False):
+        if MigrationService._has_index(table_name, index_name):
+            return False
+
+        unique_sql = "UNIQUE " if unique else ""
+        with db.engine.begin() as connection:
+            connection.execute(
+                text(f"CREATE {unique_sql}INDEX IF NOT EXISTS {index_name} ON {table_name} ({columns_sql})")
+            )
+        return True
+
+    @staticmethod
     def _migration_answer_code_execution_columns():
         MigrationService._add_column_if_missing("answers", "code_output", "TEXT")
         MigrationService._add_column_if_missing("answers", "execution_status", "VARCHAR(30)")
@@ -304,6 +316,47 @@ class MigrationService:
         )
 
     @staticmethod
+    def _migration_add_enrollment_unique_constraint():
+        if not MigrationService._has_table("exam_enrollments"):
+            return
+        with db.engine.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    DELETE FROM exam_enrollments
+                    WHERE id NOT IN (
+                        SELECT MIN(id)
+                        FROM exam_enrollments
+                        GROUP BY exam_set_id, UPPER(roll_no)
+                    )
+                    """
+                )
+            )
+        MigrationService._create_index_sql_if_missing(
+            "exam_enrollments",
+            "uq_exam_enrollments_exam_roll_unique",
+            "exam_set_id, UPPER(roll_no)",
+            unique=True,
+        )
+
+    @staticmethod
+    def _migration_add_question_bank_source_columns():
+        MigrationService._add_column_if_missing(
+            "question_bank_items",
+            "source",
+            "VARCHAR(20) NOT NULL DEFAULT 'manual'",
+        )
+        MigrationService._add_column_if_missing("question_bank_items", "exam_title", "VARCHAR(200)")
+
+    @staticmethod
+    def _migration_exam_access_mode():
+        MigrationService._add_column_if_missing(
+            "exam_sets",
+            "access_mode",
+            "VARCHAR(30) NOT NULL DEFAULT 'open'",
+        )
+
+    @staticmethod
     def _migration_platform_settings_seed():
         if PlatformSettings.query.first():
             return
@@ -431,6 +484,21 @@ class MigrationService:
             "Add per-exam pass threshold",
             _migration_exam_passing_percentage.__func__,
         ),
+        (
+            "20260525_022_add_enrollment_unique_constraint",
+            "add_enrollment_unique_constraint",
+            _migration_add_enrollment_unique_constraint.__func__,
+        ),
+        (
+            "20260525_023_add_question_bank_source_columns",
+            "add_question_bank_source_columns",
+            _migration_add_question_bank_source_columns.__func__,
+        ),
+        (
+            "20260525_024_exam_access_mode",
+            "Track explicit exam access mode",
+            _migration_exam_access_mode.__func__,
+        ),
     ]
 
     @staticmethod
@@ -543,6 +611,15 @@ class MigrationService:
             return MigrationService._has_column("student_groups", "join_code")
         if version == "20260525_021_exam_passing_percentage":
             return MigrationService._has_column("exam_sets", "passing_percentage")
+        if version == "20260525_022_add_enrollment_unique_constraint":
+            return MigrationService._has_index("exam_enrollments", "uq_exam_enrollments_exam_roll_unique")
+        if version == "20260525_023_add_question_bank_source_columns":
+            return (
+                MigrationService._has_column("question_bank_items", "source")
+                and MigrationService._has_column("question_bank_items", "exam_title")
+            )
+        if version == "20260525_024_exam_access_mode":
+            return MigrationService._has_column("exam_sets", "access_mode")
         return False
 
     @staticmethod

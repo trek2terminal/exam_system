@@ -145,6 +145,22 @@
         await fetch("/api/notifications/mark-read", { method: "POST" });
         window.location.reload();
       });
+      document.querySelectorAll("input[required], textarea[required], select[required]").forEach(field => {
+        const id = field.getAttribute("id");
+        let label = id ? document.querySelector(`label[for="${CSS.escape(id)}"]`) : null;
+        if (!label) label = field.closest("label");
+        if (!label) {
+          const previous = field.previousElementSibling;
+          if (previous?.tagName?.toLowerCase() === "label") label = previous;
+        }
+        if (!label || label.dataset.requiredMarked === "true" || label.textContent.includes("*")) return;
+        const marker = document.createElement("span");
+        marker.className = "required-star";
+        marker.setAttribute("aria-hidden", "true");
+        marker.textContent = "*";
+        label.appendChild(marker);
+        label.dataset.requiredMarked = "true";
+      });
     </script>
     {% block scripts %}{% endblock %}
 </body>

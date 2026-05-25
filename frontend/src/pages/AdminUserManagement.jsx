@@ -7,10 +7,12 @@ import { formatDate, formatDateShort } from "../utils/dateFormat";
 import { useLiveRefresh } from "../hooks/useLiveRefresh";
 
 function parseCsv(text) {
-  const lines = text.split(/\r?\n/).filter(Boolean);
+  const lines = text.split(/\r?\n/).filter(line => line.trim());
   if (lines.length === 0) return [];
-  const headers = lines[0].split(",").map(header => header.trim().toLowerCase());
-  return lines.slice(1).map((line, index) => {
+  const headerIndex = lines.findIndex(line => !line.trim().startsWith("#"));
+  if (headerIndex === -1) return [];
+  const headers = lines[headerIndex].split(",").map(header => header.trim().toLowerCase());
+  return lines.slice(headerIndex + 1).filter(line => !line.trim().startsWith("#")).map((line, index) => {
     const values = line.split(",").map(value => value.trim());
     return headers.reduce((row, header, headerIndex) => {
       row[header || `column_${headerIndex + 1}`] = values[headerIndex] || "";
@@ -461,7 +463,7 @@ export default function AdminUserManagement() {
               </div>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Input label="Full Name" value={editForm.name} onChange={event => setEditForm({ ...editForm, name: event.target.value })} />
+              <Input label="Full Name" value={editForm.name} onChange={event => setEditForm({ ...editForm, name: event.target.value })} required />
               <Input label="Username" value={selectedUser.username || ""} disabled />
               <Input label="Email" value={editForm.email} onChange={event => setEditForm({ ...editForm, email: event.target.value })} />
               <Input label="Roll Number" value={editForm.roll_number} onChange={event => setEditForm({ ...editForm, roll_number: event.target.value })} disabled={selectedUser.role !== "student"} />
@@ -574,6 +576,7 @@ export default function AdminUserManagement() {
               value={adminPassword}
               onChange={event => setAdminPassword(event.target.value)}
               autoComplete="current-password"
+              required
             />
           </div>
         )}
@@ -600,6 +603,7 @@ export default function AdminUserManagement() {
               value={adminPassword}
               onChange={event => setAdminPassword(event.target.value)}
               autoComplete="current-password"
+              required
             />
           </div>
         )}
@@ -703,10 +707,15 @@ function ImportStudentsForm({ onImported }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <label className="block">
-        <span className="mb-2 block text-sm font-semibold text-text-secondary">CSV File</span>
+        <span className="mb-2 block text-sm font-semibold text-text-secondary">
+          CSV File <span className="text-danger" aria-hidden="true">*</span>
+        </span>
         <div className="rounded-lg border-2 border-dashed border-border bg-background-base p-6 text-center">
           <Upload size={32} className="mx-auto mb-3 text-text-muted" />
           <p className="text-sm text-text-secondary">Accepted columns: name, email, roll_number, username, password</p>
+          <Button as="a" href="/api/admin/students/import-template" variant="secondary" size="sm" className="mt-3">
+            Download Template
+          </Button>
           <input name="students_file" type="file" accept=".csv" required onChange={onFileChange} className="mt-4 w-full text-sm text-text-secondary" />
         </div>
       </label>

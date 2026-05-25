@@ -188,10 +188,15 @@ function ResultCard({ result, expanded, onToggle, onImageClick }) {
 
           {/* Download PDF */}
           {result.pdf_url && (
-            <div className="border-t border-border/50 pt-4">
+            <div className="flex flex-wrap gap-2 border-t border-border/50 pt-4">
               <Button as="a" href={result.pdf_url} variant="primary" size="sm">
                 <Download size={16} /> Download PDF Report
               </Button>
+              {result.certificate_url && (
+                <Button as="a" href={result.certificate_url} variant="secondary" size="sm">
+                  <Download size={16} /> Download Certificate
+                </Button>
+              )}
             </div>
           )}
         </div>

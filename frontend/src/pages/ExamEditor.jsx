@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { BookOpenCheck, Save, Trash2, Plus, Upload } from "lucide-react";
-import { Avatar, Badge, Button, Input, Select, Textarea, StepWizard, ConfirmationDialog, Modal, Toggle } from "../components/ui";
+import { Avatar, Badge, Button, Input, MarksInput, Select, Textarea, StepWizard, ConfirmationDialog, Modal, Toggle } from "../components/ui";
 import { api } from "../services/api";
 import { notify } from "../components/ui/Toast";
 import QuestionImportWizard from "./QuestionImportWizard";
@@ -9,7 +9,6 @@ import QuestionImportWizard from "./QuestionImportWizard";
 const createEmptyExam = () => ({
   name: "",
   subject: "",
-  total_marks: "",
   duration_minutes: "",
   passing_percentage: 40,
   set_code: "",
@@ -23,7 +22,6 @@ const createEmptyExam = () => ({
   access_mode: "open",
   access_code: "",
   start_time: "",
-  end_time: "",
   enrollment_lines: "",
   group_id: "",
   group_ids: []
@@ -35,6 +33,39 @@ function normalizeQuestionIdentity(value) {
 
 function questionIdentity(type, text) {
   return `${mapQuestionType(type)}::${normalizeQuestionIdentity(text)}`;
+}
+
+function examTotalMarks(questions = []) {
+  return questions.reduce((total, question) => total + Number(question.max_marks || question.marks || 0), 0);
+}
+
+function formatMarks(value) {
+  const number = Number(value || 0);
+  return Number.isInteger(number) ? String(number) : number.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+}
+
+function calculateEndDateTime(startTime, durationMinutes) {
+  const minutes = Number(durationMinutes || 0);
+  if (!startTime || !minutes) return null;
+  const start = new Date(startTime);
+  if (Number.isNaN(start.getTime())) return null;
+  return new Date(start.getTime() + minutes * 60000);
+}
+
+function formatDateTimeDisplay(value) {
+  if (!value) return "Set duration and start time above";
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  }).format(value);
+}
+
+function generateClientAccessCode() {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  return Array.from({ length: 6 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join("");
 }
 
 export default function ExamEditor() {
@@ -88,16 +119,16 @@ export default function ExamEditor() {
       const formData = new window.FormData();
       formData.append("exam_name", exam.name);
       formData.append("subject", exam.subject);
-      formData.append("set_code", exam.set_code || "A");
+      if (exam.set_code) formData.append("set_code", exam.set_code);
       formData.append("duration_minutes", String(exam.duration_minutes || 60));
       formData.append("passing_percentage", String(exam.passing_percentage ?? 40));
       formData.append("attempt_limit", String(exam.attempt_limit ?? 1));
       formData.append("random_question_count", String(exam.random_question_count || 0));
+      formData.append("access_mode", exam.access_mode || "open");
       if (exam.shuffle_questions) formData.append("shuffle_questions", "on");
       if (exam.shuffle_options) formData.append("shuffle_options", "on");
       if (exam.start_time) formData.append("start_time", exam.start_time);
-      if (exam.end_time) formData.append("end_time", exam.end_time);
-      if (exam.access_code) formData.append("access_code", exam.access_code);
+      if (exam.access_mode === "access_code" && exam.access_code) formData.append("access_code", exam.access_code);
       if (exam.enrollment_lines) formData.append("enrollment_lines", exam.enrollment_lines);
       if (exam.group_id) formData.append("group_id", exam.group_id);
       if ((exam.group_ids || []).length) formData.append("group_ids", JSON.stringify(exam.group_ids));
@@ -113,7 +144,6 @@ export default function ExamEditor() {
         formData.append("existing_image_paths", JSON.stringify(question.image_paths || []));
         formData.append("code_snippet", question.code_snippet || "");
         formData.append("code_language", question.code_language || "python");
-        formData.append("time_limit_seconds", String(question.time_limit_seconds || 0));
         formData.append("execution_time_limit_seconds", String(question.execution_time_limit_seconds || 10));
         (question.image_files || []).forEach(file => {
           formData.append(`question_images_${index}`, file);
@@ -147,7 +177,7 @@ export default function ExamEditor() {
       ...prev,
       questions: [
         ...(prev.questions || []),
-        { id: Date.now(), text: "", type: "mcq", options: [], max_marks: 1, time_limit_seconds: 0, execution_time_limit_seconds: 10 }
+        { id: Date.now(), text: "", type: "mcq", options: [], max_marks: 1, execution_time_limit_seconds: 10 }
       ]
     }));
   };
@@ -307,7 +337,7 @@ function isStepValid(step, exam) {
   if (!exam) return false;
   switch (step) {
     case 0:
-      return exam.name && exam.subject && exam.total_marks && exam.duration_minutes;
+      return exam.name && exam.subject && exam.duration_minutes;
     case 1:
       return exam.questions && exam.questions.length > 0;
     case 2:
@@ -355,7 +385,6 @@ function questionToBankPayload(question) {
   payload.append("model_answer", question.model_answer || "");
   payload.append("code_snippet", question.code_snippet || "");
   payload.append("code_language", question.code_language || "python");
-  payload.append("time_limit_seconds", String(question.time_limit_seconds || 0));
   payload.append("execution_time_limit_seconds", String(question.execution_time_limit_seconds || 10));
   payload.append("image_paths", JSON.stringify(question.image_paths || []));
   (question.image_files || []).forEach(file => payload.append("question_images", file));
@@ -378,12 +407,13 @@ function bankItemToExamQuestion(item) {
     code_snippet: item.code_snippet || "",
     has_code_snippet: Boolean(item.code_snippet),
     code_language: item.code_language || "python",
-    time_limit_seconds: item.time_limit_seconds || 0,
     execution_time_limit_seconds: item.execution_time_limit_seconds || 10
   };
 }
 
 function ExamDetailsStep({ exam, onUpdate }) {
+  const totalMarks = examTotalMarks(exam?.questions || []);
+  const calculatedEnd = calculateEndDateTime(exam?.start_time, exam?.duration_minutes);
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
@@ -401,36 +431,43 @@ function ExamDetailsStep({ exam, onUpdate }) {
           onChange={e => onUpdate("subject", e.target.value)}
           required
         />
-        <Input
-          label="Total Marks"
-          type="number"
-          min="1"
-          value={exam?.total_marks || ""}
-          onChange={e => onUpdate("total_marks", parseInt(e.target.value))}
-          required
-        />
-        <Input
-          label="Duration (minutes)"
-          type="number"
-          min="1"
-          value={exam?.duration_minutes || ""}
-          onChange={e => onUpdate("duration_minutes", parseInt(e.target.value))}
-          required
-        />
-        <Input
+        <div className="rounded-lg border border-border bg-background-base px-4 py-3">
+          <p className="text-xs font-semibold uppercase text-text-muted">Total Marks</p>
+          <p className="text-lg font-bold text-text-primary">{formatMarks(totalMarks)} marks</p>
+          <p className="text-xs text-text-muted">Auto-calculated from question marks</p>
+        </div>
+        <MarksInput
           label="Passing Percentage (%)"
-          type="number"
           min="0"
           max="100"
           value={exam?.passing_percentage || 40}
-          onChange={e => onUpdate("passing_percentage", parseInt(e.target.value))}
+          onChange={e => onUpdate("passing_percentage", parseInt(e.target.value || "0"))}
         />
-        <Input
-          label="Set Code"
-          placeholder="e.g., SET-A"
-          value={exam?.set_code || ""}
-          onChange={e => onUpdate("set_code", e.target.value)}
-        />
+      </div>
+      <div className="rounded-lg border border-border bg-background-base p-4">
+        <p className="mb-4 text-sm font-semibold text-text-primary">Exam Schedule</p>
+        <div className="grid gap-4 md:grid-cols-3">
+          <MarksInput
+            label="Exam Duration"
+            min="1"
+            value={exam?.duration_minutes || ""}
+            onChange={e => onUpdate("duration_minutes", parseInt(e.target.value || "0"))}
+            helperText="How long students have to complete the exam"
+            required
+          />
+          <Input
+            label="Start Date & Time"
+            type="datetime-local"
+            value={exam?.start_time || ""}
+            onChange={event => onUpdate("start_time", event.target.value)}
+            helperText="When students can begin the exam"
+          />
+          <div className="rounded-lg border border-border bg-background-surface px-4 py-3">
+            <p className="text-sm font-semibold text-text-secondary">End Date & Time</p>
+            <p className="mt-2 font-semibold text-text-primary">{formatDateTimeDisplay(calculatedEnd)}</p>
+            <p className="mt-1 text-xs text-text-muted">Auto-calculated from duration and start time</p>
+          </div>
+        </div>
       </div>
       <Textarea
         label="Instructions"
@@ -446,11 +483,17 @@ function ExamDetailsStep({ exam, onUpdate }) {
 function QuestionsStep({ exam, onAddQuestion, onUpdateQuestion, onDeleteQuestion, onImport, onOpenBank, onSaveToBank, savingBankQuestionId }) {
   const [selectedQuestion, setSelectedQuestion] = useState(null);
   const questions = exam?.questions || [];
+  const totalMarks = examTotalMarks(questions);
 
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
       {/* Question List */}
       <div className="lg:col-span-1 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold text-text-primary">
+            Questions ({questions.length}) &middot; {formatMarks(totalMarks)} marks total
+          </h3>
+        </div>
         <div className="flex gap-2">
           <Button variant="primary" size="sm" onClick={onAddQuestion} className="flex-1">
             <Plus size={16} /> Add
@@ -533,6 +576,7 @@ function QuestionEditor({ question, onUpdate, onDelete, onSaveToBank, savingToBa
         label="Question Type"
         value={question?.type || "mcq"}
         onChange={e => onUpdate("type", e)}
+        required
         options={[
           { value: "mcq", label: "Multiple Choice" },
           { value: "short_answer", label: "Short Answer" },
@@ -548,19 +592,21 @@ function QuestionEditor({ question, onUpdate, onDelete, onSaveToBank, savingToBa
         onChange={e => onUpdate("text", e.target.value)}
         placeholder="Enter the question"
         rows={3}
+        required
       />
 
-      <Input
+      <MarksInput
         label="Marks"
-        type="number"
-        min="1"
+        min="0.01"
+        step="0.01"
         value={question?.max_marks || 1}
-        onChange={e => onUpdate("max_marks", parseInt(e.target.value))}
+        onChange={e => onUpdate("max_marks", e.target.value)}
+        required
       />
 
       {(question?.type === "mcq" || question?.type === "true_false") && (
         <div className="space-y-3">
-          <label className="block font-semibold text-text-primary">Options</label>
+          <label className="block font-semibold text-text-primary">Options <span className="text-danger" aria-hidden="true">*</span></label>
           {(question?.options || []).map((option, index) => (
             <Input
               key={index}
@@ -571,6 +617,7 @@ function QuestionEditor({ question, onUpdate, onDelete, onSaveToBank, savingToBa
                 onUpdate("options", newOptions);
               }}
               placeholder={`Option ${index + 1}`}
+              required={index < 2}
             />
           ))}
           <Button variant="ghost" size="sm" onClick={() => onUpdate("options", [...(question?.options || []), ""])}>
@@ -581,6 +628,7 @@ function QuestionEditor({ question, onUpdate, onDelete, onSaveToBank, savingToBa
             value={question?.correct_answer || ""}
             onChange={event => onUpdate("correct_answer", event.target.value)}
             placeholder="Type the exact correct option text or key"
+            required
           />
         </div>
       )}
@@ -618,26 +666,17 @@ function QuestionEditor({ question, onUpdate, onDelete, onSaveToBank, savingToBa
         )}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <Input
-          label="Per-question Time Limit"
-          type="number"
-          min="0"
-          value={Math.round((question?.time_limit_seconds || 0) / 60)}
-          onChange={event => onUpdate("time_limit_seconds", Number(event.target.value || 0) * 60)}
-          helperText="Minutes. 0 means no limit."
+      {question?.type === "code" && (
+        <MarksInput
+          label="Execution Time Limit"
+          min="1"
+          max="60"
+          value={question?.execution_time_limit_seconds || 10}
+          onChange={event => onUpdate("execution_time_limit_seconds", Number(event.target.value || 10))}
+          helperText="Seconds. Used when students run code for this question."
+          required
         />
-        {question?.type === "code" && (
-          <Input
-            label="Execution Time Limit"
-            type="number"
-            min="1"
-            value={question?.execution_time_limit_seconds || 10}
-            onChange={event => onUpdate("execution_time_limit_seconds", Number(event.target.value || 10))}
-            helperText="Seconds. Used when students run code for this question."
-          />
-        )}
-      </div>
+      )}
 
       <div className="space-y-3 rounded-lg border border-dashed border-border bg-background-base p-4">
         <Input
@@ -788,6 +827,19 @@ function EnrollmentStep({ exam, examId, onUpdate }) {
   const [selectedGroupIds, setSelectedGroupIds] = useState(exam?.group_ids || []);
   const [manual, setManual] = useState({ roll_no: "", student_name: "", extra_time_minutes: 0 });
   const [pendingRemove, setPendingRemove] = useState(null);
+  const normalizedRoll = value => String(value || "").trim().toUpperCase();
+  const draftRosterRolls = () => new Set(
+    String(bulkText || "")
+      .split("\n")
+      .map(line => normalizedRoll(line.split(",")[0]))
+      .filter(Boolean)
+  );
+  const isAlreadyEnrolled = student => {
+    const roll = normalizedRoll(student?.roll_number || student?.username || student?.roll_no || student?.roll_no);
+    if (!roll) return false;
+    if (enrollments.some(item => normalizedRoll(item.roll_no) === roll)) return true;
+    return draftRosterRolls().has(roll);
+  };
 
   const loadEnrollments = useCallback(async () => {
     if (!examId) return;
@@ -886,13 +938,21 @@ function EnrollmentStep({ exam, examId, onUpdate }) {
       setGroups(data.groups || groups);
       notify.success(successMessage || data.message || "Enrollment updated");
     } catch (error) {
-      notify.error(error.message || "Failed to update enrollment");
+      if (error.response?.status === 409) {
+        notify.warning(error.response?.data?.message || "This student is already enrolled in this exam.");
+      } else {
+        notify.error(error.message || "Failed to update enrollment");
+      }
     } finally {
       setSaving(false);
     }
   };
 
   const addStudent = (student) => {
+    if (isAlreadyEnrolled(student)) {
+      notify.warning(`${student.name} is already enrolled in this exam.`);
+      return;
+    }
     setQuery("");
     setStudents([]);
     postEnrollment({ student_id: student.id, student }, `${student.name} added to the exam`);
@@ -901,6 +961,10 @@ function EnrollmentStep({ exam, examId, onUpdate }) {
   const addManualStudent = () => {
     if (!manual.roll_no.trim()) {
       notify.error("Enter a roll number before adding the student.");
+      return;
+    }
+    if (isAlreadyEnrolled(manual)) {
+      notify.warning(`${manual.student_name || manual.roll_no} is already enrolled in this exam.`);
       return;
     }
     postEnrollment(manual, "Student added to the exam");
@@ -967,6 +1031,7 @@ function EnrollmentStep({ exam, examId, onUpdate }) {
     const group = groups.find(item => String(item.id) === String(groupId));
     return total + Number(group?.student_count || 0);
   }, 0);
+  const visibleStudents = students.filter(student => !isAlreadyEnrolled(student));
 
   return (
     <div className="space-y-5">
@@ -989,7 +1054,10 @@ function EnrollmentStep({ exam, examId, onUpdate }) {
               {(students.length > 0 || searching) && (
                 <div className="absolute z-20 mt-2 max-h-72 w-full overflow-y-auto rounded-lg border border-border bg-background-card p-2 shadow-elevated">
                   {searching && <p className="px-3 py-2 text-sm text-text-muted">Searching...</p>}
-                  {students.map(student => (
+                  {visibleStudents.length === 0 && !searching && (
+                    <p className="px-3 py-2 text-sm text-text-muted">No new students found.</p>
+                  )}
+                  {visibleStudents.map(student => (
                     <button
                       key={student.id}
                       type="button"
@@ -1015,15 +1083,15 @@ function EnrollmentStep({ exam, examId, onUpdate }) {
                 label="Roll Number"
                 value={manual.roll_no}
                 onChange={event => setManual(prev => ({ ...prev, roll_no: event.target.value }))}
+                required
               />
               <Input
                 label="Student Name"
                 value={manual.student_name}
                 onChange={event => setManual(prev => ({ ...prev, student_name: event.target.value }))}
               />
-              <Input
+              <MarksInput
                 label="Extra Minutes"
-                type="number"
                 min="0"
                 value={manual.extra_time_minutes}
                 onChange={event => setManual(prev => ({ ...prev, extra_time_minutes: Number(event.target.value || 0) }))}
@@ -1152,9 +1220,8 @@ function EnrollmentStep({ exam, examId, onUpdate }) {
                         )))}
                         onBlur={() => saveEnrollment(enrollment)}
                       />
-                      <Input
+                      <MarksInput
                         label="Extra"
-                        type="number"
                         min="0"
                         value={enrollment.extra_time_minutes || 0}
                         onChange={event => setEnrollments(prev => prev.map(item => (
@@ -1222,18 +1289,17 @@ function SettingsStep({ exam, onUpdate }) {
           />
         </div>
         {randomEnabled && (
-          <Input
+          <MarksInput
             label="Number of Questions"
-            type="number"
             min="1"
             max={exam?.questions?.length || undefined}
             value={exam?.random_question_count || ""}
             onChange={event => onUpdate("random_question_count", Number(event.target.value || 0))}
+            required
           />
         )}
-        <Input
+        <MarksInput
           label="Attempt Limit"
-          type="number"
           min="0"
           value={exam?.attempt_limit ?? 1}
           onChange={e => onUpdate("attempt_limit", parseInt(e.target.value || "0"))}
@@ -1252,27 +1318,23 @@ function SettingsStep({ exam, onUpdate }) {
         />
       </div>
       {accessMode === "access_code" && (
-        <Input
-          label="Access Code"
-          value={exam?.access_code || ""}
-          onChange={event => onUpdate("access_code", event.target.value.toUpperCase())}
-          placeholder="Leave blank to keep or generate code"
-        />
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+          <Input
+            label="Access Code"
+            value={exam?.access_code || ""}
+            onChange={event => onUpdate("access_code", event.target.value.toUpperCase())}
+            placeholder="Type a code or generate one"
+          />
+          <Button
+            type="button"
+            variant="secondary"
+            className="self-end"
+            onClick={() => onUpdate("access_code", generateClientAccessCode())}
+          >
+            Generate
+          </Button>
+        </div>
       )}
-      <div className="grid gap-4 md:grid-cols-2">
-        <Input
-          label="Access Window Start"
-          type="datetime-local"
-          value={exam?.start_time || ""}
-          onChange={event => onUpdate("start_time", event.target.value)}
-        />
-        <Input
-          label="Access Window End"
-          type="datetime-local"
-          value={exam?.end_time || ""}
-          onChange={event => onUpdate("end_time", event.target.value)}
-        />
-      </div>
       {Number(exam?.attempt_limit || 0) === 0 && (
         <Badge variant="info">Attempt limit will be saved as Unlimited.</Badge>
       )}
@@ -1281,6 +1343,8 @@ function SettingsStep({ exam, onUpdate }) {
 }
 
 function ReviewStep({ exam }) {
+  const totalMarks = examTotalMarks(exam?.questions || []);
+  const calculatedEnd = calculateEndDateTime(exam?.start_time, exam?.duration_minutes);
   return (
     <div className="space-y-5">
       <div className="rounded-lg border border-border bg-background-surface p-5">
@@ -1292,7 +1356,7 @@ function ReviewStep({ exam }) {
           </div>
           <div>
             <p className="text-xs text-text-muted">TOTAL MARKS</p>
-            <p className="font-semibold text-text-primary">{exam?.total_marks}</p>
+            <p className="font-semibold text-text-primary">{formatMarks(totalMarks)}</p>
           </div>
           <div>
             <p className="text-xs text-text-muted">DURATION</p>
@@ -1301,6 +1365,14 @@ function ReviewStep({ exam }) {
           <div>
             <p className="text-xs text-text-muted">QUESTIONS</p>
             <p className="font-semibold text-text-primary">{exam?.questions?.length || 0}</p>
+          </div>
+          <div>
+            <p className="text-xs text-text-muted">STARTS</p>
+            <p className="font-semibold text-text-primary">{exam?.start_time ? formatDateTimeDisplay(new Date(exam.start_time)) : "Not set"}</p>
+          </div>
+          <div>
+            <p className="text-xs text-text-muted">ENDS</p>
+            <p className="font-semibold text-text-primary">{formatDateTimeDisplay(calculatedEnd)}</p>
           </div>
         </div>
       </div>

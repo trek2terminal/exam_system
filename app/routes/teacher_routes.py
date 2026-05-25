@@ -19,8 +19,10 @@ from app.services.exam_service import ExamService
 from app.services.exam_session_guard import LOCKED_SESSION_STATUSES
 from app.services.notification_service import NotificationService
 from app.services.parser_service import QuestionParserService
+from app.utils.csv_base import build_csv_response
 from app.utils.export_utils import csv_response, format_datetime
 from app.utils.helpers import teacher_required, parse_options, create_submission_pdf
+from app.utils.pdf_base import pdf_response
 
 teacher_bp = Blueprint("teacher", __name__, url_prefix="/teacher")
 
@@ -227,16 +229,16 @@ def setup_exam(exam_id=None):
 
     if request.method == "POST":
         if exam and exam.status == "active":
-            flash("Cannot edit an active exam. Close it first.", "danger")
+            flash("Cannot edit an active exam. Deactivate it first.", "danger")
             return redirect(url_for("teacher.setup_exam", exam_id=exam.id))
 
         exam_name = request.form.get("exam_name", "").strip()
         set_code = request.form.get("set_code", "").strip().upper()
         subject = request.form.get("subject", "").strip()
         duration_minutes = request.form.get("duration_minutes", "0").strip()
+        access_mode = request.form.get("access_mode", "open").strip().lower()
         access_code = request.form.get("access_code", "").strip().upper()
         start_time = _parse_datetime_local(request.form.get("start_time"))
-        end_time = _parse_datetime_local(request.form.get("end_time"))
         shuffle_questions = request.form.get("shuffle_questions") == "on"
         try:
             attempt_limit = int(request.form.get("attempt_limit") or 1)
@@ -249,8 +251,8 @@ def setup_exam(exam_id=None):
             random_question_count = 0
         random_question_count = max(0, random_question_count)
 
-        if not exam_name or not set_code or not subject:
-            flash("Exam name, set code and subject are required.", "danger")
+        if not exam_name or not subject:
+            flash("Exam name and subject are required.", "danger")
             return redirect(request.url)
 
         try:
@@ -266,13 +268,21 @@ def setup_exam(exam_id=None):
             flash("Start time is not valid.", "danger")
             return redirect(request.url)
 
-        if request.form.get("end_time") and not end_time:
-            flash("End time is not valid.", "danger")
-            return redirect(request.url)
-
-        if start_time and end_time and end_time <= start_time:
-            flash("End time must be after start time.", "danger")
-            return redirect(request.url)
+        end_time = ExamService.calculate_end_time(start_time, duration_minutes)
+        if not set_code:
+            try:
+                set_code = exam.set_code if exam and exam.set_code else ExamService.generate_unique_set_code()
+            except ValueError as exc:
+                flash(str(exc), "danger")
+                return redirect(request.url)
+        if access_mode == "access_code":
+            try:
+                access_code = access_code or ExamService.generate_unique_access_code()
+            except ValueError as exc:
+                flash(str(exc), "danger")
+                return redirect(request.url)
+        else:
+            access_code = None
 
         # Question parsing logic (kept as is - you can improve later)
         q_numbers = request.form.getlist("question_number")
@@ -285,7 +295,6 @@ def setup_exam(exam_id=None):
         q_existing_images = request.form.getlist("existing_image_paths")
         q_code_snippets = request.form.getlist("code_snippet")
         q_code_languages = request.form.getlist("code_language")
-        q_time_limits = request.form.getlist("time_limit_seconds")
 
         question_rows = []
         for i in range(len(q_texts)):
@@ -299,7 +308,7 @@ def setup_exam(exam_id=None):
 
             q_type = (q_types[i] if i < len(q_types) else "short").strip().lower()
             try:
-                marks = int(q_marks[i]) if i < len(q_marks) and q_marks[i].strip() else 1
+                marks = float(q_marks[i]) if i < len(q_marks) and q_marks[i].strip() else 1
             except ValueError:
                 marks = 1
 
@@ -316,12 +325,6 @@ def setup_exam(exam_id=None):
             image_paths = existing_images + _save_question_images(request.files.getlist(f"question_images_{i}"))
             code_snippet = (q_code_snippets[i] if i < len(q_code_snippets) else "").strip()
             code_language = (q_code_languages[i] if i < len(q_code_languages) else "").strip() or None
-            try:
-                time_limit_seconds = int(q_time_limits[i]) if i < len(q_time_limits) and q_time_limits[i].strip() else 0
-            except ValueError:
-                time_limit_seconds = 0
-            time_limit_seconds = max(0, time_limit_seconds)
-
             if q_type == "mcq" and len(options_list) < 2:
                 flash(f"Question {number} needs at least two MCQ options.", "danger")
                 return redirect(request.url)
@@ -337,14 +340,12 @@ def setup_exam(exam_id=None):
                 "image_paths": image_paths,
                 "code_snippet": code_snippet,
                 "code_language": code_language,
-                "time_limit_seconds": time_limit_seconds,
+                "time_limit_seconds": None,
             })
 
         if not question_rows:
             flash("Add at least one question.", "danger")
             return redirect(request.url)
-
-        total_marks = sum(q["marks"] for q in question_rows)
 
         # Create or update exam
         if exam:
@@ -353,22 +354,22 @@ def setup_exam(exam_id=None):
             exam.set_code = set_code
             exam.subject = subject
             exam.duration_minutes = duration_minutes
-            exam.total_marks = total_marks
             exam.start_time = start_time
             exam.end_time = end_time
             exam.shuffle_questions = shuffle_questions
             exam.random_question_count = random_question_count
             exam.attempt_limit = attempt_limit
-            if access_code:
-                exam.access_code = access_code
+            exam.access_mode = access_mode
+            exam.access_code = access_code
         else:
             exam = ExamSet(
                 exam_name=exam_name,
                 set_code=set_code,
                 subject=subject,
                 duration_minutes=duration_minutes,
-                total_marks=total_marks,
-                access_code=access_code or ExamSet.access_code.default(),
+                total_marks=0,
+                access_mode=access_mode,
+                access_code=access_code,
                 status="draft",
                 created_by=session.get("teacher_id"),
                 start_time=start_time,
@@ -391,7 +392,7 @@ def setup_exam(exam_id=None):
                 model_answer=row["model_answer"],
                 code_snippet=row["code_snippet"],
                 code_language=row["code_language"],
-                time_limit_seconds=row["time_limit_seconds"],
+                time_limit_seconds=None,
             )
             question.set_options(row["options"])
             question.set_image_paths(row["image_paths"])
@@ -413,7 +414,7 @@ def import_questions(exam_id):
         return redirect(url_for("teacher.dashboard"))
 
     if exam.status == "active":
-        flash("Cannot import questions while the exam is active. Close it first.", "danger")
+        flash("Cannot import questions while the exam is active. Deactivate it first.", "danger")
         return redirect(url_for("teacher.setup_exam", exam_id=exam.id))
 
     parsed = None
@@ -438,7 +439,7 @@ def import_questions(exam_id):
                 questions_list=questions,
                 replace=import_mode == "replace",
             )
-            exam.total_marks = sum(q.marks for q in Question.query.filter_by(exam_set_id=exam.id).all())
+            ExamService.recalculate_exam_total_marks(exam.id, commit=False)
             db.session.commit()
 
             flash(f"Imported {imported_count} question(s) into {exam.exam_name}.", "success")
@@ -482,19 +483,14 @@ def question_bank():
         model_answer = request.form.get("model_answer", "").strip()
         code_snippet = request.form.get("code_snippet", "").strip()
         code_language = request.form.get("code_language", "").strip() or None
-        try:
-            time_limit_seconds = int(request.form.get("time_limit_seconds") or 0)
-        except ValueError:
-            time_limit_seconds = 0
-        time_limit_seconds = max(0, time_limit_seconds)
         image_paths = _save_question_images(request.files.getlist("question_images"))
         options = parse_options(request.form.get("options", ""))
 
         try:
-            marks = int(request.form.get("marks", "1"))
+            marks = float(request.form.get("marks", "1"))
         except ValueError:
             marks = 1
-        marks = max(1, marks)
+        marks = max(0.01, marks)
 
         if not question_text:
             flash("Question text is required.", "danger")
@@ -513,7 +509,8 @@ def question_bank():
             model_answer=model_answer,
             code_snippet=code_snippet,
             code_language=code_language,
-            time_limit_seconds=time_limit_seconds,
+            time_limit_seconds=None,
+            source="manual",
         )
         bank_item.set_options(options)
         bank_item.set_image_paths(image_paths)
@@ -566,7 +563,7 @@ def import_from_question_bank(exam_id):
         return redirect(url_for("teacher.dashboard"))
 
     if exam.status == "active":
-        flash("Cannot import bank questions while the exam is active. Close it first.", "danger")
+        flash("Cannot import bank questions while the exam is active. Deactivate it first.", "danger")
         return redirect(url_for("teacher.setup_exam", exam_id=exam.id))
 
     bank_items = (
@@ -601,7 +598,7 @@ def import_from_question_bank(exam_id):
                 model_answer=item.model_answer,
                 code_snippet=item.code_snippet,
                 code_language=item.code_language,
-                time_limit_seconds=item.time_limit_seconds,
+                time_limit_seconds=None,
             )
             question.set_options(item.options_as_list())
             question.set_image_paths(item.image_paths_as_list())
@@ -609,7 +606,7 @@ def import_from_question_bank(exam_id):
             next_number += 1
 
         db.session.flush()
-        exam.total_marks = sum(q.marks for q in Question.query.filter_by(exam_set_id=exam.id).all())
+        ExamService.recalculate_exam_total_marks(exam.id, commit=False)
         db.session.commit()
         flash(f"Imported {len(selected_items)} question(s) from your bank.", "success")
         return redirect(url_for("teacher.setup_exam", exam_id=exam.id))
@@ -808,11 +805,25 @@ def close_exam(exam_id):
     if exam.created_by != session.get("teacher_id"):
         return jsonify({"ok": False, "message": "You do not own this exam."}), 403
 
-    if exam.status == "closed":
-        return jsonify({"ok": False, "message": "Exam is already closed."}), 400
+    if exam.status != "active":
+        return jsonify({"ok": False, "message": "Only active exams can be ended."}), 400
 
     exam.close()
-    return jsonify({"ok": True, "message": f"{exam.exam_name} closed."})
+    return jsonify({"ok": True, "message": f"{exam.exam_name} ended."})
+
+
+@teacher_bp.route("/exam/<int:exam_id>/deactivate", methods=["POST"])
+@teacher_required
+def deactivate_exam(exam_id):
+    exam = ExamSet.query.get_or_404(exam_id)
+    if exam.created_by != session.get("teacher_id"):
+        return jsonify({"ok": False, "message": "You do not own this exam."}), 403
+
+    if exam.status != "active":
+        return jsonify({"ok": False, "message": "Only active exams can be deactivated."}), 400
+
+    exam.deactivate()
+    return jsonify({"ok": True, "message": f"{exam.exam_name} deactivated. You can edit it now."})
 
 
 
@@ -899,7 +910,15 @@ def export_results():
     ]
 
     rows = [_session_result_base_row(student_session) for student_session in sessions]
-    return csv_response("teacher_results.csv", headers, rows)
+    teacher = User.query.get(teacher_id)
+    return build_csv_response(
+        "Exam Results",
+        teacher,
+        rows,
+        headers,
+        filename=f"Teacher_ExamResults_{datetime.utcnow().strftime('%Y%m%d')}.csv",
+        extra_metadata=[("Teacher", teacher.name if teacher else ""), ("Total Students", len(rows))],
+    )
 
 
 @teacher_bp.route("/exam/<int:exam_id>/results")
@@ -1057,8 +1076,20 @@ def export_exam_results(exam_id):
             )
         rows.append(row)
 
-    safe_name = "".join(ch if ch.isalnum() else "_" for ch in exam.set_code or exam.id)
-    return csv_response(f"results_{safe_name}.csv", headers, rows)
+    safe_name = "".join(ch if ch.isalnum() else "_" for ch in exam.exam_name or str(exam.id))
+    return build_csv_response(
+        "Exam Results",
+        exam.creator,
+        rows,
+        headers,
+        filename=f"ExamResults_{safe_name}_{datetime.utcnow().strftime('%Y%m%d')}.csv",
+        extra_metadata=[
+            ("Exam", exam.exam_name),
+            ("Teacher", exam.creator.name if exam.creator else ""),
+            ("Total Students", len(rows)),
+            ("Published", "Yes" if any(item.result and item.result.published for item in sessions) else "No"),
+        ],
+    )
 
 
 @teacher_bp.route("/exam/<int:exam_id>/publish-results", methods=["POST"])
@@ -1138,7 +1169,7 @@ def student_view(session_id):
         for q in questions:
             raw_marks = request.form.get(f"marks_{q.id}", "0").strip() or "0"
             try:
-                marks_awarded = int(raw_marks)
+                marks_awarded = float(raw_marks)
             except ValueError:
                 flash(f"Marks for question {q.question_number} must be a number.", "danger")
                 return redirect(url_for("teacher.student_view", session_id=session_id))
@@ -1218,9 +1249,4 @@ def student_answer_pdf(session_id):
 
     pdf_buffer = create_submission_pdf(student_session, include_unpublished_feedback=True)
     filename = f"answer_sheet_{student_session.roll_no}_{student_session.session_code}.pdf"
-    return send_file(
-        pdf_buffer,
-        mimetype="application/pdf",
-        as_attachment=True,
-        download_name=filename,
-    )
+    return pdf_response(pdf_buffer, filename)

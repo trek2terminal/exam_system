@@ -100,8 +100,8 @@ export default function AccountSettings({ auth }) {
       notify.error("Profile image must be PNG, JPG, WEBP, or GIF.");
       return;
     }
-    if (file.size > 2 * 1024 * 1024) {
-      notify.error("Profile image must be 2 MB or smaller.");
+    if (file.size > 6 * 1024 * 1024) {
+      notify.error("Profile image must be 6 MB or smaller.");
       return;
     }
 
@@ -182,7 +182,7 @@ export default function AccountSettings({ auth }) {
           </div>
 
           <div className="grid gap-4">
-            <Input label="Full Name" value={profile.name} onChange={event => setProfile(current => ({ ...current, name: event.target.value }))} />
+            <Input label="Full Name" value={profile.name} onChange={event => setProfile(current => ({ ...current, name: event.target.value }))} required />
             <Input
               label="Email"
               type="email"
@@ -212,8 +212,8 @@ export default function AccountSettings({ auth }) {
           </div>
 
           <div className="grid gap-4">
-            <Input label="Current Password" type="password" value={security.current} onChange={event => setSecurity(current => ({ ...current, current: event.target.value }))} />
-            <Input label="New Password" type="password" value={security.next} onChange={event => setSecurity(current => ({ ...current, next: event.target.value }))} />
+            <Input label="Current Password" type="password" value={security.current} onChange={event => setSecurity(current => ({ ...current, current: event.target.value }))} required />
+            <Input label="New Password" type="password" value={security.next} onChange={event => setSecurity(current => ({ ...current, next: event.target.value }))} required />
             <div className="rounded-pill bg-background-elevated p-1">
               <div className={`h-2 rounded-pill ${strength.color} transition-all duration-300`} style={{ width: strength.width }} />
             </div>
@@ -224,6 +224,7 @@ export default function AccountSettings({ auth }) {
               value={security.confirm}
               onChange={event => setSecurity(current => ({ ...current, confirm: event.target.value }))}
               error={security.confirm && security.confirm !== security.next ? "Passwords do not match" : undefined}
+              required
             />
             <Button
               type="button"

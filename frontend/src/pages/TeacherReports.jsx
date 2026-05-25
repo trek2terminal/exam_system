@@ -71,7 +71,7 @@ export default function TeacherReports() {
               </div>
             </div>
             <div className="space-y-4">
-              <Select label="Exam" value={selectedExamId} onChange={setSelectedExamId} options={examOptions} />
+              <Select label="Exam" value={selectedExamId} onChange={setSelectedExamId} options={examOptions} required />
               {selectedExam && (
                 <div className="flex flex-wrap gap-2">
                   <Badge variant={selectedExam.status === "active" ? "success" : "secondary"}>{selectedExam.status}</Badge>
@@ -101,7 +101,7 @@ export default function TeacherReports() {
               </div>
             </div>
             <div className="space-y-4">
-              <Input label="Session ID" value={sessionId} onChange={event => setSessionId(event.target.value)} placeholder="e.g. 42" />
+              <Input label="Session ID" value={sessionId} onChange={event => setSessionId(event.target.value)} placeholder="e.g. 42" required />
               <Button as="a" href={sessionId ? `/api/teacher/reports/sessions/${sessionId}/answer.pdf` : "#"} variant="primary" className="w-full" disabled={!sessionId}>
                 <Download size={18} /> Download PDF
               </Button>

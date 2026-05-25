@@ -6,18 +6,6 @@ import { notify } from "../components/ui/Toast";
 import { formatDate } from "../utils/dateFormat";
 import { useLiveRefresh } from "../hooks/useLiveRefresh";
 
-function exportAuditRows(rows) {
-  const header = ["timestamp", "admin_user", "formatted_message", "resource_type", "resource_id", "ip_address", "status"];
-  const body = rows.map(row => header.map(key => `"${String(row[key] ?? "").replaceAll('"', '""')}"`).join(","));
-  const blob = new window.Blob([[header.join(","), ...body].join("\n")], { type: "text/csv;charset=utf-8" });
-  const url = window.URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = "audit-log.csv";
-  link.click();
-  window.URL.revokeObjectURL(url);
-}
-
 function humanize(value) {
   if (!value) return "-";
   const text = String(value).replaceAll("_", " ");
@@ -113,7 +101,7 @@ export default function AdminReports() {
           </div>
           {examOptions.length > 0 ? (
             <div className="space-y-4">
-              <Select label="Exam" value={selectedExamId} onChange={setSelectedExamId} options={examOptions} />
+              <Select label="Exam" value={selectedExamId} onChange={setSelectedExamId} options={examOptions} required />
               <Button as="a" href={`/api/admin/exams/${selectedExamId}/report.pdf`} variant="primary" className="w-full">
                 <Download size={18} /> Download PDF
               </Button>
@@ -131,7 +119,7 @@ export default function AdminReports() {
               <h2 className="text-xl font-semibold text-text-primary">Audit Log Viewer</h2>
               <p className="text-sm text-text-secondary">Recent admin and system activity.</p>
             </div>
-            <Button variant="secondary" onClick={() => exportAuditRows(auditRows)} disabled={auditRows.length === 0}>
+            <Button as="a" href="/api/admin/audit-log/export.csv" variant="secondary" disabled={auditRows.length === 0}>
               <Download size={18} /> Export CSV
             </Button>
           </div>

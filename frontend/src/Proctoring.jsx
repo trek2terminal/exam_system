@@ -320,7 +320,7 @@ export default function Proctoring({ mode }) {
 
       <Card className="p-4">
         <div className="grid gap-3 md:grid-cols-[minmax(0,320px)_1fr] md:items-end">
-          <Select label="Active Exam" value={selectedExamId} onChange={setSelectedExamId} options={examOptions} />
+          <Select label="Active Exam" value={selectedExamId} onChange={setSelectedExamId} options={examOptions} required />
           <p className="mb-0 text-sm text-text-muted">
             Showing {sortedSessions.length} of {(data?.sessions || []).length} active, waiting, or paused attempts.
           </p>
@@ -547,6 +547,7 @@ function SessionDetail({ sessionItem, isAdmin, onActionMessage, onActionError, o
             value={adminPassword}
             onChange={event => setAdminPassword(event.target.value)}
             autoComplete="current-password"
+            required
           />
           <Input
             label="Reason / note"
@@ -567,6 +568,7 @@ function SessionDetail({ sessionItem, isAdmin, onActionMessage, onActionError, o
               min="1"
               value={minutes}
               onChange={event => setMinutes(event.target.value)}
+              required
             />
             <Button variant="secondary" size="sm" disabled={Boolean(busyAction)} onClick={() => requestAction("reduce_time")}>
               <TimerReset size={18} /> Reduce

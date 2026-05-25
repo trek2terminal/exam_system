@@ -20,7 +20,7 @@ class ExamSet(db.Model):
     set_code = db.Column(db.String(20), nullable=False, unique=True, index=True)
     subject = db.Column(db.String(100), nullable=False)
     duration_minutes = db.Column(db.Integer, nullable=False)
-    total_marks = db.Column(db.Integer, nullable=False, default=0)
+    total_marks = db.Column(db.Float, nullable=False, default=0)
     passing_percentage = db.Column(db.Integer, nullable=False, default=40)
     random_question_count = db.Column(db.Integer, default=0, nullable=False)
     shuffle_questions = db.Column(db.Boolean, default=False, nullable=False)
@@ -28,7 +28,8 @@ class ExamSet(db.Model):
     attempt_limit = db.Column(db.Integer, default=1, nullable=False)
 
     # Access & Status
-    access_code = db.Column(db.String(32), unique=True, nullable=False, default=generate_access_code)
+    access_mode = db.Column(db.String(30), default="open", nullable=False)
+    access_code = db.Column(db.String(32), unique=True, nullable=True, default=None)
     status = db.Column(db.String(20), default="draft")  # draft / active / closed / archived
 
     activated_at = db.Column(db.DateTime, nullable=True)
@@ -73,6 +74,11 @@ class ExamSet(db.Model):
     def close(self):
         self.status = "closed"
         self.closed_at = datetime.utcnow()
+        db.session.commit()
+
+    def deactivate(self):
+        self.status = "draft"
+        self.closed_at = None
         db.session.commit()
 
 
@@ -120,7 +126,7 @@ class Question(db.Model):
     question_text = db.Column(db.Text, nullable=False)
     question_type = db.Column(db.String(20), nullable=False)  # mcq, short, long, coding, true_false
 
-    marks = db.Column(db.Integer, nullable=False, default=1)
+    marks = db.Column(db.Float, nullable=False, default=1)
     options = db.Column(db.Text, default="[]")          # JSON string for MCQ options
     correct_answer = db.Column(db.Text, nullable=True)  # Can be JSON for complex answers
     explanation = db.Column(db.Text, nullable=True)
@@ -128,7 +134,7 @@ class Question(db.Model):
     image_paths = db.Column(db.Text, default="[]", nullable=False)
     code_snippet = db.Column(db.Text, nullable=True)
     code_language = db.Column(db.String(40), nullable=True)
-    time_limit_seconds = db.Column(db.Integer, default=0, nullable=False)
+    time_limit_seconds = db.Column(db.Integer, default=None, nullable=True)
     execution_time_limit_seconds = db.Column(db.Integer, default=10, nullable=False)
 
     # Timestamps
@@ -170,7 +176,7 @@ class QuestionBankItem(db.Model):
 
     question_text = db.Column(db.Text, nullable=False)
     question_type = db.Column(db.String(20), nullable=False, default="short")
-    marks = db.Column(db.Integer, nullable=False, default=1)
+    marks = db.Column(db.Float, nullable=False, default=1)
     options = db.Column(db.Text, default="[]")
     correct_answer = db.Column(db.Text, nullable=True)
     explanation = db.Column(db.Text, nullable=True)
@@ -178,8 +184,10 @@ class QuestionBankItem(db.Model):
     image_paths = db.Column(db.Text, default="[]", nullable=False)
     code_snippet = db.Column(db.Text, nullable=True)
     code_language = db.Column(db.String(40), nullable=True)
-    time_limit_seconds = db.Column(db.Integer, default=0, nullable=False)
+    time_limit_seconds = db.Column(db.Integer, default=None, nullable=True)
     execution_time_limit_seconds = db.Column(db.Integer, default=10, nullable=False)
+    source = db.Column(db.String(20), default="manual", nullable=False)
+    exam_title = db.Column(db.String(200), nullable=True)
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
@@ -216,6 +224,7 @@ class QuestionBankItem(db.Model):
             code_language=question.code_language,
             time_limit_seconds=question.time_limit_seconds,
             execution_time_limit_seconds=question.execution_time_limit_seconds,
+            source="manual",
         )
         item.set_options(question.options_as_list())
         item.set_image_paths(question.image_paths_as_list())

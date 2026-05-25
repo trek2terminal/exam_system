@@ -81,7 +81,7 @@
               </div>
               <div>
                 <label>Type</label>
-                <select name="question_type">
+                <select name="question_type" required>
                   <option value="mcq" {% if q.question_type == 'mcq' %}selected{% endif %}>MCQ</option>
                   <option value="short" {% if q.question_type == 'short' %}selected{% endif %}>Short</option>
                   <option value="long" {% if q.question_type == 'long' %}selected{% endif %}>Long</option>
@@ -90,7 +90,7 @@
               </div>
               <div>
                 <label>Marks</label>
-                <input type="number" name="marks" min="1" value="{{ q.marks }}" class="marks-field" required oninput="updateTotalMarks()">
+                <input type="number" name="marks" min="0.01" step="0.01" value="{{ q.marks }}" class="marks-field" required oninput="updateTotalMarks()">
               </div>
               <div>
                 <label>Correct Answer / Key</label>
@@ -142,7 +142,7 @@
             </div>
             <div>
               <label>Type</label>
-              <select name="question_type">
+              <select name="question_type" required>
                 <option value="mcq">MCQ</option>
                 <option value="short" selected>Short</option>
                 <option value="long">Long</option>
@@ -151,7 +151,7 @@
             </div>
             <div>
               <label>Marks</label>
-              <input type="number" name="marks" min="1" value="1" class="marks-field" required oninput="updateTotalMarks()">
+              <input type="number" name="marks" min="0.01" step="0.01" value="1" class="marks-field" required oninput="updateTotalMarks()">
             </div>
             <div>
               <label>Correct Answer / Key</label>
@@ -209,12 +209,12 @@
     card.innerHTML = `
       <div class="grid-2">
         <div>
-          <label>Question Number</label>
+          <label>Question Number *</label>
           <input type="number" name="question_number" value="${nextNumber}" required>
         </div>
         <div>
-          <label>Type</label>
-          <select name="question_type">
+          <label>Type *</label>
+          <select name="question_type" required>
             <option value="mcq">MCQ</option>
             <option value="short" selected>Short</option>
             <option value="long">Long</option>
@@ -222,8 +222,8 @@
           </select>
         </div>
         <div>
-          <label>Marks</label>
-          <input type="number" name="marks" min="1" value="1" class="marks-field" required oninput="updateTotalMarks()">
+          <label>Marks *</label>
+          <input type="number" name="marks" min="0.01" step="0.01" value="1" class="marks-field" required oninput="updateTotalMarks()">
         </div>
         <div>
           <label>Correct Answer / Key</label>
@@ -231,7 +231,7 @@
         </div>
       </div>
 
-      <label>Question Text</label>
+      <label>Question Text *</label>
       <textarea name="question_text" rows="4" required></textarea>
 
       <label>Options for MCQ (use | between options)</label>
@@ -269,7 +269,7 @@
   function updateTotalMarks() {
     let total = 0;
     document.querySelectorAll(".marks-field").forEach(input => {
-      const value = parseInt(input.value || "0", 10);
+      const value = parseFloat(input.value || "0");
       total += isNaN(value) ? 0 : value;
     });
     document.getElementById("totalMarks").value = total;

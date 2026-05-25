@@ -356,10 +356,12 @@ function TeacherSessionReview() {
                 type="number"
                 min="0"
                 max={question.marks}
+                step="0.01"
                 value={marks[question.id] ?? 0}
                 onChange={event => setMarks(current => ({ ...current, [question.id]: event.target.value }))}
                 disabled={!locked}
                 className="!p-2"
+                required
               />
               <Input
                 label="Remark"

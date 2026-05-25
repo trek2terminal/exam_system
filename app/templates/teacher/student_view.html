@@ -64,7 +64,7 @@
         <div class="grid-2">
           <div>
             <label>Marks Awarded</label>
-            <input type="number" name="marks_{{ q.id }}" min="0" max="{{ q.marks }}" value="{{ marks_map.get(q.id, 0) }}">
+            <input type="number" name="marks_{{ q.id }}" min="0" max="{{ q.marks }}" step="0.01" value="{{ marks_map.get(q.id, 0) }}">
           </div>
           <div>
             <label>Optional Remark</label>

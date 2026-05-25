@@ -16,7 +16,7 @@ class QuestionParserService:
     )
     OPTION_RE = re.compile(r"^(?:\(?([A-H])\)?[\.\)]|([A-H])\s*[-:])\s*(.+)$", re.IGNORECASE)
     ANSWER_RE = re.compile(r"^(?:ans|answer|correct answer|correct)\s*[:\-]\s*(.+)$", re.IGNORECASE)
-    MARKS_RE = re.compile(r"(?:\[marks?\s*:\s*(\d+)\]|\((\d+)\s*marks?\))", re.IGNORECASE)
+    MARKS_RE = re.compile(r"(?:\[marks?\s*:\s*(\d+(?:\.\d+)?)\]|\((\d+(?:\.\d+)?)\s*marks?\))", re.IGNORECASE)
 
     @staticmethod
     def _clean_text(text):
@@ -28,7 +28,7 @@ class QuestionParserService:
         if not match:
             return text.strip(), 1
 
-        marks = int(match.group(1) or match.group(2) or 1)
+        marks = float(match.group(1) or match.group(2) or 1)
         cleaned_text = QuestionParserService.MARKS_RE.sub("", text).strip()
         return cleaned_text, marks
 
@@ -175,7 +175,7 @@ class QuestionParserService:
                 question_number = index
 
             try:
-                marks = int(row.get('marks') or 1)
+                marks = float(row.get('marks') or 1)
             except ValueError:
                 marks = 1
 
@@ -223,7 +223,7 @@ class QuestionParserService:
                 question_number=question_number,
                 question_text=q.get('question_text'),
                 question_type=q.get('question_type'),
-                marks=int(q.get('marks', 1) or 1),
+                marks=float(q.get('marks', 1) or 1),
                 correct_answer=q.get('correct_answer') or ""
             )
 

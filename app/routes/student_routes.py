@@ -10,6 +10,7 @@ from app.services.exam_service import ExamService
 from app.services.exam_session_guard import ExamSessionGuard
 from app.services.settings_service import SettingsService
 from app.utils.helpers import create_submission_pdf
+from app.utils.pdf_base import pdf_response
 
 student_bp = Blueprint("student", __name__, url_prefix="/student")
 
@@ -524,12 +525,7 @@ def export_pdf(session_code):
     pdf_buffer = create_submission_pdf(student_session, include_unpublished_feedback=False)
     filename = f"submission_{student_session.roll_no}_{student_session.session_code}.pdf"
 
-    return send_file(
-        pdf_buffer,
-        mimetype="application/pdf",
-        as_attachment=True,
-        download_name=filename,
-    )
+    return pdf_response(pdf_buffer, filename)
 
 
 @student_bp.route("/result/<session_code>/pdf")
@@ -553,9 +549,4 @@ def result_pdf(session_code):
     pdf_buffer = create_submission_pdf(student_session, include_unpublished_feedback=False)
     filename = f"result_{student_session.roll_no}_{student_session.session_code}.pdf"
 
-    return send_file(
-        pdf_buffer,
-        mimetype="application/pdf",
-        as_attachment=True,
-        download_name=filename,
-    )
+    return pdf_response(pdf_buffer, filename)

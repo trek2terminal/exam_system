@@ -7,6 +7,7 @@ export { CropModal } from "./CropModal";
 export { DateInput } from "./DateInput";
 export { EmptyState } from "./EmptyState";
 export { Input } from "./Input";
+export { MarksInput } from "./MarksInput";
 export { Modal } from "./Modal";
 export { PlatformLogo } from "./PlatformLogo";
 export { ProgressBar } from "./ProgressBar";

@@ -67,8 +67,9 @@ export default function StudentWaitingPage() {
   const exam = status?.exam || {};
   const studentSession = status?.student_session || {};
   const lobby = status?.lobby || {};
-  const timeStateLabel = status?.time_state === "not_started" ? "Exam not started" : status?.exam_status || "Waiting";
-  const progressValue = status?.time_state === "not_started" ? 35 : 65;
+  const inactive = status?.exam_status === "draft";
+  const timeStateLabel = inactive ? "Temporarily inactive" : status?.time_state === "not_started" ? "Exam not started" : status?.exam_status || "Waiting";
+  const progressValue = inactive ? 20 : status?.time_state === "not_started" ? 35 : 65;
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -77,10 +78,10 @@ export default function StudentWaitingPage() {
         <div className="absolute -bottom-20 left-10 h-52 w-52 rounded-full bg-brand-primary/10 blur-3xl" />
         <div className="relative z-10 grid gap-6 lg:grid-cols-[1fr_300px] lg:items-center">
           <div>
-            <Badge variant="warning">{timeStateLabel}</Badge>
+            <Badge variant={inactive ? "secondary" : "warning"}>{timeStateLabel}</Badge>
             <h1 className="mt-3 text-3xl font-bold text-text-primary md:text-4xl">{exam.exam_name || "Exam lobby"}</h1>
             <p className="mt-2 max-w-2xl text-text-secondary">
-              Stay on this lobby screen. You will be moved to the pre-check automatically as soon as the exam opens.
+              {status?.message || "Stay on this lobby screen. You will be moved to the pre-check automatically as soon as the exam opens."}
             </p>
             <div className="mt-5 grid gap-3 sm:grid-cols-3">
               <div className="rounded-lg border border-border bg-background-base/80 p-3">
@@ -127,8 +128,10 @@ export default function StudentWaitingPage() {
               <Clock3 size={26} className="relative" />
             </span>
             <div>
-              <h2 className="text-xl font-semibold text-text-primary">Waiting for the gate to open</h2>
-              <p className="text-sm text-text-secondary">Remaining time will be shown once the timer starts: {formatWait(status?.remaining_seconds)}</p>
+              <h2 className="text-xl font-semibold text-text-primary">{inactive ? "Exam paused for updates" : "Waiting for the gate to open"}</h2>
+              <p className="text-sm text-text-secondary">
+                {inactive ? "Your teacher or admin will publish it again after changes are complete." : `Remaining time will be shown once the timer starts: ${formatWait(status?.remaining_seconds)}`}
+              </p>
             </div>
           </div>
           <ProgressBar value={progressValue} max={100} variant="warning" />

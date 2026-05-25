@@ -422,7 +422,7 @@ function SettingsSection({
       <Card className="p-6">
         <div className="space-y-5">
           <h2 className="text-xl font-semibold text-text-primary">General</h2>
-          <Input label="Platform Name" value={general.platform_name} onChange={event => onGeneralChange("platform_name", event.target.value)} />
+          <Input label="Platform Name" value={general.platform_name} onChange={event => onGeneralChange("platform_name", event.target.value)} required />
           <div>
             <label className="mb-3 block font-semibold text-text-primary">Logo</label>
             <div className="rounded-lg border-2 border-dashed border-border bg-background-base p-6 text-center">
@@ -447,7 +447,7 @@ function SettingsSection({
               </div>
             </div>
           </div>
-          <Textarea label="Welcome Message" value={general.welcome_message} onChange={event => onGeneralChange("welcome_message", event.target.value)} rows={3} />
+          <Textarea label="Welcome Message" value={general.welcome_message} onChange={event => onGeneralChange("welcome_message", event.target.value)} rows={3} required />
           <div className="space-y-4 rounded-lg border border-border bg-background-base p-4">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -593,7 +593,7 @@ function SettingsSection({
           <Toggle checked={registration.self_registration_enabled} onChange={checked => onRegistrationChange("self_registration_enabled", checked)} label="Allow student self-registration" />
           <Toggle checked={registration.registration_code_required} onChange={checked => onRegistrationChange("registration_code_required", checked)} label="Require registration code" />
           {registration.registration_code_required && (
-            <Input label="Registration Code" value={registration.registration_code} onChange={event => onRegistrationChange("registration_code", event.target.value)} placeholder="e.g. EXAM2026" />
+            <Input label="Registration Code" value={registration.registration_code} onChange={event => onRegistrationChange("registration_code", event.target.value)} placeholder="e.g. EXAM2026" required />
           )}
         </div>
       </Card>
@@ -605,9 +605,9 @@ function SettingsSection({
       <Card className="p-6">
         <div className="space-y-5">
           <h2 className="text-xl font-semibold text-text-primary">Security</h2>
-          <Input label="Violation Threshold" type="number" min="1" value={security.violation_threshold} onChange={event => onSecurityChange("violation_threshold", Number(event.target.value || 1))} />
-          <Input label="Admin Lockout Count" type="number" min="1" max="10" value={security.admin_lockout_count} onChange={event => onSecurityChange("admin_lockout_count", Number(event.target.value || 1))} helperText="Failed admin attempts before a 30-minute lockout." />
-          <Input label="Admin Idle Timeout" type="number" min="5" max="1440" value={security.admin_idle_timeout} onChange={event => onSecurityChange("admin_idle_timeout", Number(event.target.value || 5))} helperText="Minutes before an inactive admin session expires." />
+          <Input label="Violation Threshold" type="number" min="1" value={security.violation_threshold} onChange={event => onSecurityChange("violation_threshold", Number(event.target.value || 1))} required />
+          <Input label="Admin Lockout Count" type="number" min="1" max="10" value={security.admin_lockout_count} onChange={event => onSecurityChange("admin_lockout_count", Number(event.target.value || 1))} helperText="Failed admin attempts before a 30-minute lockout." required />
+          <Input label="Admin Idle Timeout" type="number" min="5" max="1440" value={security.admin_idle_timeout} onChange={event => onSecurityChange("admin_idle_timeout", Number(event.target.value || 5))} helperText="Minutes before an inactive admin session expires." required />
         </div>
       </Card>
     );
@@ -621,7 +621,7 @@ function SettingsSection({
           <Toggle checked={announcement.enabled} onChange={checked => onAnnouncementChange("enabled", checked)} label="Enable announcement" />
           {announcement.enabled && (
             <>
-              <Textarea label="Announcement Message" value={announcement.message} onChange={event => onAnnouncementChange("message", event.target.value)} rows={4} />
+              <Textarea label="Announcement Message" value={announcement.message} onChange={event => onAnnouncementChange("message", event.target.value)} rows={4} required />
               <Card className="border-warning/30 bg-warning/5 p-4">
                 <div className="flex items-start gap-3">
                   <Megaphone size={20} className="mt-1 shrink-0 text-warning" />

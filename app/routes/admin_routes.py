@@ -20,7 +20,10 @@ from app.services.exam_session_guard import LOCKED_SESSION_STATUSES
 from app.services.notification_service import NotificationService
 from app.services.settings_service import SettingsService
 from app.socketio.realtime_events import emit_to_proctors, emit_to_session
+from app.utils.csv_base import build_csv_response
 from app.utils.export_utils import csv_response, format_datetime
+from app.utils.helpers import create_exam_report_pdf
+from app.utils.pdf_base import pdf_response
 from app.utils.helpers import admin_required
 from app.utils.network import get_client_ip
 from app.utils.rate_limiter import rate_limit
@@ -398,8 +401,6 @@ def add_group_members(group_id):
 @admin_bp.route("/groups/<int:group_id>/delete", methods=["POST"])
 @admin_required
 def delete_group(group_id):
-    if not _admin_password_confirmed():
-        return redirect(url_for("admin.groups"))
     group = StudentGroup.query.get_or_404(group_id)
     group_name = group.name
     db.session.delete(group)
@@ -777,14 +778,13 @@ def activate_exam(exam_id):
 
 
 @admin_bp.route("/exams/<int:exam_id>/close", methods=["POST"])
-@admin_bp.route("/exams/<int:exam_id>/deactivate", methods=["POST"])
 @admin_required
 def close_exam(exam_id):
-    """Close/deactivate exam"""
+    """End an active exam."""
     exam = ExamSet.query.get_or_404(exam_id)
 
-    if exam.status == "closed":
-        return jsonify({"ok": False, "message": "Exam is already closed"}), 400
+    if exam.status != "active":
+        return jsonify({"ok": False, "message": "Only active exams can be ended"}), 400
 
     exam.close()
 
@@ -793,12 +793,36 @@ def close_exam(exam_id):
         action="close_exam",
         resource_type="exam",
         resource_id=exam_id,
-        changes=f"Closed exam: {exam.exam_name}",
+        changes=f"Ended exam: {exam.exam_name}",
         status="success",
         ip_address=get_client_ip()
     ).save()
 
-    return jsonify({"ok": True, "message": "Exam closed"})
+    return jsonify({"ok": True, "message": "Exam ended"})
+
+
+@admin_bp.route("/exams/<int:exam_id>/deactivate", methods=["POST"])
+@admin_required
+def deactivate_exam(exam_id):
+    """Return an active exam to draft for editing."""
+    exam = ExamSet.query.get_or_404(exam_id)
+
+    if exam.status != "active":
+        return jsonify({"ok": False, "message": "Only active exams can be deactivated"}), 400
+
+    exam.deactivate()
+
+    AuditLog(
+        user_id=session.get("admin_id"),
+        action="deactivate_exam",
+        resource_type="exam",
+        resource_id=exam_id,
+        changes=f"Deactivated exam for editing: {exam.exam_name}",
+        status="success",
+        ip_address=get_client_ip()
+    ).save()
+
+    return jsonify({"ok": True, "message": "Exam deactivated. It is now editable as a draft."})
 
 
 @admin_bp.route("/exams/<int:exam_id>")
@@ -836,77 +860,8 @@ def export_exam_report_pdf(exam_id):
     )
     questions = Question.query.filter_by(exam_set_id=exam.id).order_by(Question.question_number.asc()).all()
 
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib.units import mm
-    from reportlab.lib.utils import simpleSplit
-    from reportlab.pdfgen import canvas
-
-    buffer = io.BytesIO()
-    pdf = canvas.Canvas(buffer, pagesize=A4)
-    width, height = A4
-    left = 16 * mm
-    y = height - 18 * mm
-    usable_width = width - (2 * left)
-
-    def page_break(required=20 * mm):
-        nonlocal y
-        if y < required:
-            pdf.showPage()
-            y = height - 18 * mm
-
-    def line(text, font="Helvetica", size=10, leading=6 * mm):
-        nonlocal y
-        pdf.setFont(font, size)
-        for part in simpleSplit(str(text or "-"), font, size, usable_width):
-            page_break()
-            pdf.drawString(left, y, part)
-            y -= leading
-
-    pdf.setFont("Helvetica-Bold", 17)
-    pdf.drawString(left, y, f"Exam Report: {exam.exam_name}")
-    y -= 10 * mm
-    line(f"Subject: {exam.subject} | Set: {exam.set_code} | Status: {exam.status}", size=10)
-    line(f"Duration: {exam.duration_minutes} minutes | Total Marks: {exam.total_marks} | Access Code: {exam.access_code}", size=10)
-    if exam.start_time or exam.end_time:
-        line(f"Window: {format_datetime(exam.start_time) if exam.start_time else 'Open'} to {format_datetime(exam.end_time) if exam.end_time else 'No end'}", size=10)
-    y -= 4 * mm
-
-    total_sessions = len(sessions)
-    submitted = sum(1 for item in sessions if item.status in LOCKED_SESSION_STATUSES)
-    active = sum(1 for item in sessions if item.status == "active")
-    violations = sum(item.focus_violations for item in sessions)
-    line("Summary", font="Helvetica-Bold", size=13)
-    line(f"Sessions: {total_sessions} | Submitted/Locked: {submitted} | Active: {active} | Total Violations: {violations}")
-    y -= 4 * mm
-
-    line("Questions", font="Helvetica-Bold", size=13)
-    for question in questions:
-        page_break(35 * mm)
-        line(f"Q{question.question_number}. [{question.question_type.upper()}] {question.marks} marks", font="Helvetica-Bold")
-        line(question.question_text, size=9, leading=5 * mm)
-    y -= 4 * mm
-
-    line("Student Sessions", font="Helvetica-Bold", size=13)
-    for student_session in sessions:
-        result = student_session.result
-        score = f"{result.total_marks_obtained}/{result.total_marks} ({result.percentage}%)" if result else "Not evaluated"
-        page_break(20 * mm)
-        line(
-            f"{student_session.student_name} | Roll {student_session.roll_no} | {student_session.status} | Score: {score} | Violations: {student_session.focus_violations}",
-            size=9,
-            leading=5 * mm,
-        )
-
-    pdf.showPage()
-    pdf.save()
-    buffer.seek(0)
     safe_code = "".join(ch if ch.isalnum() else "_" for ch in (exam.set_code or str(exam.id)))
-    return send_file(
-        buffer,
-        as_attachment=True,
-        download_name=f"exam_report_{safe_code}.pdf",
-        mimetype="application/pdf",
-    )
+    return pdf_response(create_exam_report_pdf(exam, sessions, questions), f"exam_report_{safe_code}.pdf")
 
 
 # ==================== ANALYTICS & REPORTS ====================
@@ -1062,6 +1017,9 @@ def violations():
 def export_violations():
     """Export violation logs for audit/offline review."""
     active_only = request.args.get("active", "0") == "1"
+    date_from = request.args.get("from") or request.args.get("date_from") or "All"
+    date_to = request.args.get("to") or request.args.get("date_to") or "Now"
+    admin = User.query.get(session.get("admin_id"))
 
     query = ViolationLog.query.join(StudentSession)
     if active_only:
@@ -1069,50 +1027,86 @@ def export_violations():
 
     violations = query.order_by(ViolationLog.occurred_at.desc()).all()
 
+    type_labels = {
+        "TAB_SWITCH": "Tab Switch",
+        "FULLSCREEN_EXIT": "Fullscreen Exit",
+        "DEVTOOLS_OPEN": "Developer Tools Opened",
+        "RIGHT_CLICK": "Right Click Attempt",
+        "COPY_ATTEMPT": "Copy Attempt",
+        "PASTE_ATTEMPT": "Paste Attempt",
+        "KEYBOARD_SHORTCUT": "Blocked Keyboard Shortcut",
+        "KEYBOARD_SHORTCUT_BLOCKED": "Blocked Keyboard Shortcut",
+    }
     headers = [
-        "Violation ID",
-        "Occurred At",
+        "Date",
+        "Time",
         "Student Name",
-        "Roll No",
-        "Exam",
-        "Set Code",
-        "Session Code",
-        "Session Status",
+        "Roll Number",
+        "Exam Title",
         "Violation Type",
-        "Detail",
-        "Client Count",
-        "Session Violation Count",
-        "Suspicion Score",
-        "IP Address",
-        "User Agent",
+        "Warning Number",
+        "Session Status At Time",
+        "Admin Notified",
     ]
 
     rows = []
     for violation in violations:
         student_session = violation.student_session
         exam = student_session.exam_set
+        occurred_at = violation.occurred_at
         rows.append(
             [
-                violation.id,
-                format_datetime(violation.occurred_at),
+                occurred_at.strftime("%Y-%m-%d") if occurred_at else "",
+                occurred_at.strftime("%H:%M:%S") if occurred_at else "",
                 student_session.student_name,
                 student_session.roll_no,
                 exam.exam_name,
-                exam.set_code,
-                student_session.session_code,
-                student_session.status,
-                violation.violation_type,
-                violation.detail,
+                type_labels.get(violation.violation_type, (violation.violation_type or "").replace("_", " ").title()),
                 violation.client_count,
-                student_session.focus_violations,
-                student_session.suspicion_score,
-                violation.ip_address,
-                violation.user_agent,
+                student_session.status,
+                violation.admin_notified,
             ]
         )
 
-    filename = "active_violation_logs.csv" if active_only else "violation_logs.csv"
-    return csv_response(filename, headers, rows)
+    return build_csv_response(
+        "Violation Log",
+        admin,
+        rows,
+        headers,
+        filename=f"ViolationLog_{date_from}_to_{date_to}.csv",
+        extra_metadata=[("Date Range", f"{date_from} to {date_to}"), ("Total Violations", len(rows))],
+    )
+
+
+@admin_bp.route("/audit-logs/export")
+@admin_required
+def export_audit_logs():
+    admin = User.query.get(session.get("admin_id"))
+    logs = AuditLog.query.order_by(AuditLog.created_at.desc()).all()
+    headers = ["Date", "Time", "Actor", "Actor Role", "Action", "Target", "IP Address", "Status"]
+    rows = []
+    for item in logs:
+        created_at = item.created_at
+        rows.append(
+            [
+                created_at.strftime("%Y-%m-%d") if created_at else "",
+                created_at.strftime("%H:%M:%S") if created_at else "",
+                item.user.name if item.user else "System",
+                item.user.role if item.user else "system",
+                (item.action or "").replace("_", " ").replace(" api", "").title(),
+                f"{item.resource_type}:{item.resource_id}" if item.resource_id else item.resource_type,
+                item.ip_address,
+                item.status,
+            ]
+        )
+    return build_csv_response(
+        "Audit Log",
+        admin,
+        rows,
+        headers,
+        filename=f"AuditLog_{datetime.utcnow().strftime('%Y%m%d')}.csv",
+        extra_metadata=[("Total Entries", len(rows))],
+    )
 
 
 @admin_bp.route("/suspicious-activity")

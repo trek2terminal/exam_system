@@ -16,7 +16,7 @@
       <h2>Add Question</h2>
       <form method="post" class="student-roster-form" enctype="multipart/form-data">
         <label>Question Type</label>
-        <select name="question_type">
+        <select name="question_type" required>
           <option value="short">Short</option>
           <option value="long">Long</option>
           <option value="mcq">MCQ</option>
@@ -27,7 +27,7 @@
         <textarea name="question_text" rows="5" required></textarea>
 
         <label>Marks</label>
-        <input type="number" name="marks" min="1" value="1" required>
+        <input type="number" name="marks" min="0.01" step="0.01" value="1" required>
 
         <label>Options for MCQ (use | between options)</label>
         <input type="text" name="options" placeholder="Option A|Option B|Option C|Option D">

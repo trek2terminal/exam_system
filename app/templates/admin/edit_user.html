@@ -56,9 +56,9 @@
 
             <div class="form-row">
                 <div class="form-group">
-                    <label for="role"><i class="fas fa-user-shield"></i> Role</label>
+                    <label for="role"><i class="fas fa-user-shield"></i> Role *</label>
                     {% set selected_role = form_data.get('role', user.role) if form_data else user.role %}
-                    <select id="role" name="role">
+                    <select id="role" name="role" required>
                         <option value="teacher" {% if selected_role == 'teacher' %}selected{% endif %}>Teacher</option>
                         <option value="admin" {% if selected_role == 'admin' %}selected{% endif %}>Admin</option>
                         <option value="student" {% if selected_role == 'student' %}selected{% endif %}>Student</option>

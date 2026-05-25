@@ -62,6 +62,7 @@ export function ConfirmationDialog({
             label={`Type ${requiredWord} to continue`}
             value={typed}
             onChange={event => setTyped(event.target.value)}
+            required
           />
         )}
       </div>

@@ -60,18 +60,18 @@
                                         {% if s.status == 'active' %}
                                             <form method="post" action="{{ url_for('admin.terminate_session', session_id=s.id) }}">
                                                 <input type="hidden" name="reason" value="Terminated after integrity review">
-                                                <input type="password" name="admin_password" placeholder="Admin password" required>
+                                                <input type="password" name="admin_password" placeholder="Admin password *" required>
                                                 <button class="btn danger small" type="submit">Terminate</button>
                                             </form>
                                             <form method="post" action="{{ url_for('admin.reduce_session_time', session_id=s.id) }}" class="inline-time-form">
-                                                <input type="number" name="minutes" min="1" max="60" value="5" aria-label="Minutes">
-                                                <input type="password" name="admin_password" placeholder="Admin password" required>
+                                                <input type="number" name="minutes" min="1" max="60" value="5" aria-label="Minutes *" required>
+                                                <input type="password" name="admin_password" placeholder="Admin password *" required>
                                                 <button class="btn secondary small" type="submit">Reduce</button>
                                             </form>
                                         {% endif %}
                                         {% if s.status in ['active', 'waiting'] %}
                                             <form method="post" action="{{ url_for('admin.grant_second_chance', session_id=s.id) }}">
-                                                <input type="password" name="admin_password" placeholder="Admin password" required>
+                                                <input type="password" name="admin_password" placeholder="Admin password *" required>
                                                 <button class="btn primary small" type="submit">Second Chance</button>
                                             </form>
                                         {% endif %}

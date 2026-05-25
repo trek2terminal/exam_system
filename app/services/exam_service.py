@@ -1,5 +1,6 @@
 import json
 import random
+import secrets
 from datetime import datetime, timedelta
 from app.models.database import db
 from app.models.exam_model import ExamEnrollment, ExamSet, Question
@@ -8,19 +9,66 @@ from app.services.exam_session_guard import LOCKED_SESSION_STATUSES
 
 
 class ExamService:
+    ACCESS_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+    @staticmethod
+    def calculate_end_time(start_time, duration_minutes):
+        if not start_time or not duration_minutes:
+            return None
+        try:
+            minutes = int(duration_minutes)
+        except (TypeError, ValueError):
+            return None
+        if minutes <= 0:
+            return None
+        return start_time + timedelta(minutes=minutes)
+
+    @staticmethod
+    def recalculate_exam_total_marks(exam_id, commit=True):
+        total = (
+            db.session.query(db.func.coalesce(db.func.sum(Question.marks), 0.0))
+            .filter(Question.exam_set_id == exam_id)
+            .scalar()
+            or 0.0
+        )
+        exam = ExamSet.query.get(exam_id)
+        if exam:
+            exam.total_marks = float(total)
+            if commit:
+                db.session.commit()
+        return float(total)
+
+    @staticmethod
+    def generate_unique_access_code(length=6):
+        for _ in range(10):
+            code = "".join(secrets.choice(ExamService.ACCESS_CODE_ALPHABET) for _ in range(length))
+            if not ExamSet.query.filter_by(access_code=code).first():
+                return code
+        raise ValueError("Could not generate a unique access code. Please try again.")
+
+    @staticmethod
+    def generate_unique_set_code():
+        for _ in range(10):
+            code = "SET" + "".join(secrets.choice(ExamService.ACCESS_CODE_ALPHABET) for _ in range(7))
+            if not ExamSet.query.filter_by(set_code=code).first():
+                return code
+        raise ValueError("Could not generate a unique set code. Please try again.")
 
     @staticmethod
     def create_exam(data: dict, teacher_id: int):
         """Create new exam set"""
+        duration_minutes = int(data["duration_minutes"])
+        start_time = data.get("start_time")
         exam = ExamSet(
             exam_name=data['exam_name'],
-            set_code=data.get('set_code'),
+            set_code=data.get('set_code') or ExamService.generate_unique_set_code(),
             subject=data['subject'],
-            duration_minutes=int(data['duration_minutes']),
-            total_marks=int(data.get('total_marks', 0)),
+            duration_minutes=duration_minutes,
+            total_marks=0,
+            access_mode=data.get("access_mode") or "open",
             created_by=teacher_id,
-            start_time=data.get("start_time"),
-            end_time=data.get("end_time"),
+            start_time=start_time,
+            end_time=ExamService.calculate_end_time(start_time, duration_minutes),
             status="draft"
         )
         db.session.add(exam)

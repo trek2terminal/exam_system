@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Plus, Trash2, Upload } from "lucide-react";
-import { Badge, Button, ConfirmationDialog, Input, Select, Textarea, StepWizard } from "../components/ui";
+import { Badge, Button, ConfirmationDialog, Input, MarksInput, Select, Textarea, StepWizard } from "../components/ui";
 
 export default function QuestionImportWizard({ onImport }) {
   const [currentStep, setCurrentStep] = useState(0);
@@ -192,16 +192,19 @@ export default function QuestionImportWizard({ onImport }) {
                     <div className="flex-1">
                       <p className="font-semibold text-text-primary">Q{index + 1}</p>
                       <Textarea
+                        label="Question Text"
                         value={q.text}
                         onChange={event => updateQuestion(q.id, "text", event.target.value)}
                         rows={2}
                         className="mt-2 text-sm"
+                        required
                       />
                       <div className="mt-3 grid gap-3 sm:grid-cols-2">
                         <Select
                           label="Type"
                           value={q.type}
                           onChange={value => updateQuestion(q.id, "type", value)}
+                          required
                           options={[
                             { value: "mcq", label: "MCQ" },
                             { value: "short_answer", label: "Short Answer" },
@@ -209,12 +212,13 @@ export default function QuestionImportWizard({ onImport }) {
                             { value: "code", label: "Code" }
                           ]}
                         />
-                        <Input
+                        <MarksInput
                           label="Marks"
-                          type="number"
-                          min="0"
+                          min="0.01"
+                          step="0.01"
                           value={q.max_marks}
                           onChange={event => updateQuestion(q.id, "max_marks", Number(event.target.value))}
+                          required
                         />
                       </div>
                       {q.type === "mcq" && (
@@ -244,6 +248,7 @@ export default function QuestionImportWizard({ onImport }) {
                                   if (q.correct_answer === opt) updateQuestion(q.id, "correct_answer", event.target.value);
                                 }}
                                 placeholder={`Option ${String.fromCharCode(65 + i)}`}
+                                required={i < 2}
                               />
                             </label>
                           ))}

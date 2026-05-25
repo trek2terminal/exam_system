@@ -11,6 +11,7 @@ export function Select({
   error,
   helperText,
   disabled = false,
+  required = false,
   className
 }) {
   const [open, setOpen] = useState(false);
@@ -73,11 +74,17 @@ export function Select({
 
   return (
     <div className={cn("relative grid gap-2 text-sm font-medium text-text-secondary", className)} ref={ref}>
-      {label && <label htmlFor={id}>{label}</label>}
+      {label && (
+        <label htmlFor={id}>
+          {label}
+          {required && <span className="ml-1 text-danger" aria-hidden="true">*</span>}
+        </label>
+      )}
       <button
         id={id}
         type="button"
         disabled={disabled}
+        aria-required={required || undefined}
         role="combobox"
         aria-haspopup="listbox"
         aria-expanded={open}

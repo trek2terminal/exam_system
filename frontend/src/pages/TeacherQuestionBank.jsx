@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FilePlus2, Pencil, Search, Trash2, Upload } from "lucide-react";
-import { Badge, Button, Card, ConfirmationDialog, EmptyState, Input, Modal, Select, Textarea } from "../components/ui";
+import { Badge, Button, Card, ConfirmationDialog, EmptyState, Input, MarksInput, Modal, Select, Textarea } from "../components/ui";
 import { notify } from "../components/ui/Toast";
 import { api } from "../services/api";
 import { useLiveRefresh } from "../hooks/useLiveRefresh";
@@ -25,7 +25,6 @@ const emptyForm = {
   explanation: "",
   code_snippet: "",
   code_language: "python",
-  time_limit_seconds: "0",
   execution_time_limit_seconds: "10"
 };
 
@@ -41,8 +40,9 @@ function normalizeItem(item) {
     explanation: item.explanation || "",
     codeSnippet: item.code_snippet || "",
     code_language: item.code_language || "python",
-    time_limit_seconds: item.time_limit_seconds || 0,
     execution_time_limit_seconds: item.execution_time_limit_seconds || 10,
+    source: item.source || "manual",
+    exam_title: item.exam_title || "",
     image_urls: item.image_urls || []
   };
 }
@@ -57,10 +57,15 @@ function formFromItem(item) {
     explanation: item.explanation || "",
     code_snippet: item.codeSnippet || "",
     code_language: item.code_language || "python",
-    time_limit_seconds: String(item.time_limit_seconds || 0),
     execution_time_limit_seconds: String(item.execution_time_limit_seconds || 10)
   };
 }
+
+const sourceOptions = [
+  { value: "all", label: "All" },
+  { value: "auto", label: "Auto-saved" },
+  { value: "manual", label: "Saved" }
+];
 
 export default function TeacherQuestionBank() {
   const [items, setItems] = useState([]);
@@ -68,6 +73,7 @@ export default function TeacherQuestionBank() {
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [sourceFilter, setSourceFilter] = useState("all");
   const [formData, setFormData] = useState(emptyForm);
   const [options, setOptions] = useState(["", "", "", ""]);
   const [examId, setExamId] = useState("");
@@ -99,10 +105,11 @@ export default function TeacherQuestionBank() {
     const query = search.trim().toLowerCase();
     return items.filter(item => {
       const matchesType = typeFilter === "all" || item.type === typeFilter;
+      const matchesSource = sourceFilter === "all" || item.source === sourceFilter;
       const matchesSearch = !query || item.text.toLowerCase().includes(query);
-      return matchesType && matchesSearch;
+      return matchesType && matchesSource && matchesSearch;
     });
-  }, [items, search, typeFilter]);
+  }, [items, search, typeFilter, sourceFilter]);
 
   const saveQuestion = async (event, imageFiles = []) => {
     event.preventDefault();
@@ -140,7 +147,6 @@ export default function TeacherQuestionBank() {
       const payload = {
         ...editForm,
         marks: Number(editForm.marks || 1),
-        time_limit_seconds: Number(editForm.time_limit_seconds || 0),
         execution_time_limit_seconds: Number(editForm.execution_time_limit_seconds || 10),
         options: ["mcq", "true_false"].includes(editForm.question_type) ? editOptions.filter(Boolean) : []
       };
@@ -221,7 +227,7 @@ export default function TeacherQuestionBank() {
 
         <div className="space-y-4">
           <Card className="p-4">
-            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px_170px]">
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_160px_160px_170px]">
               <Input
                 label="Search Questions"
                 value={search}
@@ -229,6 +235,7 @@ export default function TeacherQuestionBank() {
                 placeholder="Search by question text"
               />
               <Select label="Type" value={typeFilter} onChange={setTypeFilter} options={typeOptions} />
+              <Select label="Source" value={sourceFilter} onChange={setSourceFilter} options={sourceOptions} />
               <Input label="Exam ID for Import" value={examId} onChange={event => setExamId(event.target.value)} placeholder="e.g. 12" />
             </div>
           </Card>
@@ -253,12 +260,16 @@ export default function TeacherQuestionBank() {
                           {item.type}
                         </Badge>
                         <Badge variant="secondary">{item.marks} marks</Badge>
+                        {item.source === "auto" && <Badge variant="secondary">Auto-saved</Badge>}
                       </div>
                       <Button variant="ghost" size="sm" className="h-11 w-11 px-0" onClick={() => setDeleteTarget(item)} aria-label="Delete bank question">
                         <Trash2 size={17} />
                       </Button>
                     </div>
                     <p className="line-clamp-2 font-semibold text-text-primary">{item.text}</p>
+                    {item.source === "auto" && item.exam_title && (
+                      <p className="text-xs text-text-muted">From {item.exam_title}</p>
+                    )}
                     {item.options.length > 0 && (
                       <div className="flex flex-wrap gap-2">
                         {item.options.map(option => <Badge key={option} variant={option === item.correct_answer ? "success" : "secondary"}>{option}</Badge>)}
@@ -328,13 +339,13 @@ function QuestionForm({ formData, setFormData, options, setOptions, onSubmit, sa
 
   return (
     <form className="space-y-4" onSubmit={event => onSubmit(event, imageFiles)}>
-      <Select label="Question Type" value={formData.question_type} onChange={value => update({ question_type: value })} options={questionTypeOptions} />
+      <Select label="Question Type" value={formData.question_type} onChange={value => update({ question_type: value })} options={questionTypeOptions} required />
       <Textarea label="Question Text" rows={5} required value={formData.question_text} onChange={event => update({ question_text: event.target.value })} placeholder="Write the reusable question text." />
-      <Input label="Marks" type="number" min="1" required value={formData.marks} onChange={event => update({ marks: event.target.value })} />
+      <MarksInput label="Marks" min="0.01" step="0.01" required value={formData.marks} onChange={event => update({ marks: event.target.value })} />
 
       {["mcq", "true_false"].includes(formData.question_type) && (
         <div className="space-y-3">
-          <span className="block text-sm font-semibold text-text-secondary">MCQ Options</span>
+          <span className="block text-sm font-semibold text-text-secondary">MCQ Options <span className="text-danger" aria-hidden="true">*</span></span>
           {options.map((option, index) => (
             <Input
               key={index}
@@ -345,6 +356,7 @@ function QuestionForm({ formData, setFormData, options, setOptions, onSubmit, sa
                 setOptions(next);
               }}
               placeholder={`Option ${index + 1}`}
+              required={index < 2}
             />
           ))}
           <Button type="button" variant="ghost" size="sm" onClick={() => setOptions(current => [...current, ""])}>
@@ -353,7 +365,7 @@ function QuestionForm({ formData, setFormData, options, setOptions, onSubmit, sa
         </div>
       )}
 
-      <Input label="Correct Answer / Key" value={formData.correct_answer} onChange={event => update({ correct_answer: event.target.value })} placeholder="Optional for written questions" />
+      <Input label="Correct Answer / Key" value={formData.correct_answer} onChange={event => update({ correct_answer: event.target.value })} placeholder="Optional for written questions" required={["mcq", "true_false"].includes(formData.question_type)} />
       <Textarea label="Model Answer" rows={3} value={formData.model_answer} onChange={event => update({ model_answer: event.target.value })} placeholder="Reference answer shown during review/results when revealed." />
       <Textarea label="Explanation" rows={3} value={formData.explanation} onChange={event => update({ explanation: event.target.value })} placeholder="Optional explanation for results." />
       {allowImages && (
@@ -368,16 +380,15 @@ function QuestionForm({ formData, setFormData, options, setOptions, onSubmit, sa
       )}
       <Textarea label="Read-only Code Snippet" rows={4} value={formData.code_snippet} onChange={event => update({ code_snippet: event.target.value })} className="font-mono text-sm" />
       <Input label="Snippet Language" value={formData.code_language} onChange={event => update({ code_language: event.target.value })} placeholder="python" />
-      <Input label="Per-question Time Limit" type="number" min="0" value={formData.time_limit_seconds} onChange={event => update({ time_limit_seconds: event.target.value })} helperText="Seconds. 0 means no limit." />
       {formData.question_type === "coding" && (
-        <Input
+        <MarksInput
           label="Execution Time Limit"
-          type="number"
           min="1"
           max="60"
           value={formData.execution_time_limit_seconds}
           onChange={event => update({ execution_time_limit_seconds: event.target.value })}
           helperText="Seconds allowed for each student code run."
+          required
         />
       )}
       <Button type="submit" variant="primary" className="w-full" loading={saving} loadingLabel="Saving...">
