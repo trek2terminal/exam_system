@@ -13,12 +13,13 @@ import {
   Play,
   Plus,
   Radio,
+  Search,
   Trophy,
   Users
 } from "lucide-react";
 import { PageLayout } from "./components/layout/PageLayout";
 import { SessionEndedOverlay } from "./components/SessionEndedOverlay";
-import { Badge, Button, Card, EmptyState, StatCard } from "./components/ui";
+import { Badge, Button, Card, EmptyState, Input, StatCard } from "./components/ui";
 import { cn } from "./components/ui/utils";
 import { useAppStore } from "./store/appStore";
 import { api } from "./services/api";
@@ -164,6 +165,7 @@ function LoginPanel() {
 
 function StudentDashboard({ dashboard }) {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const loadDashboard = useAppStore(state => state.loadDashboard);
   const stats = dashboard?.stats || {};
   const exams = dashboard?.exams || [];
   const student = dashboard?.student || {};
@@ -225,6 +227,12 @@ function StudentDashboard({ dashboard }) {
         </div>
       )}
 
+      <StudentBatchJoinPanel
+        joinedBatches={student.batches || []}
+        needsBatchJoin={Boolean(student.needs_batch_join)}
+        onJoined={() => loadDashboard("student")}
+      />
+
       {/* Stats Row */}
       <section className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <StatCard icon={BookOpenCheck} label="Assigned" value={stats.assigned || 0} variant="default" />
@@ -272,6 +280,173 @@ function StudentDashboard({ dashboard }) {
         )}
       </div>
     </div>
+  );
+}
+
+function StudentBatchJoinPanel({ joinedBatches = [], needsBatchJoin = false, onJoined }) {
+  const [batches, setBatches] = useState([]);
+  const [query, setQuery] = useState("");
+  const [selectedBatchId, setSelectedBatchId] = useState("");
+  const [joinCode, setJoinCode] = useState("");
+  const [loading, setLoading] = useState(needsBatchJoin);
+  const [joining, setJoining] = useState(false);
+  const [expanded, setExpanded] = useState(needsBatchJoin);
+
+  useEffect(() => {
+    if (!expanded) return undefined;
+    let mounted = true;
+    setLoading(true);
+    api.get("/student/batches")
+      .then(({ data }) => {
+        if (!mounted) return;
+        setBatches(data.batches || []);
+        const firstAvailable = (data.batches || []).find(batch => !batch.is_member);
+        if (firstAvailable && !selectedBatchId) setSelectedBatchId(String(firstAvailable.id));
+      })
+      .catch(error => notify.error(error.message || "Could not load batches"))
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [expanded, selectedBatchId]);
+
+  const visibleBatches = batches.filter(batch => {
+    const searchText = `${batch.name} ${batch.description || ""}`.toLowerCase();
+    return searchText.includes(query.toLowerCase());
+  });
+  const selectedBatch = batches.find(batch => String(batch.id) === String(selectedBatchId));
+
+  const joinBatch = async event => {
+    event.preventDefault();
+    if (!selectedBatchId) {
+      notify.error("Choose your batch first.");
+      return;
+    }
+    setJoining(true);
+    try {
+      const { data } = await api.post("/student/batches/join", {
+        group_id: selectedBatchId,
+        join_code: joinCode
+      });
+      notify.success(data.message || "Batch joined");
+      setJoinCode("");
+      setExpanded(false);
+      await onJoined?.();
+    } catch (error) {
+      notify.error(error.message || "Could not join batch");
+    } finally {
+      setJoining(false);
+    }
+  };
+
+  if (!needsBatchJoin && !expanded && joinedBatches.length > 0) {
+    return (
+      <Card className="border-info/20 bg-info/5 p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <span className="grid h-10 w-10 place-items-center rounded-lg bg-info/10 text-info">
+              <Users size={20} />
+            </span>
+            <div>
+              <p className="text-sm font-semibold text-text-primary">Your batch</p>
+              <div className="mt-1 flex flex-wrap gap-2">
+                {joinedBatches.map(batch => (
+                  <Badge key={batch.id} variant="info">{batch.name}</Badge>
+                ))}
+              </div>
+            </div>
+          </div>
+          <Button variant="ghost" size="sm" onClick={() => setExpanded(true)}>
+            Join another batch
+          </Button>
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className={cn("overflow-hidden p-5", needsBatchJoin && "border-brand-primary/30 bg-brand-primary/5")}>
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-start gap-3">
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-brand-primary/10 text-brand-primary">
+            <Users size={22} />
+          </span>
+          <div>
+            <h2 className="text-lg font-semibold text-text-primary">
+              {needsBatchJoin ? "Join your batch" : "Join another batch"}
+            </h2>
+            <p className="text-sm text-text-secondary">
+              Select your batch and enter the code shared by the admin. Assigned exams will appear automatically.
+            </p>
+          </div>
+        </div>
+        {!needsBatchJoin && (
+          <Button variant="ghost" size="sm" onClick={() => setExpanded(false)}>Close</Button>
+        )}
+      </div>
+
+      <form onSubmit={joinBatch} className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+        <div className="space-y-3">
+          <Input
+            label="Search batches"
+            value={query}
+            onChange={event => setQuery(event.target.value)}
+            placeholder="Search or scroll to find your batch"
+          />
+          <div className="max-h-64 overflow-y-auto rounded-lg border border-border bg-background-base p-2">
+            {loading ? (
+              <p className="px-3 py-4 text-sm text-text-muted">Loading batches...</p>
+            ) : visibleBatches.length === 0 ? (
+              <div className="px-3 py-6 text-center text-sm text-text-muted">
+                <Search size={24} className="mx-auto mb-2" />
+                No matching batches found.
+              </div>
+            ) : (
+              visibleBatches.map(batch => (
+                <button
+                  key={batch.id}
+                  type="button"
+                  disabled={batch.is_member}
+                  onClick={() => setSelectedBatchId(String(batch.id))}
+                  className={cn(
+                    "mb-2 flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-3 text-left transition last:mb-0",
+                    String(selectedBatchId) === String(batch.id)
+                      ? "border-brand-primary bg-brand-primary/10"
+                      : "border-border hover:bg-background-elevated",
+                    batch.is_member && "cursor-not-allowed opacity-60"
+                  )}
+                >
+                  <span>
+                    <span className="block font-semibold text-text-primary">{batch.name}</span>
+                    <span className="block text-xs text-text-muted">{batch.description || "No description"} | {batch.student_count} students</span>
+                  </span>
+                  <Badge variant={batch.is_member ? "success" : "secondary"}>{batch.is_member ? "Joined" : "Select"}</Badge>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-border bg-background-surface p-4">
+          <div className="mb-4">
+            <p className="text-xs font-semibold uppercase text-text-muted">Selected batch</p>
+            <p className="mt-1 text-lg font-semibold text-text-primary">{selectedBatch?.name || "Choose a batch"}</p>
+          </div>
+          <Input
+            label="Batch code"
+            value={joinCode}
+            onChange={event => setJoinCode(event.target.value.toUpperCase())}
+            placeholder="Enter code"
+            autoComplete="off"
+          />
+          <Button type="submit" variant="primary" className="mt-4 w-full" loading={joining} loadingLabel="Joining...">
+            <KeyRound size={17} /> Join Batch
+          </Button>
+        </div>
+      </form>
+    </Card>
   );
 }
 

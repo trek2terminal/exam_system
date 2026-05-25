@@ -1,6 +1,13 @@
+import secrets
+import string
 from datetime import datetime
 
 from app.models.database import db
+
+
+def generate_group_join_code(length=8):
+    alphabet = string.ascii_uppercase + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(length))
 
 
 class StudentGroup(db.Model):
@@ -9,6 +16,7 @@ class StudentGroup(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), unique=True, nullable=False, index=True)
     description = db.Column(db.Text, nullable=True)
+    join_code = db.Column(db.String(16), unique=True, nullable=True, index=True, default=generate_group_join_code)
     created_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     creator = db.relationship("User")
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)

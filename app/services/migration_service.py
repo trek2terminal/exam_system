@@ -270,6 +270,32 @@ class MigrationService:
             )
 
     @staticmethod
+    def _migration_student_group_join_codes():
+        from app.models.group_model import StudentGroup, generate_group_join_code
+
+        MigrationService._add_column_if_missing("student_groups", "join_code", "VARCHAR(16)")
+        used_codes = {
+            code
+            for (code,) in db.session.query(StudentGroup.join_code).filter(StudentGroup.join_code.isnot(None)).all()
+            if code
+        }
+        for group in StudentGroup.query.order_by(StudentGroup.id.asc()).all():
+            if group.join_code:
+                continue
+            code = generate_group_join_code()
+            while code in used_codes:
+                code = generate_group_join_code()
+            group.join_code = code
+            used_codes.add(code)
+        db.session.commit()
+        MigrationService._create_index_if_missing(
+            "student_groups",
+            "ix_student_groups_join_code",
+            "join_code",
+            unique=True,
+        )
+
+    @staticmethod
     def _migration_platform_settings_seed():
         if PlatformSettings.query.first():
             return
@@ -387,6 +413,11 @@ class MigrationService:
             "Add admin-editable login page content fields",
             _migration_login_page_content.__func__,
         ),
+        (
+            "20260525_020_student_group_join_codes",
+            "Add self-join codes to student groups",
+            _migration_student_group_join_codes.__func__,
+        ),
     ]
 
     @staticmethod
@@ -495,6 +526,8 @@ class MigrationService:
                 and MigrationService._has_column("platform_settings", "login_page_subheading")
                 and MigrationService._has_column("platform_settings", "login_page_features")
             )
+        if version == "20260525_020_student_group_join_codes":
+            return MigrationService._has_column("student_groups", "join_code")
         return False
 
     @staticmethod

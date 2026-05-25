@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { BookOpenCheck, Save, Trash2, Plus, Upload } from "lucide-react";
-import { Badge, Button, Input, Select, Textarea, StepWizard, ConfirmationDialog, Modal, Toggle } from "../components/ui";
+import { Avatar, Badge, Button, Input, Select, Textarea, StepWizard, ConfirmationDialog, Modal, Toggle } from "../components/ui";
 import { api } from "../services/api";
 import { notify } from "../components/ui/Toast";
 import QuestionImportWizard from "./QuestionImportWizard";
@@ -25,7 +25,8 @@ const createEmptyExam = () => ({
   start_time: "",
   end_time: "",
   enrollment_lines: "",
-  group_id: ""
+  group_id: "",
+  group_ids: []
 });
 
 export default function ExamEditor() {
@@ -90,6 +91,7 @@ export default function ExamEditor() {
       if (exam.access_code) formData.append("access_code", exam.access_code);
       if (exam.enrollment_lines) formData.append("enrollment_lines", exam.enrollment_lines);
       if (exam.group_id) formData.append("group_id", exam.group_id);
+      if ((exam.group_ids || []).length) formData.append("group_ids", JSON.stringify(exam.group_ids));
 
       (exam.questions || []).forEach((question, index) => {
         formData.append("question_number", String(index + 1));
@@ -723,6 +725,7 @@ function EnrollmentStep({ exam, examId, onUpdate }) {
   const [enrollments, setEnrollments] = useState([]);
   const [bulkText, setBulkText] = useState(exam?.enrollment_lines || "");
   const [selectedGroup, setSelectedGroup] = useState(exam?.group_id || "");
+  const [selectedGroupIds, setSelectedGroupIds] = useState(exam?.group_ids || []);
   const [manual, setManual] = useState({ roll_no: "", student_name: "", extra_time_minutes: 0 });
   const [pendingRemove, setPendingRemove] = useState(null);
 
@@ -787,8 +790,11 @@ function EnrollmentStep({ exam, examId, onUpdate }) {
   const postEnrollment = async (payload, successMessage) => {
     if (!examId) {
       if (payload.group_id) {
-        setSelectedGroup(String(payload.group_id));
-        onUpdate("group_id", String(payload.group_id));
+        const nextIds = Array.from(new Set([...selectedGroupIds, String(payload.group_id)]));
+        setSelectedGroupIds(nextIds);
+        setSelectedGroup("");
+        onUpdate("group_ids", nextIds);
+        onUpdate("group_id", nextIds[0] || "");
         notify.success("Group assignment will be applied when this exam is saved.");
         return;
       }
@@ -860,6 +866,13 @@ function EnrollmentStep({ exam, examId, onUpdate }) {
     postEnrollment({ group_id: selectedGroup }, "Group students added to the exam");
   };
 
+  const removeDraftGroup = groupId => {
+    const nextIds = selectedGroupIds.filter(item => String(item) !== String(groupId));
+    setSelectedGroupIds(nextIds);
+    onUpdate("group_ids", nextIds);
+    onUpdate("group_id", nextIds[0] || "");
+  };
+
   const saveEnrollment = async (enrollment) => {
     if (!examId) return;
     try {
@@ -889,6 +902,11 @@ function EnrollmentStep({ exam, examId, onUpdate }) {
       setPendingRemove(null);
     }
   };
+
+  const draftGroupStudentCount = selectedGroupIds.reduce((total, groupId) => {
+    const group = groups.find(item => String(item.id) === String(groupId));
+    return total + Number(group?.student_count || 0);
+  }, 0);
 
   return (
     <div className="space-y-5">
@@ -996,12 +1014,47 @@ function EnrollmentStep({ exam, examId, onUpdate }) {
             <Button className="mt-4 w-full" variant="secondary" loading={saving} onClick={applyGroup}>
               Add Group Students
             </Button>
+            {!examId && selectedGroupIds.length > 0 && (
+              <div className="mt-4 space-y-2">
+                <p className="text-xs font-semibold uppercase text-text-muted">Batches selected for this exam</p>
+                {selectedGroupIds.map(groupId => {
+                  const group = groups.find(item => String(item.id) === String(groupId));
+                  return (
+                    <div key={groupId} className="flex items-center justify-between gap-2 rounded-lg border border-border bg-background-base p-2 text-sm">
+                      <span className="font-semibold text-text-primary">{group?.name || `Batch ${groupId}`}</span>
+                      <Button variant="ghost" size="sm" onClick={() => removeDraftGroup(groupId)}>
+                        <Trash2 size={14} /> Remove
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {selectedGroup && groups.find(group => String(group.id) === String(selectedGroup))?.members?.length > 0 && (
+              <div className="mt-4 rounded-lg border border-border bg-background-base p-3">
+                <p className="mb-2 text-xs font-semibold uppercase text-text-muted">Students in selected batch</p>
+                <div className="max-h-52 space-y-2 overflow-y-auto">
+                  {groups.find(group => String(group.id) === String(selectedGroup)).members.map(member => (
+                    <div key={member.id} className="flex items-center justify-between gap-3 rounded-md bg-background-surface px-3 py-2">
+                      <span className="flex min-w-0 items-center gap-2">
+                        <Avatar name={member.name} src={member.profile_picture} size="sm" />
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-semibold text-text-primary">{member.name}</span>
+                          <span className="block truncate text-xs text-text-muted">{member.roll_number || member.username}</span>
+                        </span>
+                      </span>
+                      <Badge variant="info" size="sm">Included</Badge>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="rounded-xl border border-border bg-background-card p-5 shadow-card">
             <div className="mb-4 flex items-center justify-between gap-3">
               <h3 className="text-sm font-semibold text-text-primary">Current Enrollment</h3>
-              <Badge variant="purple">{examId ? enrollments.length : countDraftRoster(bulkText)} students</Badge>
+              <Badge variant="purple">{examId ? enrollments.length : countDraftRoster(bulkText) + draftGroupStudentCount} students</Badge>
             </div>
             {!examId ? (
               <div className="rounded-lg border border-border bg-background-base p-4 text-sm text-text-muted">

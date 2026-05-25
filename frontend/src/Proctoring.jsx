@@ -26,6 +26,7 @@ import { Badge } from "./components/ui/Badge";
 import { Input } from "./components/ui/Input";
 import { Textarea } from "./components/ui/Textarea";
 import { Select } from "./components/ui/Select";
+import { Avatar } from "./components/ui/Avatar";
 import { cn } from "./components/ui/utils";
 import { formatDate } from "./utils/dateFormat";
 
@@ -265,6 +266,7 @@ export default function Proctoring({ mode }) {
   }, [data, selectedExamId]);
 
   const selectedSession = sortedSessions.find(item => item.id === selectedId) || sortedSessions[0] || null;
+  const waitingSessions = sortedSessions.filter(item => item.status === "waiting");
   const counts = data?.counts || {};
 
   if (loading) return <div className="loadingScreen">Loading proctoring workspace...</div>;
@@ -325,6 +327,41 @@ export default function Proctoring({ mode }) {
         </div>
       </Card>
 
+      {waitingSessions.length > 0 && (
+        <Card className="overflow-hidden border-warning/30 bg-warning/5">
+          <div className="flex flex-col gap-2 border-b border-warning/20 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-text-primary">Exam Lobby</h3>
+              <p className="text-sm text-text-secondary">Students waiting for this exam to open or complete the pre-check appear here live.</p>
+            </div>
+            <Badge variant="warning">{waitingSessions.length} waiting</Badge>
+          </div>
+          <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-4">
+            {waitingSessions.map(item => (
+              <button
+                type="button"
+                key={item.id}
+                className={cn(
+                  "flex items-center gap-3 rounded-lg border border-warning/25 bg-background-surface p-3 text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-warning/60 hover:shadow-card",
+                  selectedSession?.id === item.id && "border-warning/70 ring-2 ring-warning/20"
+                )}
+                onClick={() => {
+                  setSelectedId(item.id);
+                  setMobileDetailOpen(true);
+                }}
+              >
+                <Avatar name={item.student_name} src={item.profile_picture} size="lg" />
+                <span className="min-w-0">
+                  <span className="block truncate font-semibold text-text-primary">{item.student_name}</span>
+                  <span className="block truncate text-xs text-text-muted">Roll {item.roll_no}</span>
+                  <span className="mt-1 block truncate text-xs font-medium text-warning">{item.exam_name}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </Card>
+      )}
+
       <div className="proctorLayout">
         <section className="proctorCardGrid">
           {sortedSessions.map(item => (
@@ -338,7 +375,8 @@ export default function Proctoring({ mode }) {
               }}
             >
               <div className="proctorCardTop">
-                <div>
+                <Avatar name={item.student_name} src={item.profile_picture} size="md" />
+                <div className="min-w-0 flex-1">
                   <strong>{item.student_name}</strong>
                   <span>Roll {item.roll_no} | {item.exam_name}</span>
                 </div>

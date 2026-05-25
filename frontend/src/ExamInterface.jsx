@@ -143,6 +143,7 @@ export default function ExamInterface() {
   const [runningQuestionId, setRunningQuestionId] = useState(null);
   const [fullscreenPrompt, setFullscreenPrompt] = useState(true);
   const saveTimers = useRef({});
+  const stdinRefs = useRef({});
   const submittedRef = useRef(false);
   const lastViolationCountRef = useRef(0);
 
@@ -432,11 +433,29 @@ export default function ExamInterface() {
     setShowSubmitConfirm(true);
   }, []);
 
+  const focusStdinInput = useCallback(questionId => {
+    window.setTimeout(() => {
+      stdinRefs.current[questionId]?.focus?.();
+    }, 50);
+  }, []);
+
   const runCode = useCallback(async question => {
     if (expiredQuestions[question.id]) return;
     const code = answers[question.id] || "";
     const stdin = stdinValues[question.id] || "";
+    const needsInput = /\binput\s*\(/.test(code);
     const nextStatus = computeStatus(code, isFlagged(statuses[question.id]), true);
+
+    if (needsInput && !stdin.trim()) {
+      setOutputs(current => ({
+        ...current,
+        [question.id]: "This code uses input(). Type the values in User Input, one per line, then click Run Code again."
+      }));
+      setAutosaveState("Input required");
+      focusStdinInput(question.id);
+      return;
+    }
+
     setRunningQuestionId(question.id);
     setOutputs(current => ({ ...current, [question.id]: "Running..." }));
     await saveAnswerNow(question.id, code, nextStatus);
@@ -451,15 +470,25 @@ export default function ExamInterface() {
       if (typeof data.execution_time_ms === "number") parts.push(`Time: ${data.execution_time_ms} ms`);
       if (data.stdout) parts.push(`\nSTDOUT:\n${data.stdout}`);
       if (data.stderr) parts.push(`\nSTDERR:\n${data.stderr}`);
+      if (needsInput && data.status !== "success" && /EOFError|input/i.test(`${data.message || ""}\n${data.stderr || ""}`)) {
+        parts.push("\nYour program still needs more input. Add each value on a new line in User Input, then run again.");
+        focusStdinInput(question.id);
+      }
       setOutputs(current => ({ ...current, [question.id]: parts.join("\n") }));
       setAutosaveState("Code run saved");
     } catch (err) {
-      setOutputs(current => ({ ...current, [question.id]: err.response?.data?.message || "Run failed" }));
+      const message = err.response?.data?.message || err.message || "Run failed";
+      const stderr = err.response?.data?.stderr || "";
+      const inputHint = needsInput && /EOFError|input/i.test(`${message}\n${stderr}`)
+        ? "\n\nYour program is waiting for input. Add the values in User Input, one per line, then run again."
+        : "";
+      setOutputs(current => ({ ...current, [question.id]: `${message}${inputHint}` }));
+      if (inputHint) focusStdinInput(question.id);
       setAutosaveState("Run failed");
     } finally {
       setRunningQuestionId(null);
     }
-  }, [answers, statuses, stdinValues, expiredQuestions, sessionCode, requestHeaders, requestPayload, redirectFromPayload, saveAnswerNow]);
+  }, [answers, statuses, stdinValues, expiredQuestions, sessionCode, requestHeaders, requestPayload, redirectFromPayload, saveAnswerNow, focusStdinInput]);
 
   const expireQuestion = useCallback(async question => {
     if (!question || expiredQuestions[question.id]) return;
@@ -1038,6 +1067,9 @@ export default function ExamInterface() {
                 expired={Boolean(expiredQuestions[currentQuestion.id])}
                 onChange={value => updateAnswer(currentQuestion, value)}
                 onStdinChange={value => setStdinValues(current => ({ ...current, [currentQuestion.id]: value }))}
+                stdinRef={element => {
+                  if (element) stdinRefs.current[currentQuestion.id] = element;
+                }}
                 onRun={() => runCode(currentQuestion)}
                 running={runningQuestionId === currentQuestion.id}
               />
@@ -1137,7 +1169,7 @@ export default function ExamInterface() {
   );
 }
 
-function AnswerEditor({ question, editorTheme, value, output, stdinValue, expired, onChange, onStdinChange, onRun, running }) {
+function AnswerEditor({ question, editorTheme, value, output, stdinValue, expired, onChange, onStdinChange, stdinRef, onRun, running }) {
   if (question.question_type === "mcq") {
     return (
       <div className="reactMcqList">
@@ -1187,14 +1219,18 @@ function AnswerEditor({ question, editorTheme, value, output, stdinValue, expire
             }}
           />
         </div>
-        <label className="stdinLabel" htmlFor={`stdin-${question.id}`}>stdin for input()</label>
+        <label className="stdinLabel" htmlFor={`stdin-${question.id}`}>
+          User Input <span>for input() prompts</span>
+        </label>
         <Textarea
+          ref={stdinRef}
           id={`stdin-${question.id}`}
           className="reactStdinInput"
           value={stdinValue}
           onChange={event => onStdinChange(event.target.value)}
           rows={3}
-          placeholder="Each line is passed to Python stdin"
+          placeholder={"Example:\n5\n10"}
+          helperText="Type input values before running. Each line is sent to one input() call."
           disabled={expired}
         />
         <XtermOutput output={output || "Run output will appear here."} />

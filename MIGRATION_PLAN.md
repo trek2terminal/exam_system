@@ -717,3 +717,21 @@ Current status:
 - Realtime source wiring is build-clean.
 - Pages now refresh automatically after successful admin/teacher/student API changes, with Socket.IO first and polling/focus fallback.
 - Runtime QA still recommended with two browsers logged in as different roles to confirm same-machine live updates and production Socket.IO proxy behavior.
+
+## Latest Implementation Batch 31 - 2026-05-25
+
+Completed in this batch:
+- Added batch self-join codes to student groups with recorded migration `20260525_020_student_group_join_codes`.
+- Extended Admin Groups so each batch shows a unique join code, copy action, regenerate action, searchable student add, avatars in member lists, and existing remove/delete controls.
+- Added student batch discovery and join APIs: `/api/student/batches` and `/api/student/batches/join`.
+- Added a student dashboard batch-join panel that appears for students without a batch; students can search/scroll batches, select one, enter the admin-generated code, and get mapped to the batch.
+- Extended teacher exam enrollment to accept multiple group IDs, so one exam can be assigned to multiple batches plus individual students/roster entries.
+- Improved Exam Editor enrollment with selected-batch chips, selected-batch student preview, and current enrollment count that includes draft batch assignments before saving.
+- Added richer proctoring payloads with student avatars and lobby metadata.
+- Rebuilt the student waiting page as a proper exam lobby with student avatar, lobby position, waiting count, exam timing, readiness checklist, and animated waiting state.
+- Added an Exam Lobby section to admin/teacher proctoring showing waiting students with names and avatars, updating through the existing realtime/polling proctoring flow.
+
+Current status:
+- Source changes are ready for verification in lint/build.
+- Database migration must run before using join codes on an existing database: `python run.py migrate`.
+- Runtime QA recommended: create a batch, copy its code, log in as a student, join the batch from the dashboard, assign that batch to an exam, start/join the exam, and confirm the student appears in the proctoring Exam Lobby.

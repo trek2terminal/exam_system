@@ -15,7 +15,7 @@ from werkzeug.utils import secure_filename
 from app.models.audit_model import AuditLog, ViolationLog
 from app.models.database import db
 from app.models.exam_model import ExamEnrollment, ExamSet, Question, QuestionBankItem, generate_access_code
-from app.models.group_model import StudentGroup, StudentGroupMember
+from app.models.group_model import StudentGroup, StudentGroupMember, generate_group_join_code
 from app.models.notification_model import Notification
 from app.models.result_model import QuestionMark, Result
 from app.models.submission_model import Answer, StudentSession
@@ -484,6 +484,7 @@ def _group_payload(group):
         "id": group.id,
         "name": group.name,
         "description": group.description,
+        "join_code": group.join_code,
         "created_at": _iso_datetime(group.created_at),
         "updated_at": _iso_datetime(group.updated_at),
         "student_count": len(group.members),
@@ -495,10 +496,33 @@ def _group_payload(group):
                 "username": member.student.username,
                 "email": member.student.email,
                 "roll_number": member.student.roll_number,
+                "profile_picture": url_for("static", filename=member.student.profile_picture) if member.student.profile_picture else None,
             }
             for member in group.members
         ],
     }
+
+
+def _student_group_public_payload(group, student_group_ids=None):
+    student_group_ids = student_group_ids or set()
+    return {
+        "id": group.id,
+        "name": group.name,
+        "description": group.description,
+        "student_count": len(group.members),
+        "is_member": group.id in student_group_ids,
+    }
+
+
+def _assign_unique_group_join_code(group):
+    code = generate_group_join_code()
+    while StudentGroup.query.filter(
+        StudentGroup.id != (group.id or 0),
+        StudentGroup.join_code == code,
+    ).first():
+        code = generate_group_join_code()
+    group.join_code = code
+    return code
 
 
 def _find_student_by_identifier(identifier):
@@ -517,6 +541,21 @@ def _find_student_by_identifier(identifier):
         )
         .first()
     )
+
+
+def _student_user_for_current_session():
+    student_user_id = session.get("student_user_id")
+    if student_user_id:
+        user = User.query.filter_by(id=student_user_id, role="student").first()
+        if user:
+            return user
+    roll_no = (session.get("roll_no") or "").strip().upper()
+    if not roll_no:
+        return None
+    return User.query.filter(
+        User.role == "student",
+        db.func.upper(User.roll_number) == roll_no,
+    ).first()
 
 
 def _current_session_user():
@@ -690,6 +729,18 @@ def _teacher_group_option_payload(group):
         "id": group.id,
         "name": group.name,
         "student_count": len(group.members),
+        "members": [
+            {
+                "id": member.id,
+                "student_id": member.student.id,
+                "name": member.student.name,
+                "username": member.student.username,
+                "email": member.student.email,
+                "roll_number": member.student.roll_number,
+                "profile_picture": url_for("static", filename=member.student.profile_picture) if member.student.profile_picture else None,
+            }
+            for member in group.members
+        ],
     }
 
 
@@ -829,22 +880,43 @@ def _apply_teacher_enrollment_payload(exam, teacher, payload):
         else:
             added += 1
 
-    group_id = payload.get("group_id")
-    if group_id:
+    raw_group_ids = payload.get("group_ids")
+    if isinstance(raw_group_ids, str):
+        try:
+            raw_group_ids = json.loads(raw_group_ids)
+        except json.JSONDecodeError:
+            raw_group_ids = [raw_group_ids]
+    if raw_group_ids is None:
+        raw_group_ids = []
+    if not isinstance(raw_group_ids, list):
+        raw_group_ids = [raw_group_ids]
+    if payload.get("group_id"):
+        raw_group_ids.append(payload.get("group_id"))
+
+    clean_group_ids = []
+    for group_id in raw_group_ids:
+        try:
+            group_id_int = int(group_id)
+        except (TypeError, ValueError):
+            continue
+        if group_id_int not in clean_group_ids:
+            clean_group_ids.append(group_id_int)
+
+    for group_id in clean_group_ids:
         group = StudentGroup.query.get(group_id)
         if not group:
             errors.append("Selected group was not found.")
-        else:
-            for member in group.members:
-                student = member.student
-                if not student:
-                    continue
-                roll_no = student.roll_number or student.username
-                _, error = _upsert_exam_enrollment(exam, teacher, roll_no, student.name, 0)
-                if error:
-                    errors.append(error)
-                else:
-                    added += 1
+            continue
+        for member in group.members:
+            student = member.student
+            if not student:
+                continue
+            roll_no = student.roll_number or student.username
+            _, error = _upsert_exam_enrollment(exam, teacher, roll_no, student.name, 0)
+            if error:
+                errors.append(error)
+            else:
+                added += 1
 
     bulk_items = payload.get("enrollments") or payload.get("enrollment_lines")
     if isinstance(bulk_items, str):
@@ -1090,6 +1162,7 @@ def _admin_password_matches(payload):
 
 def _proctor_session_payload(student_session):
     exam = student_session.exam_set
+    student_user = _find_student_by_identifier(student_session.roll_no)
     total_questions = Question.query.filter_by(exam_set_id=exam.id).count()
     answered_count = (
         Answer.query.filter_by(session_id=student_session.id)
@@ -1112,6 +1185,7 @@ def _proctor_session_payload(student_session):
         "session_code": student_session.session_code,
         "student_name": student_session.student_name,
         "roll_no": student_session.roll_no,
+        "profile_picture": url_for("static", filename=student_user.profile_picture) if student_user and student_user.profile_picture else None,
         "exam_name": exam.exam_name,
         "set_code": exam.set_code,
         "status": student_session.status,
@@ -1743,6 +1817,15 @@ def student_dashboard_api():
             }), 401
 
     roll_no = (session.get("roll_no") or "").strip().upper()
+    student_user = _student_user_for_current_session()
+    student_group_memberships = []
+    if student_user:
+        student_group_memberships = (
+            StudentGroupMember.query.filter_by(student_id=student_user.id)
+            .join(StudentGroup)
+            .order_by(StudentGroup.name.asc())
+            .all()
+        )
     now = datetime.utcnow()
     enrollments = (
         ExamEnrollment.query.filter(db.func.upper(ExamEnrollment.roll_no) == roll_no)
@@ -1840,7 +1923,21 @@ def student_dashboard_api():
     return jsonify(
         {
             "ok": True,
-            "student": {"name": session.get("student_name"), "roll_no": roll_no, "greeting": greeting},
+            "student": {
+                "name": session.get("student_name"),
+                "roll_no": roll_no,
+                "greeting": greeting,
+                "batches": [
+                    {
+                        "id": membership.group.id,
+                        "name": membership.group.name,
+                        "description": membership.group.description,
+                        "student_count": len(membership.group.members),
+                    }
+                    for membership in student_group_memberships
+                ],
+                "needs_batch_join": not bool(student_group_memberships),
+            },
             "quote": SettingsService.random_quote(settings),
             "announcement_message": settings.announcement_message if settings else None,
             "server_time": _iso_datetime(now),
@@ -1851,6 +1948,64 @@ def student_dashboard_api():
                 "results": "/react/student/results",
                 "dashboard": "/react/student",
             },
+        }
+    )
+
+
+@api_bp.route("/student/batches")
+def student_batches_api():
+    student_name, roll_no, error_response = _require_student_api_details()
+    if error_response:
+        return error_response
+    student_user = _student_user_for_current_session()
+    memberships = []
+    if student_user:
+        memberships = StudentGroupMember.query.filter_by(student_id=student_user.id).all()
+    group_ids = {membership.group_id for membership in memberships}
+    groups = StudentGroup.query.order_by(StudentGroup.name.asc()).all()
+    return jsonify(
+        {
+            "ok": True,
+            "student": {"name": student_name, "roll_no": roll_no},
+            "batches": [_student_group_public_payload(group, group_ids) for group in groups],
+            "joined_batches": [_student_group_public_payload(membership.group, group_ids) for membership in memberships],
+        }
+    )
+
+
+@api_bp.route("/student/batches/join", methods=["POST"])
+@rate_limit("submit")
+def student_batch_join_api():
+    student_name, roll_no, error_response = _require_student_api_details()
+    if error_response:
+        return error_response
+    student_user = _student_user_for_current_session()
+    if not student_user:
+        return jsonify({"ok": False, "message": "Student account was not found. Please log in again."}), 401
+
+    payload = _get_json_payload()
+    group_id = payload.get("group_id") or payload.get("batch_id")
+    join_code = (payload.get("join_code") or payload.get("code") or "").strip().upper()
+    if not group_id:
+        return jsonify({"ok": False, "message": "Choose your batch first."}), 400
+    if not join_code:
+        return jsonify({"ok": False, "message": "Enter the batch code shared by the admin."}), 400
+
+    group = StudentGroup.query.get_or_404(group_id)
+    expected_code = (group.join_code or "").strip().upper()
+    if not expected_code or not secrets.compare_digest(join_code, expected_code):
+        return jsonify({"ok": False, "message": "That batch code does not match. Please check it and try again."}), 403
+
+    existing = StudentGroupMember.query.filter_by(group_id=group.id, student_id=student_user.id).first()
+    if not existing:
+        db.session.add(StudentGroupMember(group_id=group.id, student_id=student_user.id))
+    student_user.batch = group.name[:20]
+    db.session.commit()
+    return jsonify(
+        {
+            "ok": True,
+            "message": f"You joined {group.name}.",
+            "batch": _student_group_public_payload(group, {group.id}),
         }
     )
 
@@ -2393,8 +2548,9 @@ def _save_teacher_exam_from_request(teacher, exam=None):
     enrollment_payload = {
         "enrollment_lines": request.form.get("enrollment_lines") if is_multipart else payload.get("enrollment_lines"),
         "group_id": request.form.get("group_id") if is_multipart else payload.get("group_id"),
+        "group_ids": request.form.get("group_ids") if is_multipart else payload.get("group_ids"),
     }
-    if enrollment_payload["enrollment_lines"] or enrollment_payload["group_id"]:
+    if enrollment_payload["enrollment_lines"] or enrollment_payload["group_id"] or enrollment_payload["group_ids"]:
         _, enrollment_errors = _apply_teacher_enrollment_payload(exam, teacher, enrollment_payload)
         if enrollment_errors:
             return None, (
@@ -3579,6 +3735,7 @@ def admin_groups_api():
         if StudentGroup.query.filter(db.func.lower(StudentGroup.name) == name.lower()).first():
             return jsonify({"ok": False, "message": "A group with this name already exists."}), 400
         group = StudentGroup(name=name, description=description, created_by=admin.id)
+        _assign_unique_group_join_code(group)
         db.session.add(group)
         db.session.commit()
         return jsonify({"ok": True, "group": _group_payload(group)}), 201
@@ -3614,10 +3771,23 @@ def admin_group_members_api(group_id):
             skipped += 1
             continue
         db.session.add(StudentGroupMember(group_id=group.id, student_id=student.id))
+        student.batch = group.name[:20]
         existing_student_ids.add(student.id)
         added += 1
     db.session.commit()
     return jsonify({"ok": True, "added": added, "skipped": skipped, "group": _group_payload(group)})
+
+
+@api_bp.route("/admin/groups/<int:group_id>/join-code", methods=["PATCH"])
+@rate_limit("admin_action")
+def admin_group_join_code_api(group_id):
+    admin, error_response = _require_admin_api()
+    if error_response:
+        return error_response
+    group = StudentGroup.query.get_or_404(group_id)
+    _assign_unique_group_join_code(group)
+    db.session.commit()
+    return jsonify({"ok": True, "message": "Batch code regenerated.", "group": _group_payload(group)})
 
 
 @api_bp.route("/admin/groups/<int:group_id>/members/<int:member_id>", methods=["DELETE"])
@@ -3627,6 +3797,8 @@ def admin_group_member_delete_api(group_id, member_id):
     if error_response:
         return error_response
     member = StudentGroupMember.query.filter_by(group_id=group_id, id=member_id).first_or_404()
+    if member.student and member.student.batch == member.group.name[:20]:
+        member.student.batch = None
     db.session.delete(member)
     db.session.commit()
     group = StudentGroup.query.get_or_404(group_id)
@@ -4222,6 +4394,14 @@ def session_status(session_code):
 
     remaining_seconds = ExamService.remaining_seconds_for_session(student_session)
     is_locked = ExamSessionGuard.is_locked(student_session)
+    waiting_sessions = (
+        StudentSession.query.filter_by(exam_set_id=exam.id, status="waiting")
+        .order_by(StudentSession.created_at.asc())
+        .all()
+    )
+    waiting_ids = [item.id for item in waiting_sessions]
+    lobby_position = waiting_ids.index(student_session.id) + 1 if student_session.id in waiting_ids else None
+    student_user = _find_student_by_identifier(student_session.roll_no)
 
     return jsonify(
         {
@@ -4243,6 +4423,19 @@ def session_status(session_code):
             "focus_violations": student_session.focus_violations,
             "max_violations_allowed": SettingsService.max_violations_allowed(),
             "suspicion_score": getattr(student_session, "suspicion_score", 0),
+            "student_session": {
+                "id": student_session.id,
+                "session_code": student_session.session_code,
+                "student_name": student_session.student_name,
+                "roll_no": student_session.roll_no,
+                "profile_picture": url_for("static", filename=student_user.profile_picture) if student_user and student_user.profile_picture else None,
+                "status": student_session.status,
+                "created_at": _iso_datetime(student_session.created_at),
+            },
+            "lobby": {
+                "waiting_count": len(waiting_sessions),
+                "position": lobby_position,
+            },
             "pause_requested": bool(student_session.pause_requested_at),
             "pause_reason": student_session.pause_reason,
             "paused": student_session.status == "paused",

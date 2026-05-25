@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { Plus, Search, Trash2, X } from "lucide-react";
-import { Badge, Button, Card, ConfirmationDialog, EmptyState, Input, Textarea } from "../components/ui";
+import { Copy, Plus, RefreshCw, Search, Trash2, UserPlus, X } from "lucide-react";
+import { Avatar, Badge, Button, Card, ConfirmationDialog, EmptyState, Input, Textarea } from "../components/ui";
 import { api } from "../services/api";
 import { notify } from "../components/ui/Toast";
 import { useLiveRefresh } from "../hooks/useLiveRefresh";
@@ -11,6 +11,9 @@ export default function AdminGroups() {
   const [search, setSearch] = useState("");
   const [newGroup, setNewGroup] = useState({ name: "", description: "" });
   const [memberDrafts, setMemberDrafts] = useState({});
+  const [studentSearches, setStudentSearches] = useState({});
+  const [studentResults, setStudentResults] = useState({});
+  const [searchingGroupId, setSearchingGroupId] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [adminPassword, setAdminPassword] = useState("");
 
@@ -55,6 +58,55 @@ export default function AdminGroups() {
       notify.success(`Added ${data.added} student(s), skipped ${data.skipped}`);
     } catch (error) {
       notify.error(error.response?.data?.message || "Could not add members");
+    }
+  };
+
+  const searchStudents = async group => {
+    const query = (studentSearches[group.id] || "").trim();
+    if (query.length < 2) {
+      notify.error("Type at least two characters to search students.");
+      return;
+    }
+    setSearchingGroupId(group.id);
+    try {
+      const { data } = await api.get("/admin/students/search", { params: { q: query } });
+      setStudentResults(current => ({ ...current, [group.id]: data.students || [] }));
+    } catch (error) {
+      notify.error(error.response?.data?.message || "Could not search students");
+    } finally {
+      setSearchingGroupId(null);
+    }
+  };
+
+  const addStudentToGroup = async (group, student) => {
+    try {
+      const { data } = await api.post(`/admin/groups/${group.id}/members`, { student_id: student.id });
+      setGroups(current => current.map(item => item.id === group.id ? data.group : item));
+      setStudentResults(current => ({ ...current, [group.id]: [] }));
+      setStudentSearches(current => ({ ...current, [group.id]: "" }));
+      notify.success(`${student.name} added to ${group.name}`);
+    } catch (error) {
+      notify.error(error.response?.data?.message || "Could not add student");
+    }
+  };
+
+  const regenerateCode = async group => {
+    try {
+      const { data } = await api.patch(`/admin/groups/${group.id}/join-code`);
+      setGroups(current => current.map(item => item.id === group.id ? data.group : item));
+      notify.success("Batch code regenerated");
+    } catch (error) {
+      notify.error(error.response?.data?.message || "Could not regenerate code");
+    }
+  };
+
+  const copyCode = async code => {
+    if (!code) return;
+    try {
+      await window.navigator.clipboard.writeText(code);
+      notify.success("Batch code copied");
+    } catch {
+      notify.error("Could not copy code");
     }
   };
 
@@ -131,7 +183,64 @@ export default function AdminGroups() {
                     <Badge variant="info">{group.student_count} students</Badge>
                   </div>
 
+                  <div className="mb-4 rounded-lg border border-brand-primary/20 bg-brand-primary/5 p-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-xs font-semibold uppercase text-text-muted">Student join code</p>
+                        <p className="font-mono text-2xl font-bold tracking-[0.2em] text-brand-primary">{group.join_code || "--------"}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button type="button" variant="secondary" size="sm" onClick={() => copyCode(group.join_code)}>
+                          <Copy size={16} /> Copy
+                        </Button>
+                        <Button type="button" variant="ghost" size="sm" onClick={() => regenerateCode(group)}>
+                          <RefreshCw size={16} /> Regenerate
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="space-y-3 rounded-lg border border-border bg-background-base p-3">
+                    <div className="rounded-lg border border-border bg-background-surface p-3">
+                      <div className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
+                        <Input
+                          label="Search Students"
+                          value={studentSearches[group.id] || ""}
+                          onChange={event => setStudentSearches(current => ({ ...current, [group.id]: event.target.value }))}
+                          placeholder="Search by name, roll, username, or email"
+                        />
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          loading={searchingGroupId === group.id}
+                          loadingLabel="Searching"
+                          onClick={() => searchStudents(group)}
+                        >
+                          <Search size={16} /> Search
+                        </Button>
+                      </div>
+                      {(studentResults[group.id] || []).length > 0 && (
+                        <div className="mt-3 max-h-56 overflow-y-auto rounded-lg border border-border">
+                          {(studentResults[group.id] || []).map(student => (
+                            <button
+                              key={student.id}
+                              type="button"
+                              onClick={() => addStudentToGroup(group, student)}
+                              className="flex w-full items-center justify-between gap-3 border-b border-border px-3 py-2 text-left last:border-0 hover:bg-background-elevated"
+                            >
+                              <span className="flex min-w-0 items-center gap-3">
+                                <Avatar name={student.name} src={student.profile_picture} size="sm" />
+                                <span className="min-w-0">
+                                  <span className="block truncate text-sm font-semibold text-text-primary">{student.name}</span>
+                                  <span className="block truncate text-xs text-text-muted">{student.roll_number || student.username} | {student.email || "No email"}</span>
+                                </span>
+                              </span>
+                              <Badge variant="info" size="sm">Add</Badge>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                     <Textarea
                       label="Add Members"
                       value={memberDrafts[group.id] || ""}
@@ -140,7 +249,7 @@ export default function AdminGroups() {
                       placeholder="Paste roll number, username, or email, one per line"
                     />
                     <Button type="button" variant="secondary" size="sm" onClick={() => addMembers(group)}>
-                      <Plus size={16} /> Add Students
+                      <UserPlus size={16} /> Add Students
                     </Button>
                   </div>
 
@@ -149,7 +258,7 @@ export default function AdminGroups() {
                       <table className="w-full text-left text-sm">
                         <thead className="bg-background-elevated text-text-secondary">
                           <tr>
-                            <th className="px-3 py-2">Name</th>
+                            <th className="px-3 py-2">Student</th>
                             <th className="px-3 py-2">Roll</th>
                             <th className="px-3 py-2">Email</th>
                             <th className="px-3 py-2 text-right">Remove</th>
@@ -158,7 +267,12 @@ export default function AdminGroups() {
                         <tbody className="divide-y divide-border">
                           {group.members.map(member => (
                             <tr key={member.id}>
-                              <td className="px-3 py-2 text-text-primary">{member.name}</td>
+                              <td className="px-3 py-2 text-text-primary">
+                                <span className="flex items-center gap-2">
+                                  <Avatar name={member.name} src={member.profile_picture} size="sm" />
+                                  <span>{member.name}</span>
+                                </span>
+                              </td>
                               <td className="px-3 py-2 text-text-secondary">{member.roll_number || "-"}</td>
                               <td className="px-3 py-2 text-text-secondary">{member.email || "-"}</td>
                               <td className="px-3 py-2 text-right">
