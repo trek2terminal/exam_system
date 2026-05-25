@@ -682,6 +682,7 @@ def _exam_editor_payload(exam):
         "set_code": exam.set_code,
         "status": exam.status,
         "total_marks": exam.total_marks,
+        "passing_percentage": getattr(exam, "passing_percentage", 40) or 40,
         "duration_minutes": exam.duration_minutes,
         "attempt_limit": exam.attempt_limit,
         "random_question_count": exam.random_question_count,
@@ -777,6 +778,28 @@ def _teacher_result_export_base_row(student_session):
         student_session.focus_violations,
         result.teacher_remarks if result else "",
     ]
+
+
+def _exam_passing_percentage(exam):
+    try:
+        return int(getattr(exam, "passing_percentage", 40) or 40)
+    except (TypeError, ValueError):
+        return 40
+
+
+def _result_status_payload(result, exam):
+    passing_percentage = _exam_passing_percentage(exam)
+    percentage = float(result.percentage or 0) if result else 0
+    passed = percentage >= passing_percentage
+    return {
+        "passing_percentage": passing_percentage,
+        "passed": passed,
+        "status": "passed" if passed else "failed",
+    }
+
+
+def _student_result_pdf_url(result):
+    return f"/api/student/results/{result.id}/pdf"
 
 
 def _parse_extra_minutes(value):
@@ -1878,6 +1901,7 @@ def student_dashboard_api():
                 "subject": exam.subject,
                 "set_code": exam.set_code,
                 "status": exam.status,
+                "passing_percentage": _exam_passing_percentage(exam),
                 "start_time": _iso_datetime(exam.start_time),
                 "end_time": _iso_datetime(exam.end_time),
                 "duration_minutes": exam.duration_minutes,
@@ -1903,9 +1927,10 @@ def student_dashboard_api():
                     "total_marks_obtained": published_result.total_marks_obtained,
                     "total_marks": published_result.total_marks,
                     "percentage": published_result.percentage,
+                    **_result_status_payload(published_result, exam),
                     "published_at": _iso_datetime(published_result.published_at),
                     "href": f"/react/student/submitted/{latest_session.session_code}",
-                    "pdf_href": url_for("student.result_pdf", session_code=latest_session.session_code),
+                    "pdf_href": _student_result_pdf_url(published_result),
                 }
                 if published_result
                 else None,
@@ -2463,6 +2488,7 @@ def _save_teacher_exam_from_request(teacher, exam=None):
     set_code = (request.form.get("set_code") if is_multipart else payload.get("set_code") or "").strip().upper()
     subject = (request.form.get("subject") if is_multipart else payload.get("subject") or "").strip()
     duration_raw = request.form.get("duration_minutes") if is_multipart else payload.get("duration_minutes")
+    passing_percentage = _parse_int_field(request.form if is_multipart else payload, "passing_percentage")
     access_code = (request.form.get("access_code") if is_multipart else payload.get("access_code") or "").strip().upper()
     start_time = _parse_datetime_local_value(request.form.get("start_time") if is_multipart else payload.get("start_time"))
     end_time = _parse_datetime_local_value(request.form.get("end_time") if is_multipart else payload.get("end_time"))
@@ -2476,6 +2502,9 @@ def _save_teacher_exam_from_request(teacher, exam=None):
     duration_minutes = _parse_int_field({"duration_minutes": duration_raw}, "duration_minutes") or 0
     if duration_minutes <= 0:
         return None, (jsonify({"ok": False, "message": "Duration must be a positive number."}), 400)
+    if passing_percentage is None:
+        passing_percentage = getattr(exam, "passing_percentage", 40) if exam else 40
+    passing_percentage = min(max(int(passing_percentage), 0), 100)
     if start_time and end_time and end_time <= start_time:
         return None, (jsonify({"ok": False, "message": "End time must be after start time."}), 400)
     duplicate = ExamSet.query.filter(ExamSet.set_code == set_code)
@@ -2499,6 +2528,7 @@ def _save_teacher_exam_from_request(teacher, exam=None):
         exam.subject = subject
         exam.duration_minutes = duration_minutes
         exam.total_marks = total_marks
+        exam.passing_percentage = passing_percentage
         exam.start_time = start_time
         exam.end_time = end_time
         exam.shuffle_questions = shuffle_questions
@@ -2514,6 +2544,7 @@ def _save_teacher_exam_from_request(teacher, exam=None):
             subject=subject,
             duration_minutes=duration_minutes,
             total_marks=total_marks,
+            passing_percentage=passing_percentage,
             access_code=access_code or generate_access_code(),
             status="draft",
             created_by=teacher.id,
@@ -3979,6 +4010,30 @@ def teacher_import_question_bank_api(exam_id):
     )
 
 
+@api_bp.route("/student/results/<int:result_id>/pdf")
+def student_result_pdf_api(result_id):
+    _student_name, roll_no, error_response = _require_student_api_details()
+    if error_response:
+        return error_response
+
+    result = Result.query.filter_by(id=result_id, published=True).first_or_404()
+    student_session = result.session
+    if (student_session.roll_no or "").strip().upper() != (roll_no or "").strip().upper():
+        return jsonify({"ok": False, "message": "You do not have permission to download this result."}), 403
+
+    pdf_buffer = create_submission_pdf(student_session, include_unpublished_feedback=False)
+    safe_roll = re.sub(r"[^A-Za-z0-9_-]+", "_", student_session.roll_no or "student").strip("_") or "student"
+    safe_exam = re.sub(r"[^A-Za-z0-9_-]+", "_", student_session.exam_set.set_code or str(student_session.exam_set_id)).strip("_") or "exam"
+    filename = f"result_{safe_roll}_{safe_exam}.pdf"
+    return send_file(
+        pdf_buffer,
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=filename,
+        max_age=0,
+    )
+
+
 @api_bp.route("/student/results")
 def student_results_api():
     if session.get("role") != "student" or not session.get("roll_no"):
@@ -4025,8 +4080,8 @@ def student_results_api():
                 "total_marks": result.total_marks,
                 "percentage": result.percentage,
                 "teacher_remarks": result.teacher_remarks,
-                "status": "passed" if result.percentage >= 40 else "failed",
-                "pdf_url": url_for("student.result_pdf", session_code=student_session.session_code),
+                **_result_status_payload(result, exam),
+                "pdf_url": _student_result_pdf_url(result),
                 "questions": [
                     _result_question_payload(
                         question,
@@ -4093,8 +4148,8 @@ def student_result_detail_api(exam_id):
                 "total_marks": result.total_marks,
                 "percentage": result.percentage,
                 "teacher_remarks": result.teacher_remarks,
-                "status": "passed" if result.percentage >= 40 else "failed",
-                "pdf_url": url_for("student.result_pdf", session_code=student_session.session_code),
+                **_result_status_payload(result, exam),
+                "pdf_url": _student_result_pdf_url(result),
                 "questions": [
                     _result_question_payload(
                         question,

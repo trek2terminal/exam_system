@@ -82,6 +82,7 @@ export default function ExamEditor() {
       formData.append("subject", exam.subject);
       formData.append("set_code", exam.set_code || "A");
       formData.append("duration_minutes", String(exam.duration_minutes || 60));
+      formData.append("passing_percentage", String(exam.passing_percentage ?? 40));
       formData.append("attempt_limit", String(exam.attempt_limit ?? 1));
       formData.append("random_question_count", String(exam.random_question_count || 0));
       if (exam.shuffle_questions) formData.append("shuffle_questions", "on");

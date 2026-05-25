@@ -21,6 +21,7 @@ class ExamSet(db.Model):
     subject = db.Column(db.String(100), nullable=False)
     duration_minutes = db.Column(db.Integer, nullable=False)
     total_marks = db.Column(db.Integer, nullable=False, default=0)
+    passing_percentage = db.Column(db.Integer, nullable=False, default=40)
     random_question_count = db.Column(db.Integer, default=0, nullable=False)
     shuffle_questions = db.Column(db.Boolean, default=False, nullable=False)
     shuffle_options = db.Column(db.Boolean, default=False, nullable=False)

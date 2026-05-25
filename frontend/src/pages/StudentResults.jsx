@@ -6,6 +6,22 @@ import { api } from "../services/api";
 import { formatDateShort } from "../utils/dateFormat";
 import { useLiveRefresh } from "../hooks/useLiveRefresh";
 
+function getResultStatus(result) {
+  const passing = Number(result?.passing_percentage ?? 40);
+  const percentage = Number(result?.percentage ?? 0);
+  const passed = typeof result?.passed === "boolean"
+    ? result.passed
+    : result?.status
+      ? String(result.status).toLowerCase() === "passed"
+      : percentage >= passing;
+  return {
+    passed,
+    passing,
+    label: passed ? "PASSED" : "FAILED",
+    variant: passed ? "success" : "danger"
+  };
+}
+
 export default function StudentResults() {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -101,6 +117,7 @@ export default function StudentResults() {
 }
 
 function ResultCard({ result, expanded, onToggle, onImageClick }) {
+  const resultStatus = getResultStatus(result);
   return (
     <Card>
       {/* Header */}
@@ -139,11 +156,12 @@ function ResultCard({ result, expanded, onToggle, onImageClick }) {
             <div>
               <p className="text-xs font-semibold text-text-muted">STATUS</p>
               <Badge
-                variant={result.percentage >= result.passing_percentage ? "success" : "danger"}
+                variant={resultStatus.variant}
                 className="mt-1"
               >
-                {result.percentage >= result.passing_percentage ? "PASSED" : "FAILED"}
+                {resultStatus.label}
               </Badge>
+              <p className="mt-1 text-xs text-text-muted">Pass mark {resultStatus.passing}%</p>
             </div>
             <div>
               <p className="text-xs font-semibold text-text-muted">DURATION</p>
@@ -171,7 +189,7 @@ function ResultCard({ result, expanded, onToggle, onImageClick }) {
           {/* Download PDF */}
           {result.pdf_url && (
             <div className="border-t border-border/50 pt-4">
-              <Button as="a" href={result.pdf_url} download variant="primary" size="sm">
+              <Button as="a" href={result.pdf_url} variant="primary" size="sm">
                 <Download size={16} /> Download PDF Report
               </Button>
             </div>
@@ -184,10 +202,11 @@ function ResultCard({ result, expanded, onToggle, onImageClick }) {
 
 function ScoreDisplay({ result }) {
   const percentage = result.percentage || 0;
+  const resultStatus = getResultStatus(result);
   const [animatedPercentage, setAnimatedPercentage] = useState(0);
   const circumference = 2 * Math.PI * 45;
   const strokeDashoffset = circumference - (animatedPercentage / 100) * circumference;
-  const color = percentage >= (result.passing_percentage || 40) ? "rgb(var(--color-success))" : "rgb(var(--color-danger))";
+  const color = resultStatus.passed ? "rgb(var(--color-success))" : "rgb(var(--color-danger))";
 
   useEffect(() => {
     const id = window.requestAnimationFrame(() => setAnimatedPercentage(Math.max(0, Math.min(percentage, 100))));

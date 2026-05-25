@@ -534,15 +534,21 @@ def export_pdf(session_code):
 
 @student_bp.route("/result/<session_code>/pdf")
 def result_pdf(session_code):
-    owner_redirect = _redirect_if_not_owner(session_code)
-    if owner_redirect:
-        return owner_redirect
-
     student_session = StudentSession.query.filter_by(session_code=session_code).first_or_404()
     result = Result.query.filter_by(session_id=student_session.id, published=True).first()
     if not result:
         flash("Result PDF is available only after your teacher publishes the result.", "info")
         return redirect(url_for("student.submitted", session_code=session_code))
+
+    owns_attempt = _owns_session(session_code)
+    _student_name, roll_no, redirect_response = _require_student_details()
+    same_student = (
+        not redirect_response
+        and _normalize_roll(roll_no) == _normalize_roll(student_session.roll_no)
+    )
+    if not owns_attempt and not same_student:
+        flash("This result PDF is not available in this browser. Please log in again.", "danger")
+        return redirect(url_for("student.dashboard"))
 
     pdf_buffer = create_submission_pdf(student_session, include_unpublished_feedback=False)
     filename = f"result_{student_session.roll_no}_{student_session.session_code}.pdf"

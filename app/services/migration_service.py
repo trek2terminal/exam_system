@@ -296,6 +296,14 @@ class MigrationService:
         )
 
     @staticmethod
+    def _migration_exam_passing_percentage():
+        MigrationService._add_column_if_missing(
+            "exam_sets",
+            "passing_percentage",
+            "INTEGER NOT NULL DEFAULT 40",
+        )
+
+    @staticmethod
     def _migration_platform_settings_seed():
         if PlatformSettings.query.first():
             return
@@ -418,6 +426,11 @@ class MigrationService:
             "Add self-join codes to student groups",
             _migration_student_group_join_codes.__func__,
         ),
+        (
+            "20260525_021_exam_passing_percentage",
+            "Add per-exam pass threshold",
+            _migration_exam_passing_percentage.__func__,
+        ),
     ]
 
     @staticmethod
@@ -528,6 +541,8 @@ class MigrationService:
             )
         if version == "20260525_020_student_group_join_codes":
             return MigrationService._has_column("student_groups", "join_code")
+        if version == "20260525_021_exam_passing_percentage":
+            return MigrationService._has_column("exam_sets", "passing_percentage")
         return False
 
     @staticmethod
