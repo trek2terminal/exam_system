@@ -5,7 +5,7 @@ import re
 import secrets
 import shutil
 import subprocess
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from difflib import SequenceMatcher
 
 from flask import Blueprint, current_app, jsonify, request, send_file, session, url_for
@@ -431,7 +431,11 @@ def _parse_float_field(payload, field_name):
 
 
 def _iso_datetime(value):
-    return value.isoformat() if value else None
+    if not value:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
+    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _strong_password(password):
@@ -584,6 +588,85 @@ def _account_stats(user):
         "total_teachers": User.query.filter_by(role="teacher").count(),
         "exams_on_platform": ExamSet.query.count(),
     }
+
+
+def _search_item(item_type, title, subtitle, href, keywords=None, score=0):
+    return {
+        "type": item_type,
+        "title": title,
+        "subtitle": subtitle,
+        "href": href,
+        "keywords": keywords or "",
+        "score": score,
+    }
+
+
+def _search_score(item, query):
+    if not query:
+        return int(item.get("score") or 0)
+    haystack = " ".join(
+        str(item.get(key) or "")
+        for key in ("type", "title", "subtitle", "href", "keywords")
+    ).lower()
+    score = int(item.get("score") or 0)
+    for token in query.split():
+        if token in str(item.get("title") or "").lower():
+            score += 8
+        if token in str(item.get("subtitle") or "").lower():
+            score += 4
+        if token in haystack:
+            score += 2
+    return score
+
+
+def _search_pages_for_role(role):
+    page_map = {
+        "admin": [
+            ("Dashboard", "Live counts, recent activity, violations, and shortcuts.", "/react/admin", "workspace overview activity"),
+            ("Users", "Manage admins, teachers, students, passwords, activation, and delete actions.", "/react/admin/users", "accounts user management import students create teacher"),
+            ("Groups", "Manage student groups, join codes, and memberships.", "/react/admin/groups", "classes batches group members"),
+            ("My Drafts", "Resume saved admin drafts.", "/react/admin/drafts", "autosave drafts"),
+            ("Exams", "Review, publish, deactivate, close, and delete exams.", "/react/admin/exams", "exam sets status active draft closed"),
+            ("Proctoring", "Monitor live exam sessions and violations.", "/react/admin/proctoring", "live monitoring violations students"),
+            ("Reports", "Audit logs, violation exports, exam PDFs, and suspicious activity.", "/react/admin/reports", "audit log csv pdf suspicious activity"),
+            ("Settings", "Platform name, login page, registration, security, logo, and backup settings.", "/react/admin/settings", "configuration platform logo theme registration lockout quotes"),
+            ("Profile", "Admin profile and account settings.", "/react/admin/profile", "account password avatar"),
+        ],
+        "teacher": [
+            ("Dashboard", "Teacher workspace overview and exam shortcuts.", "/react/teacher", "workspace overview"),
+            ("My Exams", "Create, edit, publish, and review your exams.", "/react/teacher/exams", "exam sets edit publish submissions"),
+            ("Question Bank", "Reusable questions and import tools.", "/react/teacher/question-bank", "bank reusable mcq coding import"),
+            ("My Drafts", "Resume saved teacher drafts.", "/react/teacher/drafts", "autosave drafts"),
+            ("Proctoring", "Monitor your live exam sessions.", "/react/teacher/proctoring", "live monitoring violations"),
+            ("Reports", "Exam reports and student performance summaries.", "/react/teacher/reports", "analytics results reports"),
+            ("Profile", "Teacher profile and account settings.", "/react/teacher/profile", "account password avatar"),
+        ],
+        "student": [
+            ("Dashboard", "Student workspace, assigned exams, and announcements.", "/react/student", "workspace assigned exams"),
+            ("My Exams", "Available, active, and upcoming exams.", "/react/student/exams", "join exam waiting precheck"),
+            ("Results", "Published exam results and certificates.", "/react/student/results", "marks score percentage certificate"),
+            ("Exam History", "Past attempts and submitted exams.", "/react/student/history", "attempts submissions history"),
+            ("Profile", "Student profile and account settings.", "/react/student/profile", "account password avatar"),
+        ],
+    }
+    return [
+        _search_item("page", title, subtitle, href, keywords, score=3)
+        for title, subtitle, href, keywords in page_map.get(role, [])
+    ]
+
+
+def _filter_search_items(items, query, limit):
+    if not query:
+        return [{**item, "score": int(item.get("score") or 0)} for item in items[:limit]]
+
+    scored = []
+    for item in items:
+        score = _search_score(item, query)
+        if query and score <= 0:
+            continue
+        scored.append({**item, "score": score})
+    scored.sort(key=lambda item: (-item["score"], 0 if item["type"] == "page" else 1, item["title"].lower()))
+    return scored[:limit]
 
 
 def _admin_exam_payload(exam):
@@ -1560,6 +1643,312 @@ def bootstrap():
 @api_bp.route("/settings/public")
 def public_settings_api():
     return jsonify({"ok": True, "settings": _public_settings_payload(SettingsService.get_settings())})
+
+
+@api_bp.route("/search")
+def universal_search_api():
+    user, error_response = _current_session_user()
+    if error_response:
+        return error_response
+
+    role = user.role
+    query = (request.args.get("q") or "").strip().lower()
+    limit = min(max(request.args.get("limit", 10, type=int), 1), 20)
+    items = _search_pages_for_role(role)
+
+    if query:
+        pattern = f"%{query}%"
+        if role == "admin":
+            users = (
+                User.query.filter(
+                    or_(
+                        db.func.lower(User.name).like(pattern),
+                        db.func.lower(User.username).like(pattern),
+                        db.func.lower(User.email).like(pattern),
+                        db.func.lower(User.roll_number).like(pattern),
+                        db.func.lower(User.role).like(pattern),
+                    )
+                )
+                .order_by(User.updated_at.desc())
+                .limit(8)
+                .all()
+            )
+            items.extend(
+                _search_item(
+                    "user",
+                    found_user.name,
+                    f"{found_user.role.title()} | @{found_user.username}{f' | {found_user.roll_number}' if found_user.roll_number else ''}",
+                    f"/react/admin/users?edit={found_user.id}",
+                    f"{found_user.email or ''} {found_user.role} {found_user.roll_number or ''}",
+                )
+                for found_user in users
+            )
+
+            exams = (
+                ExamSet.query.filter(
+                    or_(
+                        db.func.lower(ExamSet.exam_name).like(pattern),
+                        db.func.lower(ExamSet.subject).like(pattern),
+                        db.func.lower(ExamSet.set_code).like(pattern),
+                        db.func.lower(ExamSet.status).like(pattern),
+                    )
+                )
+                .order_by(ExamSet.updated_at.desc())
+                .limit(8)
+                .all()
+            )
+            items.extend(
+                _search_item(
+                    "exam",
+                    exam.exam_name,
+                    f"{exam.subject} | {exam.status}",
+                    "/react/admin/exams",
+                    f"{exam.set_code} {exam.creator.name if exam.creator else ''}",
+                )
+                for exam in exams
+            )
+
+            groups = (
+                StudentGroup.query.filter(
+                    or_(
+                        db.func.lower(StudentGroup.name).like(pattern),
+                        db.func.lower(StudentGroup.description).like(pattern),
+                        db.func.lower(StudentGroup.join_code).like(pattern),
+                    )
+                )
+                .order_by(StudentGroup.updated_at.desc())
+                .limit(6)
+                .all()
+            )
+            items.extend(
+                _search_item(
+                    "group",
+                    group.name,
+                    f"{len(group.members)} member(s) | Code {group.join_code or '-'}",
+                    "/react/admin/groups",
+                    group.description,
+                )
+                for group in groups
+            )
+
+            audit_logs = (
+                AuditLog.query.filter(
+                    or_(
+                        db.func.lower(AuditLog.action).like(pattern),
+                        db.func.lower(AuditLog.resource_type).like(pattern),
+                        db.func.lower(AuditLog.changes).like(pattern),
+                    )
+                )
+                .order_by(AuditLog.created_at.desc())
+                .limit(6)
+                .all()
+            )
+            items.extend(
+                _search_item(
+                    "audit",
+                    _audit_formatted_message(log),
+                    f"{_humanize_audit_action(log.action)} | {log.status or 'logged'}",
+                    "/react/admin/reports",
+                    f"{log.resource_type} {log.changes or ''}",
+                )
+                for log in audit_logs
+            )
+
+            settings = SettingsService.get_settings()
+            settings_text = " ".join(
+                str(value or "")
+                for value in (
+                    settings.platform_name,
+                    settings.welcome_message,
+                    settings.announcement_message,
+                    settings.login_page_heading,
+                    settings.login_page_tagline,
+                    settings.login_page_subheading,
+                    settings.login_page_security_badge_text,
+                    settings.quote_pool,
+                )
+            ).lower()
+            if any(token in settings_text for token in query.split()):
+                items.append(
+                    _search_item(
+                        "settings",
+                        "Platform Settings",
+                        "Login page copy, registration, security, logo, and announcements.",
+                        "/react/admin/settings",
+                        settings_text,
+                        score=7,
+                    )
+                )
+
+        elif role == "teacher":
+            exams = (
+                ExamSet.query.filter(
+                    ExamSet.created_by == user.id,
+                    or_(
+                        db.func.lower(ExamSet.exam_name).like(pattern),
+                        db.func.lower(ExamSet.subject).like(pattern),
+                        db.func.lower(ExamSet.set_code).like(pattern),
+                        db.func.lower(ExamSet.status).like(pattern),
+                    ),
+                )
+                .order_by(ExamSet.updated_at.desc())
+                .limit(10)
+                .all()
+            )
+            items.extend(
+                _search_item(
+                    "exam",
+                    exam.exam_name,
+                    f"{exam.subject} | {exam.status}",
+                    f"/react/teacher/exam/{exam.id}/edit",
+                    exam.set_code,
+                )
+                for exam in exams
+            )
+
+            bank_items = (
+                QuestionBankItem.query.filter(
+                    QuestionBankItem.teacher_id == user.id,
+                    or_(
+                        db.func.lower(QuestionBankItem.question_text).like(pattern),
+                        db.func.lower(QuestionBankItem.question_type).like(pattern),
+                        db.func.lower(QuestionBankItem.exam_title).like(pattern),
+                        db.func.lower(QuestionBankItem.code_language).like(pattern),
+                    ),
+                )
+                .order_by(QuestionBankItem.updated_at.desc())
+                .limit(8)
+                .all()
+            )
+            items.extend(
+                _search_item(
+                    "question",
+                    (item.question_text or "Question")[:90],
+                    f"{item.question_type} | {(item.marks or 0):g} mark(s)",
+                    "/react/teacher/question-bank",
+                    f"{item.exam_title or ''} {item.code_language or ''}",
+                )
+                for item in bank_items
+            )
+
+            sessions = (
+                StudentSession.query.join(ExamSet, StudentSession.exam_set_id == ExamSet.id)
+                .filter(
+                    ExamSet.created_by == user.id,
+                    or_(
+                        db.func.lower(StudentSession.student_name).like(pattern),
+                        db.func.lower(StudentSession.roll_no).like(pattern),
+                        db.func.lower(StudentSession.status).like(pattern),
+                        db.func.lower(ExamSet.exam_name).like(pattern),
+                    ),
+                )
+                .order_by(StudentSession.updated_at.desc())
+                .limit(8)
+                .all()
+            )
+            items.extend(
+                _search_item(
+                    "session",
+                    session_row.student_name,
+                    f"{session_row.exam_set.exam_name} | {session_row.status}",
+                    f"/react/teacher/session/{session_row.id}/review",
+                    session_row.roll_no,
+                )
+                for session_row in sessions
+            )
+
+        elif role == "student":
+            roll_no = (user.roll_number or session.get("roll_no") or "").strip().upper()
+            exams = (
+                ExamSet.query.outerjoin(ExamEnrollment, ExamEnrollment.exam_set_id == ExamSet.id)
+                .filter(
+                    or_(
+                        ExamSet.access_mode == "open",
+                        db.func.upper(ExamEnrollment.roll_no) == roll_no,
+                    ),
+                    or_(
+                        db.func.lower(ExamSet.exam_name).like(pattern),
+                        db.func.lower(ExamSet.subject).like(pattern),
+                        db.func.lower(ExamSet.set_code).like(pattern),
+                        db.func.lower(ExamSet.status).like(pattern),
+                    ),
+                )
+                .order_by(ExamSet.updated_at.desc())
+                .limit(10)
+                .all()
+            )
+            items.extend(
+                _search_item(
+                    "exam",
+                    exam.exam_name,
+                    f"{exam.subject} | {exam.status}",
+                    "/react/student/exams",
+                    exam.set_code,
+                )
+                for exam in exams
+            )
+
+            student_sessions = (
+                StudentSession.query.join(ExamSet, StudentSession.exam_set_id == ExamSet.id)
+                .filter(
+                    db.func.upper(StudentSession.roll_no) == roll_no,
+                    or_(
+                        db.func.lower(StudentSession.student_name).like(pattern),
+                        db.func.lower(StudentSession.status).like(pattern),
+                        db.func.lower(ExamSet.exam_name).like(pattern),
+                        db.func.lower(ExamSet.subject).like(pattern),
+                    ),
+                )
+                .order_by(StudentSession.updated_at.desc())
+                .limit(8)
+                .all()
+            )
+            items.extend(
+                _search_item(
+                    "attempt",
+                    student_session.exam_set.exam_name,
+                    f"{student_session.status} | {student_session.student_name}",
+                    "/react/student/history",
+                    student_session.roll_no,
+                )
+                for student_session in student_sessions
+            )
+
+            results = (
+                Result.query.join(StudentSession, Result.session_id == StudentSession.id)
+                .join(ExamSet, StudentSession.exam_set_id == ExamSet.id)
+                .filter(
+                    Result.published.is_(True),
+                    db.func.upper(StudentSession.roll_no) == roll_no,
+                    or_(
+                        db.func.lower(ExamSet.exam_name).like(pattern),
+                        db.func.lower(ExamSet.subject).like(pattern),
+                        db.func.lower(StudentSession.student_name).like(pattern),
+                    ),
+                )
+                .order_by(Result.updated_at.desc())
+                .limit(6)
+                .all()
+            )
+            items.extend(
+                _search_item(
+                    "result",
+                    result.session.exam_set.exam_name,
+                    f"{(result.percentage or 0):g}% | {(result.total_marks_obtained or 0):g}/{(result.total_marks or 0):g}",
+                    "/react/student/results",
+                    result.teacher_remarks,
+                )
+                for result in results
+            )
+
+    return jsonify(
+        {
+            "ok": True,
+            "query": query,
+            "role": role,
+            "items": _filter_search_items(items, query, limit),
+        }
+    )
 
 
 @api_bp.route("/drafts", methods=["GET", "POST", "DELETE"])

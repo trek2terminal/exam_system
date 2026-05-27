@@ -11,7 +11,14 @@ const timeFormatter = new Intl.DateTimeFormat("en-US", {
 
 function parseDate(value) {
   if (!value) return null;
-  const date = new Date(value);
+  let normalized = value;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    const hasTime = /[T\s]\d{2}:\d{2}/.test(trimmed);
+    const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(trimmed);
+    normalized = hasTime && !hasTimezone ? `${trimmed}Z` : trimmed;
+  }
+  const date = new Date(normalized);
   return Number.isNaN(date.getTime()) ? null : date;
 }
 

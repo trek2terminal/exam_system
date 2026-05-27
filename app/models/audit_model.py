@@ -39,6 +39,27 @@ class AuditLog(db.Model):
         """Save audit log to database"""
         db.session.add(self)
         db.session.commit()
+        try:
+            from flask import has_request_context, request, session
+            from app.socketio.realtime_events import emit_data_changed
+
+            payload = {
+                "method": "AUDIT",
+                "resource": "audit_logs",
+                "audit_log_id": self.id,
+                "action": self.action,
+            }
+            if has_request_context():
+                payload.update(
+                    {
+                        "role": session.get("role"),
+                        "user_id": session.get("user_id") or session.get("admin_id") or session.get("teacher_id") or session.get("student_user_id"),
+                        "path": request.path,
+                    }
+                )
+            emit_data_changed(payload)
+        except Exception:
+            pass
 
 
 class ViolationLog(db.Model):

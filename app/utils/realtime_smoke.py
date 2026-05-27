@@ -84,6 +84,7 @@ def _seed_smoke_data():
         question_text="Realtime smoke question?",
         question_type="short",
         marks=1,
+        time_limit_seconds=0,
     )
     db.session.add(question)
     db.session.flush()

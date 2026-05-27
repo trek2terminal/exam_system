@@ -50,6 +50,7 @@ export default function AdminUserManagement() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
+  const [handledEditId, setHandledEditId] = useState("");
   const [editForm, setEditForm] = useState({ name: "", email: "", roll_number: "" });
   const [editAdminPassword, setEditAdminPassword] = useState("");
   const [sessionUser, setSessionUser] = useState(null);
@@ -200,7 +201,7 @@ export default function AdminUserManagement() {
     }
   };
 
-  const openEdit = user => {
+  const openEdit = useCallback(user => {
     setSelectedUser(user);
     setEditForm({
       name: user.name || "",
@@ -208,7 +209,20 @@ export default function AdminUserManagement() {
       roll_number: user.roll_number || ""
     });
     setEditAdminPassword("");
-  };
+  }, []);
+
+  useEffect(() => {
+    const editId = searchParams.get("edit");
+    if (!editId) {
+      if (handledEditId) setHandledEditId("");
+      return;
+    }
+    if (editId === handledEditId) return;
+    const target = users.find(user => String(user.id) === String(editId));
+    if (!target) return;
+    openEdit(target);
+    setHandledEditId(editId);
+  }, [handledEditId, openEdit, searchParams, users]);
 
   const saveUserEdit = async event => {
     event.preventDefault();

@@ -71,6 +71,22 @@ def emit_data_changed(payload=None):
     socketio.emit("app:data_changed", clean_payload, room=app_updates_room())
 
 
+def emit_socket_data_changed(payload=None):
+    if not realtime_enabled():
+        return
+    clean_payload = {
+        **(payload or {}),
+        "role": session.get("role"),
+        "user_id": (
+            session.get("user_id")
+            or session.get("admin_id")
+            or session.get("teacher_id")
+            or session.get("student_user_id")
+        ),
+    }
+    socketio.emit("app:data_changed", clean_payload, room=app_updates_room())
+
+
 def _current_user_context():
     role = session.get("role")
     user_id = (
@@ -218,4 +234,13 @@ if SOCKETIO_AVAILABLE:
                 "type": violation.violation_type if violation else data.get("type"),
                 "count": student_session.focus_violations,
             },
+        )
+        emit_socket_data_changed(
+            {
+                "method": "SOCKET",
+                "path": "exam:violation",
+                "resource": "violations",
+                "session_id": student_session.id,
+                "exam_id": student_session.exam_set_id,
+            }
         )

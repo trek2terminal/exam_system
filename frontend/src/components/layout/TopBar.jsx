@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Bell, ChevronDown, LogOut, Menu, Moon, Search, Settings, Sun, User } from "lucide-react";
 import { Avatar, Badge, Button, cn } from "../ui";
 import { breadcrumbFor, logoutHref, normalizeReactHref, roleLabel, userName, userSubtitle } from "./navigation";
 import { formatDate } from "../../utils/dateFormat";
+import { api } from "../../services/api";
 
 function humanizeLabel(value) {
   if (!value) return "Notice";
@@ -15,8 +16,15 @@ export function TopBar({ auth, notifications, theme, onToggleTheme, onMarkAllRea
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState("");
+  const [activeSearchIndex, setActiveSearchIndex] = useState(0);
   const containerRef = useRef(null);
+  const searchInputRef = useRef(null);
   const location = useLocation();
+  const navigate = useNavigate();
   const breadcrumbs = breadcrumbFor(location.pathname, auth?.role);
   const unreadCount = notifications?.unread_count || 0;
   const unreadItems = useMemo(() => notifications?.recent || notifications?.items || [], [notifications]);
@@ -29,11 +37,92 @@ export function TopBar({ auth, notifications, theme, onToggleTheme, onMarkAllRea
       if (!containerRef.current.contains(event.target)) {
         setShowNotifications(false);
         setShowUserMenu(false);
+        setSearchOpen(false);
       }
     }
     document.addEventListener("pointerdown", onDocClick);
     return () => document.removeEventListener("pointerdown", onDocClick);
   }, []);
+
+  useEffect(() => {
+    if (!searchOpen) return undefined;
+    const frame = window.requestAnimationFrame(() => searchInputRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [searchOpen]);
+
+  useEffect(() => {
+    if (!searchOpen || !auth?.role) return undefined;
+    let active = true;
+    const timer = window.setTimeout(async () => {
+      setSearchLoading(true);
+      setSearchError("");
+      try {
+        const { data } = await api.get("/search", {
+          params: { q: searchTerm.trim(), limit: 8 }
+        });
+        if (!active) return;
+        setSearchResults(data.items || []);
+        setActiveSearchIndex(0);
+      } catch (error) {
+        if (!active) return;
+        setSearchResults([]);
+        setSearchError(error.message || "Search failed");
+      } finally {
+        if (active) setSearchLoading(false);
+      }
+    }, 180);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [auth?.role, searchOpen, searchTerm]);
+
+  const closeSearch = () => {
+    setSearchOpen(false);
+    setSearchTerm("");
+    setSearchError("");
+    setActiveSearchIndex(0);
+  };
+
+  const openSearch = () => {
+    setSearchOpen(true);
+    setShowNotifications(false);
+    setShowUserMenu(false);
+  };
+
+  const selectSearchResult = item => {
+    if (!item?.href) return;
+    const fallback = auth?.role ? `/react/${auth.role}` : "/react";
+    const href = normalizeReactHref(item.href, fallback);
+    closeSearch();
+    if (href.startsWith("/react/") || href === "/react") {
+      navigate(href.replace(/^\/react/, "") || "/");
+      return;
+    }
+    window.location.href = href;
+  };
+
+  const onSearchKeyDown = event => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeSearch();
+      return;
+    }
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveSearchIndex(current => Math.min(current + 1, Math.max(searchResults.length - 1, 0)));
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveSearchIndex(current => Math.max(current - 1, 0));
+      return;
+    }
+    if (event.key === "Enter" && searchResults[activeSearchIndex]) {
+      event.preventDefault();
+      selectSearchResult(searchResults[activeSearchIndex]);
+    }
+  };
 
   return (
     <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-border/80 bg-background-card/82 px-3 shadow-sm backdrop-blur-2xl md:px-5">
@@ -56,50 +145,98 @@ export function TopBar({ auth, notifications, theme, onToggleTheme, onMarkAllRea
       </div>
 
       <div className="ml-auto flex items-center gap-2" ref={containerRef}>
-        {searchOpen && (
-          <label className="hidden h-9 w-56 items-center gap-2 rounded-md border border-border bg-background-card/80 px-3 text-sm text-text-secondary shadow-sm backdrop-blur-xl md:flex">
-            <Search size={18} strokeWidth={2.25} />
-            <input
-              className="min-w-0 flex-1 bg-transparent text-text-primary outline-none placeholder:text-text-muted"
-              placeholder="Search"
-              autoFocus
-            />
-          </label>
-        )}
+        <div className={cn("relative", searchOpen && "md:w-80")}>
+          {searchOpen && (
+            <>
+              <label className="fixed left-3 right-3 top-16 z-50 flex h-11 items-center gap-2 rounded-md border border-border bg-background-card/95 px-3 text-sm text-text-secondary shadow-elevated backdrop-blur-2xl md:static md:mt-0 md:w-full md:shadow-sm">
+                <Search size={21} strokeWidth={2.4} />
+                <input
+                  ref={searchInputRef}
+                  className="min-w-0 flex-1 bg-transparent text-text-primary outline-none placeholder:text-text-muted"
+                  placeholder={`Search ${roleLabel(auth?.role).toLowerCase()} workspace`}
+                  value={searchTerm}
+                  onChange={event => setSearchTerm(event.target.value)}
+                  onKeyDown={onSearchKeyDown}
+                  autoComplete="off"
+                />
+              </label>
+              <div className="fixed left-3 right-3 top-[7.25rem] z-50 overflow-hidden rounded-card border border-border bg-background-card/95 shadow-elevated backdrop-blur-2xl md:absolute md:left-auto md:right-0 md:top-[calc(100%+0.5rem)] md:w-full">
+                <div className="border-b border-border px-3 py-2 text-xs font-semibold text-text-muted">
+                  {searchTerm.trim() ? "Search results" : "Quick destinations"}
+                </div>
+                <div className="max-h-80 overflow-auto">
+                  {searchLoading && (
+                    <div className="px-3 py-4 text-sm text-text-muted">Searching...</div>
+                  )}
+                  {!searchLoading && searchError && (
+                    <div className="px-3 py-4 text-sm text-danger">{searchError}</div>
+                  )}
+                  {!searchLoading && !searchError && searchResults.length === 0 && (
+                    <div className="px-3 py-4 text-sm text-text-muted">No results found.</div>
+                  )}
+                  {!searchLoading && !searchError && searchResults.map((item, index) => (
+                    <button
+                      key={`${item.type}-${item.href}-${item.title}-${index}`}
+                      type="button"
+                      className={cn(
+                        "flex w-full items-start gap-3 border-b border-border/70 px-3 py-3 text-left transition last:border-b-0",
+                        index === activeSearchIndex ? "bg-brand-primary/10" : "hover:bg-background-elevated"
+                      )}
+                      onMouseEnter={() => setActiveSearchIndex(index)}
+                      onClick={() => selectSearchResult(item)}
+                    >
+                      <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-primary/10 text-brand-primary">
+                        <Search size={17} />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-2">
+                          <span className="truncate text-sm font-semibold text-text-primary">{item.title}</span>
+                          <Badge variant="secondary" size="sm">{item.type}</Badge>
+                        </span>
+                        <span className="mt-0.5 block truncate text-xs text-text-muted">{item.subtitle || item.href}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
         <div className="flex items-center gap-1">
           <Button
             variant="ghost"
             className={cn(
-              "h-10 w-10 rounded-lg px-0 transition duration-150 hover:bg-black/[0.08] dark:hover:bg-white/10",
+              "h-11 w-11 rounded-lg px-0 transition duration-150 hover:bg-black/[0.08] dark:hover:bg-white/10",
               searchOpen && "bg-background-elevated dark:bg-white/10"
             )}
             aria-label="Search"
-            onClick={() => setSearchOpen(current => !current)}
+            onClick={() => searchOpen ? closeSearch() : openSearch()}
           >
-            <Search size={20} strokeWidth={2.3} />
+            <Search size={24} strokeWidth={2.35} />
           </Button>
 
           <Button
-            className="h-10 w-10 rounded-lg px-0 transition duration-150 hover:bg-black/[0.08] dark:hover:bg-white/10"
+            className="h-11 w-11 rounded-lg px-0 transition duration-150 hover:bg-black/[0.08] dark:hover:bg-white/10"
             variant="ghost"
             aria-label="Toggle theme"
             onClick={onToggleTheme}
           >
-            {theme === "dark" ? <Moon size={20} strokeWidth={2.3} /> : <Sun size={20} strokeWidth={2.3} />}
+            {theme === "dark" ? <Moon size={24} strokeWidth={2.35} /> : <Sun size={24} strokeWidth={2.35} />}
           </Button>
 
           <div className="relative">
             <Button
-              className="relative h-10 w-10 rounded-lg px-0 transition duration-150 hover:bg-black/[0.08] dark:hover:bg-white/10"
+              className="relative h-11 w-11 rounded-lg px-0 transition duration-150 hover:bg-black/[0.08] dark:hover:bg-white/10"
               variant="ghost"
               aria-label="Notifications"
               aria-expanded={showNotifications}
               onClick={() => {
                 setShowNotifications(current => !current);
                 setShowUserMenu(false);
+                setSearchOpen(false);
               }}
             >
-              <Bell size={20} strokeWidth={2.3} />
+              <Bell size={24} strokeWidth={2.35} />
               {unreadCount > 0 && (
                 <span className="absolute -right-1 -top-1 grid min-h-5 min-w-5 place-items-center rounded-pill bg-danger px-1 text-[11px] font-bold text-white">
                   {unreadCount > 99 ? "99+" : unreadCount}

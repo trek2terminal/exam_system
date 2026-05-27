@@ -41,6 +41,7 @@ export function useRealtimeBridge(role) {
       return (
         path === "/student"
         || path === "/student/exams"
+        || path === "/admin"
         || path === "/teacher"
         || path === "/teacher/exams"
       );
