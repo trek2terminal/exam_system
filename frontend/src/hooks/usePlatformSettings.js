@@ -8,6 +8,8 @@ export const defaultPlatformSettings = {
   logo_url: "",
   welcomeMessage: "Welcome to the Exam Platform",
   welcome_message: "Welcome to the Exam Platform",
+  student_self_registration: true,
+  studentSelfRegistration: true,
   registration_code_required: false,
   loginPage: {
     heading: "Exam Platform",
@@ -49,6 +51,8 @@ export function normalizePlatformSettings(settings) {
   const loginPage = source.loginPage || source.login_page || {};
   const platformName = source.platformName || source.platform_name || defaultPlatformSettings.platformName;
   const logoUrl = source.logoUrl || source.logo_url || "";
+  const selfRegistrationValue = source.student_self_registration ?? source.studentSelfRegistration ?? defaultPlatformSettings.student_self_registration;
+  const selfRegistrationEnabled = selfRegistrationValue !== false;
   const features = normalizeFeatures(
     loginPage.features || source.login_page_features || source.login_features
   );
@@ -60,6 +64,8 @@ export function normalizePlatformSettings(settings) {
     platform_name: platformName,
     logoUrl,
     logo_url: logoUrl,
+    student_self_registration: selfRegistrationEnabled,
+    studentSelfRegistration: selfRegistrationEnabled,
     registration_code_required: Boolean(source.registration_code_required),
     loginPage: {
       ...defaultPlatformSettings.loginPage,

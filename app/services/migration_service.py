@@ -408,6 +408,22 @@ class MigrationService:
         MigrationService._add_column_if_missing("users", "account_preferences", "TEXT")
 
     @staticmethod
+    def _migration_registration_requests():
+        from app.models.registration_request_model import RegistrationRequest
+
+        RegistrationRequest.__table__.create(db.engine, checkfirst=True)
+        MigrationService._create_index_if_missing(
+            "registration_requests",
+            "ix_registration_requests_status",
+            "status",
+        )
+        MigrationService._create_index_if_missing(
+            "registration_requests",
+            "ix_registration_requests_created_at",
+            "created_at",
+        )
+
+    @staticmethod
     def _migration_platform_settings_seed():
         if PlatformSettings.query.first():
             return
@@ -560,6 +576,11 @@ class MigrationService:
             "Add personal account preferences",
             _migration_user_account_preferences.__func__,
         ),
+        (
+            "20260527_027_registration_requests",
+            "Add student registration access requests",
+            _migration_registration_requests.__func__,
+        ),
     ]
 
     @staticmethod
@@ -697,6 +718,12 @@ class MigrationService:
             )
         if version == "20260525_026_user_account_preferences":
             return MigrationService._has_column("users", "account_preferences")
+        if version == "20260527_027_registration_requests":
+            return (
+                MigrationService._has_table("registration_requests")
+                and MigrationService._has_column("registration_requests", "message")
+                and MigrationService._has_index("registration_requests", "ix_registration_requests_status")
+            )
         return False
 
     @staticmethod

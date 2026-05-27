@@ -18,6 +18,7 @@ from app.models.draft_model import Draft
 from app.models.exam_model import ExamEnrollment, ExamSet, Question, QuestionBankItem
 from app.models.group_model import StudentGroup, StudentGroupMember, generate_group_join_code
 from app.models.notification_model import Notification
+from app.models.registration_request_model import RegistrationRequest
 from app.models.result_model import QuestionMark, Result
 from app.models.submission_model import Answer, StudentSession
 from app.models.user_model import User
@@ -200,6 +201,56 @@ def _draft_payload(draft):
     }
 
 
+def _compact_text(value, max_length=500):
+    text_value = re.sub(r"\s+", " ", str(value or "").strip())
+    if max_length and len(text_value) > max_length:
+        return text_value[:max_length].rstrip()
+    return text_value
+
+
+def _registration_request_payload(registration_request):
+    reviewer = registration_request.reviewer
+    return {
+        "id": registration_request.id,
+        "full_name": registration_request.full_name,
+        "preferred_username": registration_request.preferred_username,
+        "email": registration_request.email,
+        "phone": registration_request.phone,
+        "roll_number": registration_request.roll_number,
+        "class_name": registration_request.class_name,
+        "message": registration_request.message,
+        "status": registration_request.status,
+        "admin_note": registration_request.admin_note,
+        "reviewed_by": reviewer.name if reviewer else None,
+        "reviewed_at": _iso_datetime(registration_request.reviewed_at),
+        "created_at": _iso_datetime(registration_request.created_at),
+        "updated_at": _iso_datetime(registration_request.updated_at),
+    }
+
+
+def _notification_payload(item):
+    payload = {
+        "id": item.id,
+        "type": item.notification_type,
+        "message": item.message,
+        "is_read": item.is_read,
+        "read": item.is_read,
+        "created_at": _iso_datetime(item.created_at),
+        "related_entity_type": item.related_entity_type,
+        "related_entity_id": item.related_entity_id,
+    }
+    if item.related_entity_type == "registration_request":
+        payload.update(
+            {
+                "title": "Registration request",
+                "summary": item.message,
+                "href": f"/react/notifications?request={item.related_entity_id}",
+                "action_label": "View details",
+            }
+        )
+    return payload
+
+
 def _public_settings_payload(settings):
     payload = _settings_payload(settings)
     return {
@@ -210,6 +261,8 @@ def _public_settings_payload(settings):
         "tagline": payload.get("login_page_tagline"),
         "welcomeMessage": payload.get("welcome_message"),
         "welcome_message": payload.get("welcome_message"),
+        "student_self_registration": payload.get("student_self_registration"),
+        "studentSelfRegistration": payload.get("student_self_registration"),
         "registration_code_required": payload.get("registration_code_required"),
         "loginPage": {
             "heading": payload.get("login_page_heading"),
@@ -1627,12 +1680,7 @@ def bootstrap():
             "notifications": {
                 "unread_count": NotificationService.unread_count_for_user(user_id),
                 "recent": [
-                    {
-                        "id": item.id,
-                        "type": item.notification_type,
-                        "message": item.message,
-                        "created_at": item.created_at.isoformat(),
-                    }
+                    _notification_payload(item)
                     for item in NotificationService.unread_for_user(user_id, limit=6)
                 ],
             },
@@ -1643,6 +1691,74 @@ def bootstrap():
 @api_bp.route("/settings/public")
 def public_settings_api():
     return jsonify({"ok": True, "settings": _public_settings_payload(SettingsService.get_settings())})
+
+
+@api_bp.route("/registration-requests", methods=["POST"])
+@rate_limit("registration_request", limit=5, window_seconds=300)
+def registration_request_api():
+    settings = SettingsService.get_settings()
+    if settings.student_self_registration:
+        return jsonify({"ok": False, "message": "Student self-registration is currently open. Please create your account from this page."}), 409
+
+    payload = request.get_json(silent=True) or {}
+    full_name = _compact_text(payload.get("full_name") or payload.get("name"), 120)
+    preferred_username = _compact_text(payload.get("preferred_username") or payload.get("username"), 80) or None
+    email = (_compact_text(payload.get("email"), 120) or "").lower() or None
+    phone = _compact_text(payload.get("phone"), 30) or None
+    roll_number = _compact_text(payload.get("roll_number") or payload.get("roll_no"), 50).upper()
+    class_name = _compact_text(payload.get("class_name") or payload.get("className"), 80) or None
+    message = _compact_text(payload.get("message"), 1500)
+
+    if not full_name or not roll_number or not message:
+        return jsonify({"ok": False, "message": "Please share your name, roll number, and message for the admin."}), 400
+    if len(message) < 10:
+        return jsonify({"ok": False, "message": "Please write a little more so the admin understands what you need."}), 400
+    if not email and not phone:
+        return jsonify({"ok": False, "message": "Please provide an email address or phone number so the admin can reach you."}), 400
+    if email and not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+        return jsonify({"ok": False, "message": "Please enter a valid email address."}), 400
+
+    registration_request = RegistrationRequest(
+        full_name=full_name,
+        preferred_username=preferred_username,
+        email=email,
+        phone=phone,
+        roll_number=roll_number,
+        class_name=class_name,
+        message=message,
+        ip_address=get_client_ip(),
+        user_agent=(request.headers.get("User-Agent") or "")[:255],
+    )
+    db.session.add(registration_request)
+    db.session.flush()
+
+    NotificationService.notify_role(
+        "admin",
+        f"{full_name} requested registration access for roll {roll_number}.",
+        notification_type="registration_request",
+        related_entity_type="registration_request",
+        related_entity_id=registration_request.id,
+    )
+    db.session.commit()
+
+    emit_data_changed(
+        {
+            "role": "public",
+            "resource": "registration_requests",
+            "method": "POST",
+            "registration_request_id": registration_request.id,
+            "path": request.path,
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+        }
+    )
+
+    return jsonify(
+        {
+            "ok": True,
+            "message": "Your request was sent to the admin. Please keep an eye on the contact details you shared.",
+            "request": _registration_request_payload(registration_request),
+        }
+    ), 201
 
 
 @api_bp.route("/search")
@@ -1752,6 +1868,34 @@ def universal_search_api():
                     f"{log.resource_type} {log.changes or ''}",
                 )
                 for log in audit_logs
+            )
+
+            registration_requests = (
+                RegistrationRequest.query.filter(
+                    or_(
+                        db.func.lower(RegistrationRequest.full_name).like(pattern),
+                        db.func.lower(RegistrationRequest.preferred_username).like(pattern),
+                        db.func.lower(RegistrationRequest.email).like(pattern),
+                        db.func.lower(RegistrationRequest.phone).like(pattern),
+                        db.func.lower(RegistrationRequest.roll_number).like(pattern),
+                        db.func.lower(RegistrationRequest.class_name).like(pattern),
+                        db.func.lower(RegistrationRequest.message).like(pattern),
+                        db.func.lower(RegistrationRequest.status).like(pattern),
+                    )
+                )
+                .order_by(RegistrationRequest.created_at.desc())
+                .limit(6)
+                .all()
+            )
+            items.extend(
+                _search_item(
+                    "request",
+                    registration_request.full_name,
+                    f"{registration_request.roll_number} | {registration_request.status}",
+                    f"/react/notifications?request={registration_request.id}",
+                    f"{registration_request.email or ''} {registration_request.phone or ''} {registration_request.message}",
+                )
+                for registration_request in registration_requests
             )
 
             settings = SettingsService.get_settings()
@@ -5210,6 +5354,91 @@ def student_result_detail_api(exam_id):
     )
 
 
+@api_bp.route("/admin/registration-requests")
+def admin_registration_requests_api():
+    admin, error_response = _require_admin_api()
+    if error_response:
+        return error_response
+
+    filter_name = (request.args.get("status") or "all").strip().lower()
+    search = (request.args.get("q") or "").strip().lower()
+    page = max(request.args.get("page", 1, type=int), 1)
+    per_page = min(max(request.args.get("per_page", 20, type=int), 1), 100)
+    query = RegistrationRequest.query
+
+    if filter_name in {"new", "reviewed", "closed"}:
+        query = query.filter_by(status=filter_name)
+    if search:
+        pattern = f"%{search}%"
+        query = query.filter(
+            or_(
+                db.func.lower(RegistrationRequest.full_name).like(pattern),
+                db.func.lower(RegistrationRequest.preferred_username).like(pattern),
+                db.func.lower(RegistrationRequest.email).like(pattern),
+                db.func.lower(RegistrationRequest.phone).like(pattern),
+                db.func.lower(RegistrationRequest.roll_number).like(pattern),
+                db.func.lower(RegistrationRequest.class_name).like(pattern),
+                db.func.lower(RegistrationRequest.message).like(pattern),
+            )
+        )
+
+    pagination = query.order_by(RegistrationRequest.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
+    return jsonify(
+        {
+            "ok": True,
+            "items": [_registration_request_payload(item) for item in pagination.items],
+            "pagination": {
+                "page": pagination.page,
+                "per_page": pagination.per_page,
+                "pages": pagination.pages,
+                "total": pagination.total,
+            },
+        }
+    )
+
+
+@api_bp.route("/admin/registration-requests/<int:request_id>", methods=["GET", "PATCH"])
+@rate_limit("admin_action", methods=("PATCH",))
+def admin_registration_request_detail_api(request_id):
+    admin, error_response = _require_admin_api()
+    if error_response:
+        return error_response
+
+    registration_request = RegistrationRequest.query.get_or_404(request_id)
+    if request.method == "PATCH":
+        payload = request.get_json(silent=True) or {}
+        status = (payload.get("status") or registration_request.status or "new").strip().lower()
+        if status not in {"new", "reviewed", "closed"}:
+            return jsonify({"ok": False, "message": "Invalid request status."}), 400
+        note = _compact_text(payload.get("admin_note"), 1200) if "admin_note" in payload else registration_request.admin_note
+        registration_request.mark_status(status, admin=admin, note=note)
+        db.session.add(
+            AuditLog(
+                user_id=admin.id,
+                action="registration_request_update",
+                resource_type="registration_request",
+                resource_id=registration_request.id,
+                changes=f"status={status}",
+                ip_address=get_client_ip(),
+                user_agent=request.headers.get("User-Agent"),
+            )
+        )
+        db.session.commit()
+        emit_data_changed(
+            {
+                "role": "admin",
+                "user_id": admin.id,
+                "resource": "registration_requests",
+                "method": "PATCH",
+                "registration_request_id": registration_request.id,
+                "path": request.path,
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+            }
+        )
+
+    return jsonify({"ok": True, "request": _registration_request_payload(registration_request)})
+
+
 @api_bp.route("/notifications")
 def notifications_api():
     user_id = session.get("user_id")
@@ -5228,20 +5457,14 @@ def notifications_api():
     elif filter_name == "system":
         query = query.filter(Notification.notification_type.in_(["system", "info"]))
     elif filter_name == "admin":
-        query = query.filter(Notification.notification_type.like("%admin%"))
+        query = query.filter(
+            or_(
+                Notification.notification_type.like("%admin%"),
+                Notification.notification_type == "registration_request",
+            )
+        )
     pagination = query.order_by(Notification.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
-    items = [
-        {
-            "id": item.id,
-            "type": item.notification_type,
-            "message": item.message,
-            "is_read": item.is_read,
-            "created_at": _iso_datetime(item.created_at),
-            "related_entity_type": item.related_entity_type,
-            "related_entity_id": item.related_entity_id,
-        }
-        for item in pagination.items
-    ]
+    items = [_notification_payload(item) for item in pagination.items]
     return jsonify(
         {
             "ok": True,

@@ -526,8 +526,7 @@ def student_register():
     """Student self-registration, controlled by admin settings."""
     platform_settings = SettingsService.get_settings()
     if not platform_settings.student_self_registration:
-        flash("Student registration is currently closed. Please use the details provided by your teacher.", "warning")
-        return redirect("/react/login")
+        return redirect("/react/register")
 
     if request.method == "POST":
         name = request.form.get("name", "").strip()

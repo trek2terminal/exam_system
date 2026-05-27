@@ -7,6 +7,7 @@ import {
   BarChart2,
   BookOpen,
   Check,
+  Clock3,
   Code2,
   Eye,
   EyeOff,
@@ -15,6 +16,9 @@ import {
   Loader2,
   Lock,
   Mail,
+  MessageCircle,
+  Phone,
+  Send,
   Shield,
   ShieldCheck,
   User,
@@ -45,6 +49,17 @@ export default function RegisterPage({ settings }) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [requestSubmitting, setRequestSubmitting] = useState(false);
+  const [requestSent, setRequestSent] = useState(false);
+  const [requestForm, setRequestForm] = useState({
+    fullName: "",
+    username: "",
+    email: "",
+    phone: "",
+    rollNumber: "",
+    className: "",
+    message: ""
+  });
 
   const validations = useMemo(() => ({
     length: password.length >= 8,
@@ -79,6 +94,17 @@ export default function RegisterPage({ settings }) {
   );
   const panelContent = platformSettings.loginPage;
   const enabledFeatures = panelContent.features.filter(feature => feature.enabled !== false);
+  const registrationOpen = platformSettings.student_self_registration !== false;
+  const isRequestValid = Boolean(
+    requestForm.fullName.trim()
+    && requestForm.rollNumber.trim()
+    && requestForm.message.trim().length >= 10
+    && (requestForm.email.trim() || requestForm.phone.trim())
+  );
+
+  const updateRequestForm = (field, value) => {
+    setRequestForm(current => ({ ...current, [field]: value }));
+  };
 
   const handleSubmit = async event => {
     event.preventDefault();
@@ -102,6 +128,38 @@ export default function RegisterPage({ settings }) {
       notify.error(error.message || "Could not create account");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleRequestSubmit = async event => {
+    event.preventDefault();
+    if (!isRequestValid) return;
+    setRequestSubmitting(true);
+    try {
+      const { data } = await api.post("/registration-requests", {
+        full_name: requestForm.fullName,
+        preferred_username: requestForm.username,
+        email: requestForm.email,
+        phone: requestForm.phone,
+        roll_number: requestForm.rollNumber,
+        class_name: requestForm.className,
+        message: requestForm.message
+      });
+      notify.success(data.message || "Your request was sent to the admin");
+      setRequestSent(true);
+      setRequestForm({
+        fullName: "",
+        username: "",
+        email: "",
+        phone: "",
+        rollNumber: "",
+        className: "",
+        message: ""
+      });
+    } catch (error) {
+      notify.error(error.message || "Could not send request");
+    } finally {
+      setRequestSubmitting(false);
     }
   };
 
@@ -176,6 +234,19 @@ export default function RegisterPage({ settings }) {
 
         <main className="flex flex-1 items-center justify-center bg-[#0d0f1a] px-4 py-6 sm:px-6 lg:px-10">
           <section className="registerGlassCard relative mx-auto max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-white/10 bg-white/[0.04] px-5 py-6 shadow-[0_0_60px_rgba(99,102,241,0.12)] backdrop-blur-2xl before:absolute before:left-1/2 before:top-0 before:h-px before:w-2/3 before:-translate-x-1/2 before:bg-gradient-to-r before:from-transparent before:via-indigo-500 before:to-transparent sm:px-10 sm:py-8">
+            {settingsLoading ? (
+              <RegistrationLoadingCard />
+            ) : !registrationOpen ? (
+              <RegistrationPausedCard
+                form={requestForm}
+                isValid={isRequestValid}
+                sent={requestSent}
+                submitting={requestSubmitting}
+                onChange={updateRequestForm}
+                onSubmit={handleRequestSubmit}
+              />
+            ) : (
+              <>
             <div className="text-center">
               <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl border border-indigo-500/30 bg-indigo-500/10 text-indigo-400">
                 <UserPlus className="h-6 w-6" />
@@ -326,8 +397,163 @@ export default function RegisterPage({ settings }) {
                 <ArrowRight className="h-3.5 w-3.5" />
               </Link>
             </div>
+              </>
+            )}
           </section>
         </main>
+      </div>
+    </div>
+  );
+}
+
+function RegistrationLoadingCard() {
+  return (
+    <div className="py-16 text-center">
+      <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl border border-indigo-500/30 bg-indigo-500/10 text-indigo-300">
+        <Loader2 className="h-6 w-6 animate-spin" />
+      </div>
+      <h1 className="mt-4 text-2xl font-black text-white">Checking registration status</h1>
+      <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-gray-500">
+        We are preparing the right student access page for you.
+      </p>
+    </div>
+  );
+}
+
+function RegistrationPausedCard({ form, isValid, sent, submitting, onChange, onSubmit }) {
+  return (
+    <div>
+      <div className="text-center">
+        <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl border border-cyan-300/20 bg-cyan-300/10 text-cyan-200 shadow-[0_0_30px_rgba(34,211,238,0.16)]">
+          <MessageCircle className="h-7 w-7" />
+        </div>
+        <h1 className="mt-4 text-2xl font-black text-white">Registration is paused for now</h1>
+        <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-gray-400">
+          Student self-registration is currently closed. Send your details to the admin and they can help you with access.
+        </p>
+      </div>
+
+      <div className="mb-5 mt-5 h-px w-full bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+
+      {sent && (
+        <div className="mb-5 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm font-semibold text-emerald-100">
+          Your message has reached the admin inbox.
+        </div>
+      )}
+
+      <form className="space-y-5" onSubmit={onSubmit}>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <RegisterInput
+            label="Full Name"
+            name="request_name"
+            placeholder="John Doe"
+            value={form.fullName}
+            onChange={event => onChange("fullName", event.target.value)}
+            autoComplete="name"
+            required
+            icon={User}
+          />
+          <RegisterInput
+            label="Roll Number"
+            name="request_roll"
+            placeholder="e.g., 2026001"
+            value={form.rollNumber}
+            onChange={event => onChange("rollNumber", event.target.value.toUpperCase())}
+            required
+            icon={Hash}
+          />
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <RegisterInput
+            label="Email Address"
+            name="request_email"
+            type="email"
+            placeholder="student@example.com"
+            value={form.email}
+            onChange={event => onChange("email", event.target.value)}
+            autoComplete="email"
+            icon={Mail}
+            helperText="Email or phone is required"
+          />
+          <RegisterInput
+            label="Phone Number"
+            name="request_phone"
+            placeholder="Your contact number"
+            value={form.phone}
+            onChange={event => onChange("phone", event.target.value)}
+            autoComplete="tel"
+            icon={Phone}
+          />
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <RegisterInput
+            label="Preferred Username"
+            name="request_username"
+            placeholder="john2026"
+            value={form.username}
+            onChange={event => onChange("username", event.target.value)}
+            autoComplete="username"
+            icon={AtSign}
+          />
+          <RegisterInput
+            label="Class / Batch"
+            name="request_class"
+            placeholder="Section A, 2026 batch"
+            value={form.className}
+            onChange={event => onChange("className", event.target.value)}
+            icon={BookOpen}
+          />
+        </div>
+
+        <label className="block">
+          <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400">
+            Message to Admin<span className="ml-0.5 text-indigo-400">*</span>
+          </span>
+          <span className="relative block">
+            <MessageCircle className="absolute left-3.5 top-4 h-4 w-4 text-gray-500" />
+            <textarea
+              name="request_message"
+              value={form.message}
+              onChange={event => onChange("message", event.target.value)}
+              placeholder="Tell the admin which course, group, or exam access you need."
+              rows={4}
+              required
+              className="w-full resize-y rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 pl-11 text-sm leading-6 text-white outline-none transition-all duration-200 placeholder:text-gray-600 focus:border-indigo-500/40 focus:ring-2 focus:ring-indigo-500/60 focus:shadow-[0_0_20px_rgba(99,102,241,0.12)]"
+            />
+          </span>
+          <span className="ml-1 mt-1.5 block text-[11px] text-gray-600">Minimum 10 characters</span>
+        </label>
+
+        <button
+          type="submit"
+          disabled={!isValid || submitting}
+          className="registerCreateButton group mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 via-indigo-500 to-purple-500 px-5 py-3.5 text-sm font-bold tracking-wide text-white shadow-[0_0_30px_rgba(99,102,241,0.3)] transition-all duration-200 hover:scale-[1.02] hover:shadow-[0_0_50px_rgba(99,102,241,0.5)] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-70"
+        >
+          {submitting ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Sending request...
+            </>
+          ) : (
+            <>
+              <Send className="h-4 w-4" />
+              Send Request to Admin
+            </>
+          )}
+        </button>
+      </form>
+
+      <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-gray-400 sm:flex-row sm:items-center sm:justify-between">
+        <span className="inline-flex items-center gap-2">
+          <Clock3 className="h-4 w-4 text-cyan-300" />
+          The admin will see this in their notification inbox.
+        </span>
+        <Link to="/login" className="inline-flex items-center gap-1 font-medium text-indigo-400 underline-offset-4 transition-colors hover:text-indigo-300 hover:underline">
+          Back to sign in
+          <ArrowRight className="h-3.5 w-3.5" />
+        </Link>
       </div>
     </div>
   );
