@@ -36,13 +36,13 @@ export function TopBar({ auth, notifications, theme, onToggleTheme, onMarkAllRea
   }, []);
 
   return (
-    <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-border bg-background-card/95 px-4 shadow-sm backdrop-blur md:px-6">
-      <Button variant="ghost" className="h-11 w-11 px-0 md:hidden" aria-label="Open menu" onClick={onOpenDrawer}>
-        <Menu size={20} />
+    <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-border/80 bg-background-card/82 px-3 shadow-sm backdrop-blur-2xl md:px-5">
+      <Button variant="ghost" className="h-10 w-10 px-0 md:hidden" aria-label="Open menu" onClick={onOpenDrawer}>
+        <Menu size={19} />
       </Button>
 
       <div className="min-w-0">
-        <div className="flex items-center gap-2 text-xs font-semibold text-text-muted">
+        <div className="hidden items-center gap-2 text-[11px] font-semibold text-text-muted sm:flex">
           {breadcrumbs.map((item, index) => (
             <span className="inline-flex items-center gap-2" key={item}>
               {index > 0 && <span className="text-text-muted">/</span>}
@@ -50,15 +50,15 @@ export function TopBar({ auth, notifications, theme, onToggleTheme, onMarkAllRea
             </span>
           ))}
         </div>
-        <h1 className="truncate text-lg font-semibold text-text-primary md:text-xl">
+        <h1 className="truncate text-base font-semibold text-text-primary md:text-lg">
           {auth?.role ? `${roleLabel(auth.role)} Workspace` : "Exam Platform"}
         </h1>
       </div>
 
       <div className="ml-auto flex items-center gap-2" ref={containerRef}>
         {searchOpen && (
-          <label className="hidden h-9 w-64 items-center gap-2 rounded-md border border-border bg-background-card px-3 text-sm text-text-secondary shadow-sm md:flex">
-            <Search size={24} strokeWidth={2.35} />
+          <label className="hidden h-9 w-56 items-center gap-2 rounded-md border border-border bg-background-card/80 px-3 text-sm text-text-secondary shadow-sm backdrop-blur-xl md:flex">
+            <Search size={18} strokeWidth={2.25} />
             <input
               className="min-w-0 flex-1 bg-transparent text-text-primary outline-none placeholder:text-text-muted"
               placeholder="Search"
@@ -70,27 +70,27 @@ export function TopBar({ auth, notifications, theme, onToggleTheme, onMarkAllRea
           <Button
             variant="ghost"
             className={cn(
-              "h-12 w-12 rounded-lg px-0 transition duration-150 hover:bg-black/[0.08] dark:hover:bg-white/10",
+              "h-10 w-10 rounded-lg px-0 transition duration-150 hover:bg-black/[0.08] dark:hover:bg-white/10",
               searchOpen && "bg-background-elevated dark:bg-white/10"
             )}
             aria-label="Search"
             onClick={() => setSearchOpen(current => !current)}
           >
-            <Search size={28} strokeWidth={2.35} />
+            <Search size={20} strokeWidth={2.3} />
           </Button>
 
           <Button
-            className="h-12 w-12 rounded-lg px-0 transition duration-150 hover:bg-black/[0.08] dark:hover:bg-white/10"
+            className="h-10 w-10 rounded-lg px-0 transition duration-150 hover:bg-black/[0.08] dark:hover:bg-white/10"
             variant="ghost"
             aria-label="Toggle theme"
             onClick={onToggleTheme}
           >
-            {theme === "dark" ? <Moon size={28} strokeWidth={2.35} /> : <Sun size={28} strokeWidth={2.35} />}
+            {theme === "dark" ? <Moon size={20} strokeWidth={2.3} /> : <Sun size={20} strokeWidth={2.3} />}
           </Button>
 
           <div className="relative">
             <Button
-              className="relative h-12 w-12 rounded-lg px-0 transition duration-150 hover:bg-black/[0.08] dark:hover:bg-white/10"
+              className="relative h-10 w-10 rounded-lg px-0 transition duration-150 hover:bg-black/[0.08] dark:hover:bg-white/10"
               variant="ghost"
               aria-label="Notifications"
               aria-expanded={showNotifications}
@@ -99,7 +99,7 @@ export function TopBar({ auth, notifications, theme, onToggleTheme, onMarkAllRea
                 setShowUserMenu(false);
               }}
             >
-              <Bell size={28} strokeWidth={2.35} />
+              <Bell size={20} strokeWidth={2.3} />
               {unreadCount > 0 && (
                 <span className="absolute -right-1 -top-1 grid min-h-5 min-w-5 place-items-center rounded-pill bg-danger px-1 text-[11px] font-bold text-white">
                   {unreadCount > 99 ? "99+" : unreadCount}
@@ -155,12 +155,12 @@ export function TopBar({ auth, notifications, theme, onToggleTheme, onMarkAllRea
           </div>
         </div>
 
-        <div className="h-8 w-px bg-text-muted/20" />
+        <div className="hidden h-7 w-px bg-text-muted/20 sm:block" />
 
         <div className="relative">
           <Button
             variant="ghost"
-            className="h-9 gap-2 rounded-pill border border-transparent px-2 hover:border-border hover:bg-background-elevated"
+            className="h-9 gap-2 rounded-pill border border-transparent px-1.5 hover:border-border hover:bg-background-elevated sm:px-2"
             aria-label="User menu"
             aria-expanded={showUserMenu}
             onClick={() => {

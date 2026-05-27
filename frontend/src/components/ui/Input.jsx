@@ -27,7 +27,7 @@ export const Input = forwardRef(function Input(
         required={required}
         aria-required={required || undefined}
         className={cn(
-          "min-h-11 w-full rounded-md border bg-background-card px-3 text-base text-text-primary shadow-sm outline-none transition duration-150 ease-out",
+          "min-h-10 w-full rounded-md border bg-background-card/90 px-3 text-sm text-text-primary shadow-sm outline-none transition duration-150 ease-out",
           "placeholder:text-text-muted focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20",
           "disabled:cursor-not-allowed disabled:opacity-60",
           error ? "border-danger focus:border-danger focus:ring-danger/20" : "border-border",

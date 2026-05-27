@@ -63,21 +63,21 @@ export function Modal({ open, onClose, title, children, footer, required = false
         tabIndex={-1}
         onClick={event => event.stopPropagation()}
         className={cn(
-          "max-h-[88vh] w-full max-w-xl overflow-hidden rounded-card border border-border bg-background-card shadow-elevated transition",
+          "max-h-[88vh] w-full max-w-xl overflow-hidden rounded-card border border-border/80 bg-background-card/95 shadow-elevated backdrop-blur-2xl transition",
           isVisible ? "scale-100 opacity-100 duration-200 ease-out" : "scale-95 opacity-0 duration-150 ease-in",
           className
         )}
       >
-        <header className="flex items-center justify-between gap-4 border-b border-border px-5 py-4">
-          <h2 id="modal-title" className="text-xl font-semibold text-text-primary">{title}</h2>
+        <header className="flex items-center justify-between gap-4 border-b border-border px-4 py-3">
+          <h2 id="modal-title" className="text-lg font-semibold text-text-primary">{title}</h2>
           {!required && (
             <Button variant="ghost" size="sm" className="h-11 w-11 px-0" onClick={startClose} aria-label="Close modal">
               <X size={18} />
             </Button>
           )}
         </header>
-        <div className="max-h-[58vh] overflow-auto px-5 py-5">{children}</div>
-        {footer && <footer className="flex justify-end gap-3 border-t border-border px-5 py-4">{footer}</footer>}
+        <div className="max-h-[58vh] overflow-auto px-4 py-4">{children}</div>
+        {footer && <footer className="flex justify-end gap-3 border-t border-border px-4 py-3">{footer}</footer>}
       </section>
     </div>
   );

@@ -11,11 +11,11 @@ export function Sidebar({ auth, platformName, platformLogoUrl, mobile = false, o
   return (
     <aside
       className={cn(
-        "flex h-full flex-col overflow-y-auto border-r border-white/10 bg-background-card text-text-primary shadow-lg dark:bg-[#141827]",
-        mobile ? "w-72 p-5" : "fixed inset-y-0 left-0 z-30 hidden w-16 p-3 md:flex lg:w-60 lg:p-5"
+        "flex h-full flex-col overflow-y-auto border-r border-white/10 bg-background-card/95 text-text-primary shadow-lg backdrop-blur-2xl dark:bg-[#0b1020]/95",
+        mobile ? "w-72 p-5" : "fixed inset-y-0 left-0 z-30 hidden w-16 p-3 md:flex lg:w-56 lg:p-4"
       )}
     >
-      <div className={cn("mb-6 flex items-center gap-3", !mobile && "md:justify-center lg:justify-start")}>
+      <div className={cn("mb-5 flex items-center gap-3", !mobile && "md:justify-center lg:justify-start")}>
         <PlatformLogo
           src={platformLogoUrl}
           name={platformName || "Exam Platform"}
@@ -30,7 +30,7 @@ export function Sidebar({ auth, platformName, platformLogoUrl, mobile = false, o
         </div>
       </div>
 
-      <nav className="grid gap-2 border-b border-white/10 pb-5">
+      <nav className="grid gap-1.5 border-b border-white/10 pb-4">
         {items.map(item => {
           const Icon = item.icon;
           const active = location.pathname === item.to || (item.to !== `/${role}` && location.pathname.startsWith(`${item.to}/`));
@@ -38,10 +38,10 @@ export function Sidebar({ auth, platformName, platformLogoUrl, mobile = false, o
             <Link
               key={item.to}
               className={cn(
-                "flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold transition-all duration-200",
+                "flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm font-semibold transition-all duration-200",
                 active
-                  ? "bg-indigo-600 text-white shadow-lg shadow-indigo-950/25"
-                  : "text-gray-400 hover:bg-white/5 hover:text-white",
+                  ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-950/25"
+                  : "text-gray-400 hover:bg-white/5 hover:text-white hover:translate-x-0.5",
                 !mobile && "md:justify-center lg:justify-start"
               )}
               to={item.to}

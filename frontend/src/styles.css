@@ -43,38 +43,38 @@ input[type="number"]::-webkit-inner-spin-button {
   --color-danger: 220 38 38;
   --color-info: 2 132 199;
   --shadow-card: 0 1px 2px rgba(15,23,42,0.04), 0 10px 28px rgba(37,52,82,0.08);
-  --shadow-elevated: 0 2px 6px rgba(15,23,42,0.08), 0 20px 48px rgba(37,52,82,0.13);
+  --shadow-elevated: 0 2px 8px rgba(15,23,42,0.10), 0 20px 48px rgba(37,52,82,0.15);
 }
 
 .dark {
   color-scheme: dark;
-  --bg: #0f172a;
-  --panel: #182235;
+  --bg: #070a13;
+  --panel: #111827;
   --text: #eef4ff;
   --muted: #a9b4c7;
-  --border: #31405a;
-  --primary: #60a5fa;
+  --border: #26334c;
+  --primary: #8b5cf6;
   --success: #34d399;
   --warning: #fbbf24;
   --danger: #f87171;
   /* dark mode design tokens (RGB triplets) */
-  --color-background-app: 15 23 42;
-  --color-background-base: 15 23 42;
-  --color-background-card: 30 41 59;
-  --color-background-surface: 30 41 59;
-  --color-background-elevated: 51 65 85;
-  --color-border: 51 65 85;
+  --color-background-app: 4 5 15;
+  --color-background-base: 7 10 19;
+  --color-background-card: 15 23 42;
+  --color-background-surface: 18 27 47;
+  --color-background-elevated: 29 40 65;
+  --color-border: 38 51 76;
   --color-text-primary: 248 250 252;
-  --color-text-secondary: 203 213 225;
-  --color-text-muted: 100 116 139;
-  --color-brand-primary: 99 102 241;
-  --color-brand-primary-hover: 129 140 248;
+  --color-text-secondary: 199 210 229;
+  --color-text-muted: 137 150 174;
+  --color-brand-primary: 124 92 255;
+  --color-brand-primary-hover: 142 116 255;
   --color-success: 34 197 94;
   --color-warning: 245 158 11;
   --color-danger: 248 113 113;
   --color-info: 56 189 248;
-  --shadow-card: 0 1px 3px rgba(0,0,0,0.4), 0 4px 16px rgba(0,0,0,0.3);
-  --shadow-elevated: 0 4px 16px rgba(0,0,0,0.3);
+  --shadow-card: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 18px 44px rgb(0 0 0 / 0.28);
+  --shadow-elevated: 0 1px 0 rgb(255 255 255 / 0.04) inset, 0 22px 70px rgb(0 0 0 / 0.38), 0 0 38px rgb(var(--color-brand-primary) / 0.08);
 }
 
 /* Smooth theme transition: keep it targeted so large dashboards do not stutter. */
@@ -361,7 +361,9 @@ html.live-data-updated body::after {
   .loginFeatureItem,
   .adminMissionScanline,
   .adminMissionCard,
-  .registerGlassCard {
+  .registerGlassCard,
+  .appShellSurface::after,
+  .appShellSurface main > * {
     animation: none;
   }
 
@@ -910,9 +912,140 @@ body {
   background: rgb(var(--color-background-app));
   color: var(--text);
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  letter-spacing: 0;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   transition: background 180ms ease, color 180ms ease;
+}
+
+button,
+input,
+textarea,
+select {
+  letter-spacing: 0;
+}
+
+.appShellSurface {
+  background:
+    linear-gradient(180deg, rgb(var(--color-background-base)), rgb(var(--color-background-app)));
+}
+
+.appShellSurface::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgb(var(--color-text-primary) / 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--color-text-primary) / 0.035) 1px, transparent 1px),
+    linear-gradient(135deg, rgb(var(--color-brand-primary) / 0.10), transparent 36%, rgb(var(--color-info) / 0.08) 72%, transparent);
+  background-size: 48px 48px, 48px 48px, 100% 100%;
+  mask-image: linear-gradient(180deg, black 0%, black 58%, transparent 100%);
+}
+
+.appShellSurface::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, transparent, rgb(var(--color-brand-primary) / 0.06), transparent);
+  opacity: 0.7;
+  transform: translateX(-55%);
+  animation: appShellScan 9s ease-in-out infinite;
+}
+
+.appShellSurface main > * {
+  animation: workspaceEnter 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.appShellSurface main h1 {
+  font-size: 1.5rem;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+
+.appShellSurface main h2 {
+  font-size: 1.125rem;
+  line-height: 1.35;
+  letter-spacing: 0;
+}
+
+.appShellSurface main h3 {
+  font-size: 1rem;
+  line-height: 1.35;
+  letter-spacing: 0;
+}
+
+.appShellSurface main p,
+.appShellSurface main td,
+.appShellSurface main th {
+  font-size: 0.875rem;
+}
+
+.appShellSurface main [class*="text-3xl"] {
+  font-size: 1.5rem;
+  line-height: 1.25;
+}
+
+.appShellSurface main [class*="text-2xl"] {
+  font-size: 1.25rem;
+  line-height: 1.3;
+}
+
+@media (min-width: 768px) {
+  .appShellSurface main h1,
+  .appShellSurface main [class*="text-3xl"] {
+    font-size: 1.625rem;
+  }
+}
+
+@media (max-width: 767px) {
+  .appShellSurface main {
+    scrollbar-gutter: stable;
+  }
+
+  .appShellSurface main h1,
+  .appShellSurface main [class*="text-3xl"] {
+    font-size: 1.35rem;
+  }
+
+  .appShellSurface main h2,
+  .appShellSurface main [class*="text-2xl"] {
+    font-size: 1.125rem;
+  }
+
+  .appShellSurface main .grid {
+    min-width: 0;
+  }
+}
+
+@keyframes workspaceEnter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+    filter: blur(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes appShellScan {
+  0%, 100% {
+    transform: translateX(-55%);
+    opacity: 0;
+  }
+  22%, 64% {
+    opacity: 0.7;
+  }
+  50% {
+    transform: translateX(55%);
+  }
 }
 
 html:not(.dark) .appShellSurface {
@@ -960,7 +1093,8 @@ html:not(.dark) .appShellSurface header {
 }
 
 .dark .appShellSurface {
-  background: rgb(var(--color-background-base));
+  background:
+    linear-gradient(180deg, #050713 0%, rgb(var(--color-background-base)) 44%, #090d18 100%);
 }
 
 .font-small {

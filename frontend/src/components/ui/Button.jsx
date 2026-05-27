@@ -12,9 +12,9 @@ const variants = {
 };
 
 const sizes = {
-  sm: "min-h-11 px-3 text-sm",
-  md: "min-h-11 px-4 text-sm",
-  lg: "min-h-12 px-5 text-base"
+  sm: "min-h-10 px-3 text-xs",
+  md: "min-h-10 px-3.5 text-sm",
+  lg: "min-h-11 px-4 text-sm"
 };
 
 export const Button = forwardRef(function Button(
@@ -42,7 +42,7 @@ export const Button = forwardRef(function Button(
       className={cn(
         "inline-flex items-center justify-center gap-2 rounded-md border font-semibold transition duration-150 ease-out",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background-base",
-        "active:scale-[0.97] disabled:pointer-events-none disabled:opacity-60",
+        "shadow-sm hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-60 disabled:hover:translate-y-0",
         !isButton && (disabled || loading) && "pointer-events-none opacity-60",
         variants[variant] || variants.primary,
         sizes[size] || sizes.md,

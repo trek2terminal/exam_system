@@ -12,10 +12,10 @@ export function PageLayout({ children, auth, platformName, platformLogoUrl, noti
   const studentTabs = (roleNavigation.student || []).filter(item => ["Dashboard", "My Exams", "Results"].includes(item.label));
 
   return (
-    <div className="appShellSurface h-screen overflow-hidden text-text-primary">
+    <div className="appShellSurface relative isolate h-screen overflow-hidden text-text-primary">
       <Sidebar auth={auth} platformName={platformName} platformLogoUrl={platformLogoUrl} />
       <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} auth={auth} platformName={platformName} platformLogoUrl={platformLogoUrl} />
-      <div className="flex h-screen min-h-0 flex-col md:pl-16 lg:pl-60">
+      <div className="relative z-10 flex h-screen min-h-0 flex-col md:pl-16 lg:pl-56">
         <TopBar
           auth={auth}
           notifications={notifications}
@@ -24,7 +24,7 @@ export function PageLayout({ children, auth, platformName, platformLogoUrl, noti
           onMarkAllRead={onMarkAllRead}
           onOpenDrawer={() => setDrawerOpen(true)}
         />
-        <main className={cn("min-h-0 flex-1 overflow-y-auto animate-page-fade px-4 pb-8 pt-4 md:px-6 lg:px-8", auth?.role === "student" && "pb-24 md:pb-8")}>
+        <main className={cn("min-h-0 flex-1 overflow-y-auto animate-page-fade px-3 pb-6 pt-3 sm:px-4 md:px-5 lg:px-6", auth?.role === "student" && "pb-24 md:pb-8")}>
           {children}
         </main>
         {auth?.role === "student" && (

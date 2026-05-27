@@ -1,14 +1,14 @@
 import { cn } from "./utils";
 
 const variants = {
-  default: "bg-background-card shadow-card",
-  elevated: "bg-background-card shadow-elevated",
-  flat: "bg-background-card shadow-none"
+  default: "bg-background-card/88 shadow-card backdrop-blur-xl",
+  elevated: "bg-background-card/92 shadow-elevated backdrop-blur-xl",
+  flat: "bg-background-card/80 shadow-none backdrop-blur-xl"
 };
 
 export function Card({ variant = "default", interactive = false, className, children, ...props }) {
   const interactiveClasses =
-    "hover:-translate-y-0.5 hover:scale-[1.01] hover:shadow-elevated focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/30";
+    "hover:-translate-y-0.5 hover:shadow-elevated focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/30";
 
   const roleAttrs = {};
   if (interactive && props.onClick) {
@@ -25,7 +25,7 @@ export function Card({ variant = "default", interactive = false, className, chil
   return (
     <section
       className={cn(
-        "rounded-card border border-border text-text-primary transition duration-200 ease-out",
+        "rounded-card border border-border/80 text-text-primary transition duration-200 ease-out",
         variants[variant] || variants.default,
         interactive && interactiveClasses,
         className

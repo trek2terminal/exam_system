@@ -41,17 +41,17 @@ export function StatCard({ icon: Icon, label, value = 0, trend, variant = "defau
     <Card
       interactive
       className={cn(
-        "grid gap-4 p-5 animate-fade-in-up hover:border-brand-primary/35 hover:shadow-elevated",
+        "grid gap-3 p-4 animate-fade-in-up hover:border-brand-primary/35 hover:shadow-elevated",
         className
       )}
       style={{ animationDelay: "var(--stagger-delay, 0ms)" }}
     >
       <div className="flex items-start justify-between gap-4">
         <span className={cn(
-          "grid h-11 w-11 place-items-center rounded-lg",
+          "grid h-9 w-9 place-items-center rounded-lg",
           iconTones[variant] || iconTones.default
         )}>
-          {Icon && <Icon size={22} />}
+          {Icon && <Icon size={19} />}
         </span>
         {hasTrend && (
           <span className={cn("inline-flex items-center gap-1 rounded-pill px-2 py-1 text-xs font-semibold", trendUp ? "bg-success/10 text-success" : "bg-danger/10 text-danger")}>
@@ -61,8 +61,8 @@ export function StatCard({ icon: Icon, label, value = 0, trend, variant = "defau
         )}
       </div>
       <div>
-        <p className="mb-1 text-sm font-medium text-text-secondary">{label}</p>
-        <strong className="text-3xl font-bold text-text-primary">{displayValue.toLocaleString()}</strong>
+        <p className="mb-1 text-xs font-semibold text-text-secondary">{label}</p>
+        <strong className="text-2xl font-bold text-text-primary">{displayValue.toLocaleString()}</strong>
       </div>
     </Card>
   );

@@ -58,17 +58,17 @@ export function Table({
   }, [page, pageCount]);
 
   return (
-    <section className={cn("overflow-hidden rounded-card border border-border bg-background-card shadow-card", className)}>
+    <section className={cn("overflow-hidden rounded-card border border-border/80 bg-background-card/88 shadow-card backdrop-blur-xl", className)}>
       <div className="overflow-auto">
         <table className={cn("min-w-full border-collapse text-left text-sm", tableClassName)}>
-          <thead className="sticky top-0 z-10 bg-background-surface text-text-secondary">
+          <thead className="sticky top-0 z-10 bg-background-surface/95 text-text-secondary backdrop-blur-xl">
             <tr>
               {columns.map(column => {
                 const isSorted = sort?.key === column.key;
                 const ariaSort = isSorted ? (sort.direction === "asc" ? "ascending" : "descending") : "none";
                 return (
                   <th
-                    className={cn("whitespace-nowrap px-4 py-3 font-semibold", column.headerClassName)}
+                    className={cn("whitespace-nowrap px-3 py-2.5 text-xs font-bold uppercase", column.headerClassName)}
                     key={column.key}
                     role="columnheader"
                     scope="col"
@@ -95,7 +95,7 @@ export function Table({
                 );
               })}
               {renderRowActions && (
-                <th className="w-[220px] whitespace-nowrap px-4 py-3 text-right font-semibold" scope="col">
+                <th className="w-[190px] whitespace-nowrap px-3 py-2.5 text-right text-xs font-bold uppercase" scope="col">
                   Actions
                 </th>
               )}
@@ -107,15 +107,15 @@ export function Table({
                 <td colSpan={totalColumns}><SkeletonTableRows rows={rowsPerPage} /></td>
               </tr>
             ) : visibleRows.map((row, index) => (
-              <tr className="group bg-background-card transition hover:bg-background-surface" key={row[rowKey] || index} role="row">
+              <tr className="group bg-background-card/70 transition hover:bg-background-surface/90" key={row[rowKey] || index} role="row">
                 {columns.map(column => (
-                  <td className={cn("px-4 py-3 text-text-primary", column.cellClassName)} key={column.key} role="cell">
+                  <td className={cn("px-3 py-2.5 text-text-primary", column.cellClassName)} key={column.key} role="cell">
                     {column.render ? column.render(row) : row[column.key]}
                   </td>
                 ))}
                 {renderRowActions && (
-                  <td className="w-[220px] min-w-[220px] px-4 py-3 text-right" role="cell">
-                    <div className="inline-flex min-h-11 items-center justify-end gap-2 opacity-100 transition md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
+                  <td className="w-[190px] min-w-[190px] px-3 py-2.5 text-right" role="cell">
+                    <div className="inline-flex min-h-10 items-center justify-end gap-1.5 opacity-100 transition md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
                       {renderRowActions(row)}
                     </div>
                   </td>
@@ -128,11 +128,11 @@ export function Table({
       {!loading && data.length === 0 && (
         <EmptyState icon={Inbox} heading={emptyMessage} description="New records will appear here when available." compact className="rounded-none border-0" />
       )}
-      <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-3 text-sm text-text-secondary">
+      <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-3 py-2.5 text-sm text-text-secondary">
         <span>Page {page} of {pageCount}</span>
         <div className="flex items-center gap-2">
           <select
-            className="h-10 rounded-md border border-border bg-background-card px-2 text-text-primary shadow-sm"
+            className="h-9 rounded-md border border-border bg-background-card px-2 text-sm text-text-primary shadow-sm"
             value={rowsPerPage}
             onChange={event => {
               setRowsPerPage(Number(event.target.value));

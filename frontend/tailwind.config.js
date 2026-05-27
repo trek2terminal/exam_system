@@ -57,7 +57,7 @@ export default {
         sm: "4px",
         md: "8px",
         lg: "12px",
-        card: "16px",
+        card: "8px",
         pill: "9999px"
       },
       boxShadow: {
