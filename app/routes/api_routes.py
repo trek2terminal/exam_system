@@ -3731,7 +3731,7 @@ def admin_users_api():
     status_filter = (request.args.get("status") or "all").strip().lower()
     search = (request.args.get("search") or "").strip()
 
-    query = User.query
+    query = User.query.filter(or_(User.is_active.is_(True), User.is_verified.is_(True), User.role == "admin"))
     if role_filter in {"admin", "teacher", "student"}:
         query = query.filter_by(role=role_filter)
     if status_filter == "active":
@@ -3952,6 +3952,44 @@ def admin_update_user_api(user_id):
         ip_address=get_client_ip(),
     ).save()
     return jsonify({"ok": True, "user": _user_payload(user)})
+
+
+@api_bp.route("/admin/users/<int:user_id>", methods=["DELETE"])
+@rate_limit("admin_action")
+def admin_delete_user_api(user_id):
+    admin, error_response = _require_admin_api()
+    if error_response:
+        return error_response
+    payload = _get_json_payload()
+    if not _admin_password_matches(payload):
+        return jsonify({"ok": False, "message": "Admin password confirmation failed."}), 403
+
+    user = User.query.get_or_404(user_id)
+    if user.id == admin.id:
+        return jsonify({"ok": False, "message": "You cannot delete your own account."}), 400
+    if user.role == "admin":
+        return jsonify({"ok": False, "message": "Cannot delete admin accounts."}), 400
+
+    username = user.username
+    archived_exams = 0
+    if user.role == "teacher":
+        archived_exams = ExamSet.query.filter_by(created_by=user.id).update({"status": "archived"})
+    user.is_active = False
+    user.is_verified = False
+    user.updated_at = datetime.utcnow()
+    user.clear_active_session_token()
+    db.session.commit()
+
+    AuditLog(
+        user_id=admin.id,
+        action="delete_user_api",
+        resource_type="user",
+        resource_id=user.id,
+        changes=f"Soft deleted user: {username}; archived_exams={archived_exams}",
+        status="success",
+        ip_address=get_client_ip(),
+    ).save()
+    return jsonify({"ok": True, "message": f"User {username} deleted.", "deleted_user_id": user.id})
 
 
 @api_bp.route("/admin/users/<int:user_id>/reset-password", methods=["POST"])

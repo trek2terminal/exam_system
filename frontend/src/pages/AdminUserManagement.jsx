@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Download, Edit2, Eye, RotateCcw, Upload, Plus, ShieldCheck, UserX } from "lucide-react";
+import { Download, Edit2, Eye, RotateCcw, Upload, Plus, ShieldCheck, Trash2, UserX } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { Avatar, Badge, Button, Card, ConfirmationDialog, Input, Modal, Select, Table, Textarea, Tooltip } from "../components/ui";
 import { api } from "../services/api";
@@ -149,24 +149,20 @@ export default function AdminUserManagement() {
     }
   };
 
-  const runSoftDelete = async target => {
+  const runDeleteUser = async target => {
     if (!target?.id || !adminPassword.trim()) return;
     setActionBusy(true);
     try {
-      const { data } = await api.patch(`/admin/users/${target.id}`, {
-        name: target.name,
-        username: target.username,
-        email: target.email,
-        roll_number: target.roll_number,
-        is_active: false,
-        admin_password: adminPassword
+      const { data } = await api.delete(`/admin/users/${target.id}`, {
+        data: { admin_password: adminPassword }
       });
-      setUsers(current => current.map(user => user.id === target.id ? data.user : user));
-      notify.success("User deactivated");
+      setUsers(current => current.filter(user => user.id !== target.id));
+      setSelectedIds(current => current.filter(id => id !== String(target.id)));
+      notify.success(data.message || "User deleted");
       setActionTarget(null);
       setAdminPassword("");
     } catch (error) {
-      notify.error(error.message || "Could not deactivate user");
+      notify.error(error.message || "Could not delete user");
     } finally {
       setActionBusy(false);
     }
@@ -429,6 +425,17 @@ export default function AdminUserManagement() {
                 {row.is_active ? <UserX size={17} /> : <ShieldCheck size={17} />}
               </Button>
             </Tooltip>
+            <Tooltip label="Delete">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-10 w-10 border border-danger/40 px-0 text-danger hover:bg-danger/10"
+                onClick={() => setActionTarget({ type: "delete", user: row })}
+                aria-label="Delete user"
+              >
+                <Trash2 size={17} />
+              </Button>
+            </Tooltip>
           </>
         )}
       />
@@ -575,10 +582,16 @@ export default function AdminUserManagement() {
 
       <ConfirmationDialog
         open={!!actionTarget}
-        title={actionTarget?.type === "deactivate" ? "Deactivate User?" : "Activate User?"}
+        title={actionTarget?.type === "delete" ? "Delete User?" : actionTarget?.type === "deactivate" ? "Deactivate User?" : "Activate User?"}
         description={(
           <div className="space-y-3">
-            <p>{actionTarget?.type === "deactivate" ? "This keeps records for audit/results but disables account access." : "This restores account access."}</p>
+            <p>
+              {actionTarget?.type === "delete"
+                ? "This removes the user from this list, disables account access, and keeps records for audit/results."
+                : actionTarget?.type === "deactivate"
+                  ? "This disables account access while keeping the user in this list."
+                  : "This restores account access."}
+            </p>
             <Input
               label="Admin Password"
               type="password"
@@ -589,10 +602,16 @@ export default function AdminUserManagement() {
             />
           </div>
         )}
-        confirmLabel={actionTarget?.type === "deactivate" ? "Deactivate" : "Activate"}
-        confirmWord={actionTarget?.type === "deactivate" ? "DELETE" : undefined}
-        variant={actionTarget?.type === "deactivate" ? "danger" : "success"}
-        onConfirm={() => actionTarget?.type === "deactivate" ? runSoftDelete(actionTarget.user) : runStatusAction(actionTarget.user, true)}
+        confirmLabel={actionTarget?.type === "delete" ? "Delete" : actionTarget?.type === "deactivate" ? "Deactivate" : "Activate"}
+        confirmWord={actionTarget?.type === "delete" ? "DELETE" : undefined}
+        variant={actionTarget?.type === "activate" ? "success" : "danger"}
+        onConfirm={() => {
+          if (actionTarget?.type === "delete") {
+            runDeleteUser(actionTarget.user);
+            return;
+          }
+          runStatusAction(actionTarget.user, actionTarget?.type === "activate");
+        }}
         loading={actionBusy}
         onClose={() => {
           setActionTarget(null);
