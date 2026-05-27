@@ -10,7 +10,7 @@ class RegistrationRequest(db.Model):
     full_name = db.Column(db.String(120), nullable=False, index=True)
     preferred_username = db.Column(db.String(80), nullable=True)
     email = db.Column(db.String(120), nullable=True, index=True)
-    phone = db.Column(db.String(30), nullable=True)
+    phone = db.Column(db.String(10), nullable=True)
     roll_number = db.Column(db.String(50), nullable=False, index=True)
     class_name = db.Column(db.String(80), nullable=True)
     message = db.Column(db.Text, nullable=False)

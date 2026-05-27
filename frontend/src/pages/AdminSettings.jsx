@@ -6,6 +6,7 @@ import { notify } from "../components/ui/Toast";
 import { api } from "../services/api";
 import { useAppStore } from "../store/appStore";
 import { useDraftAutoSave } from "../hooks/useDraftAutoSave";
+import { clampInteger, integerInput } from "../utils/inputSanitizers";
 
 const tabs = [
   { id: "general", label: "General", icon: Settings2 },
@@ -738,9 +739,9 @@ function SettingsSection({
       <Card className="p-6">
         <div className="space-y-5">
           <h2 className="text-xl font-semibold text-text-primary">Security</h2>
-          <Input label="Violation Threshold" type="number" min="1" value={security.violation_threshold} onChange={event => onSecurityChange("violation_threshold", Number(event.target.value || 1))} required />
-          <Input label="Admin Lockout Count" type="number" min="1" max="10" value={security.admin_lockout_count} onChange={event => onSecurityChange("admin_lockout_count", Number(event.target.value || 1))} helperText="Failed admin attempts before a 30-minute lockout." required />
-          <Input label="Admin Idle Timeout" type="number" min="5" max="1440" value={security.admin_idle_timeout} onChange={event => onSecurityChange("admin_idle_timeout", Number(event.target.value || 5))} helperText="Minutes before an inactive admin session expires." required />
+          <Input label="Violation Threshold" type="text" inputMode="numeric" pattern="[0-9]*" maxLength={2} value={security.violation_threshold} onChange={event => onSecurityChange("violation_threshold", clampInteger(integerInput(event.target.value, 2), 1, 10, 1))} required />
+          <Input label="Admin Lockout Count" type="text" inputMode="numeric" pattern="[0-9]*" maxLength={2} value={security.admin_lockout_count} onChange={event => onSecurityChange("admin_lockout_count", clampInteger(integerInput(event.target.value, 2), 1, 10, 1))} helperText="Failed admin attempts before a 30-minute lockout." required />
+          <Input label="Admin Idle Timeout" type="text" inputMode="numeric" pattern="[0-9]*" maxLength={4} value={security.admin_idle_timeout} onChange={event => onSecurityChange("admin_idle_timeout", clampInteger(integerInput(event.target.value, 4), 5, 1440, 5))} helperText="Minutes before an inactive admin session expires." required />
         </div>
       </Card>
     );

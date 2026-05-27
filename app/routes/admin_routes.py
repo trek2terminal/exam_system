@@ -27,6 +27,7 @@ from app.utils.pdf_base import pdf_response
 from app.utils.helpers import admin_required
 from app.utils.network import get_client_ip
 from app.utils.rate_limiter import rate_limit
+from app.utils.validators import normalize_phone_10
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -608,7 +609,8 @@ def edit_user(user_id):
         name = request.form.get("name", "").strip()
         username = request.form.get("username", "").strip()
         email = request.form.get("email", "").strip() or None
-        phone = request.form.get("phone", "").strip() or None
+        raw_phone = request.form.get("phone", "").strip()
+        phone = normalize_phone_10(raw_phone)
         role = request.form.get("role", user.role).strip()
         department = request.form.get("department", "").strip() or None
         designation = request.form.get("designation", "").strip() or None
@@ -636,6 +638,10 @@ def edit_user(user_id):
             if email_owner:
                 flash("Email already exists.", "danger")
                 return render_template("admin/edit_user.html", user=user, form_data=request.form), 400
+
+        if raw_phone and not phone:
+            flash("Phone number must contain exactly 10 digits.", "danger")
+            return render_template("admin/edit_user.html", user=user, form_data=request.form), 400
 
         if role not in {"admin", "teacher", "student"}:
             flash("Role must be admin, teacher, or student.", "danger")
@@ -1239,10 +1245,8 @@ def reduce_session_time(session_id):
     student_session = StudentSession.query.get_or_404(session_id)
     raw_minutes = request.form.get("minutes", "0").strip()
 
-    try:
-        minutes = int(raw_minutes)
-    except ValueError:
-        minutes = 0
+    minutes = int(raw_minutes) if re.fullmatch(r"\d{1,3}", raw_minutes or "") else 0
+    minutes = min(minutes, 480)
 
     if minutes <= 0:
         flash("Enter a positive number of minutes.", "danger")

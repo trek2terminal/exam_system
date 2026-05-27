@@ -35,7 +35,7 @@ class User(db.Model):
 
     # Optional fields for future use
     email = db.Column(db.String(120), unique=True, nullable=True, index=True)
-    phone = db.Column(db.String(20), nullable=True)
+    phone = db.Column(db.String(10), nullable=True)
     profile_picture = db.Column(db.String(255), nullable=True)
     account_preferences = db.Column(db.Text, nullable=True)
 

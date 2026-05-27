@@ -31,6 +31,7 @@ import { api } from "../services/api";
 import { notify } from "../components/ui/Toast";
 import { useAppStore } from "../store/appStore";
 import { usePlatformSettings } from "../hooks/usePlatformSettings";
+import { digitsOnly } from "../utils/inputSanitizers";
 
 const featureIconMap = { Shield, BarChart2, Code2, Layers, UserCheck, BookOpen, Lock, Zap };
 
@@ -100,6 +101,7 @@ export default function RegisterPage({ settings }) {
     && requestForm.rollNumber.trim()
     && requestForm.message.trim().length >= 10
     && (requestForm.email.trim() || requestForm.phone.trim())
+    && (!requestForm.phone.trim() || requestForm.phone.trim().length === 10)
   );
 
   const updateRequestForm = (field, value) => {
@@ -140,7 +142,7 @@ export default function RegisterPage({ settings }) {
         full_name: requestForm.fullName,
         preferred_username: requestForm.username,
         email: requestForm.email,
-        phone: requestForm.phone,
+        phone: digitsOnly(requestForm.phone, 10),
         roll_number: requestForm.rollNumber,
         class_name: requestForm.className,
         message: requestForm.message
@@ -481,9 +483,13 @@ function RegistrationPausedCard({ form, isValid, sent, submitting, onChange, onS
             name="request_phone"
             placeholder="Your contact number"
             value={form.phone}
-            onChange={event => onChange("phone", event.target.value)}
+            onChange={event => onChange("phone", digitsOnly(event.target.value, 10))}
             autoComplete="tel"
+            inputMode="numeric"
+            pattern="[0-9]{10}"
+            maxLength={10}
             icon={Phone}
+            error={form.phone && form.phone.length !== 10 ? "Enter exactly 10 digits" : ""}
           />
         </div>
 
@@ -570,7 +576,8 @@ function RegisterInput({
   helperText,
   error,
   required = false,
-  icon: Icon
+  icon: Icon,
+  ...props
 }) {
   return (
     <label className="block">
@@ -588,6 +595,7 @@ function RegisterInput({
           onChange={onChange}
           autoComplete={autoComplete}
           required={required}
+          {...props}
           className={cn(
             "w-full rounded-xl border bg-white/[0.04] px-4 py-3 pl-11 text-sm text-white outline-none transition-all duration-200 placeholder:text-gray-600 focus:shadow-[0_0_20px_rgba(99,102,241,0.12)]",
             error

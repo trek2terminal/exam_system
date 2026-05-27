@@ -1,3 +1,5 @@
+import re
+
 from flask import flash
 
 
@@ -38,3 +40,18 @@ def validate_student_join(form_data):
         flash("Access code is required.", "danger")
         return False
     return True
+
+
+def normalize_phone_10(value):
+    digits = re.sub(r"\D", "", str(value or ""))
+    if not digits:
+        return None
+    if len(digits) != 10:
+        return None
+    return digits
+
+
+def phone_10_error(value):
+    if not value:
+        return None
+    return None if normalize_phone_10(value) else "Phone number must contain exactly 10 digits."

@@ -10,7 +10,7 @@ import {
   ShieldAlert,
   Users
 } from "lucide-react";
-import { Badge, Button, Card, EmptyState, Input, Modal, Textarea } from "./components/ui";
+import { Badge, Button, Card, EmptyState, Input, MarksInput, Modal, Textarea } from "./components/ui";
 import { api } from "./services/api";
 import { notify } from "./components/ui/Toast";
 import { formatDate } from "./utils/dateFormat";
@@ -351,9 +351,8 @@ function TeacherSessionReview() {
             )}
 
             <div className="markGrid">
-              <Input
+              <MarksInput
                 label="Marks awarded"
-                type="number"
                 min="0"
                 max={question.marks}
                 step="0.01"

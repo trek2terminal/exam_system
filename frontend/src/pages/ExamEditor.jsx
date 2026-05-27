@@ -489,6 +489,8 @@ function ExamDetailsStep({ exam, onUpdate }) {
           label="Passing Percentage (%)"
           min="0"
           max="100"
+          integer
+          maxDigits={3}
           value={exam?.passing_percentage || 40}
           onChange={e => onUpdate("passing_percentage", parseInt(e.target.value || "0"))}
         />
@@ -499,6 +501,8 @@ function ExamDetailsStep({ exam, onUpdate }) {
           <MarksInput
             label="Exam Duration"
             min="1"
+            integer
+            maxDigits={4}
             value={exam?.duration_minutes || ""}
             onChange={e => onUpdate("duration_minutes", parseInt(e.target.value || "0"))}
             helperText="How long students have to complete the exam"
@@ -720,6 +724,8 @@ function QuestionEditor({ question, onUpdate, onDelete, onSaveToBank, savingToBa
           label="Execution Time Limit"
           min="1"
           max="60"
+          integer
+          maxDigits={2}
           value={question?.execution_time_limit_seconds || 10}
           onChange={event => onUpdate("execution_time_limit_seconds", Number(event.target.value || 10))}
           helperText="Seconds. Used when students run code for this question."
@@ -1142,6 +1148,8 @@ function EnrollmentStep({ exam, examId, onUpdate }) {
               <MarksInput
                 label="Extra Minutes"
                 min="0"
+                integer
+                maxDigits={4}
                 value={manual.extra_time_minutes}
                 onChange={event => setManual(prev => ({ ...prev, extra_time_minutes: Number(event.target.value || 0) }))}
               />
@@ -1272,6 +1280,8 @@ function EnrollmentStep({ exam, examId, onUpdate }) {
                       <MarksInput
                         label="Extra"
                         min="0"
+                        integer
+                        maxDigits={4}
                         value={enrollment.extra_time_minutes || 0}
                         onChange={event => setEnrollments(prev => prev.map(item => (
                           item.id === enrollment.id ? { ...item, extra_time_minutes: Number(event.target.value || 0) } : item
@@ -1342,6 +1352,8 @@ function SettingsStep({ exam, onUpdate }) {
             label="Number of Questions"
             min="1"
             max={exam?.questions?.length || undefined}
+            integer
+            maxDigits={3}
             value={exam?.random_question_count || ""}
             onChange={event => onUpdate("random_question_count", Number(event.target.value || 0))}
             required
@@ -1350,6 +1362,8 @@ function SettingsStep({ exam, onUpdate }) {
         <MarksInput
           label="Attempt Limit"
           min="0"
+          integer
+          maxDigits={3}
           value={exam?.attempt_limit ?? 1}
           onChange={e => onUpdate("attempt_limit", parseInt(e.target.value || "0"))}
           helperText="0 for unlimited attempts"

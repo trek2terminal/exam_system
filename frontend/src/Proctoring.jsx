@@ -29,6 +29,7 @@ import { Select } from "./components/ui/Select";
 import { Avatar } from "./components/ui/Avatar";
 import { cn } from "./components/ui/utils";
 import { formatDate } from "./utils/dateFormat";
+import { integerInput } from "./utils/inputSanitizers";
 
 function formatSeconds(value) {
   const total = Math.max(Number(value || 0), 0);
@@ -564,10 +565,12 @@ function SessionDetail({ sessionItem, isAdmin, onActionMessage, onActionError, o
           <div className="timePenaltyLine">
             <Input
               label="Time penalty"
-              type="number"
-              min="1"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={3}
               value={minutes}
-              onChange={event => setMinutes(event.target.value)}
+              onChange={event => setMinutes(integerInput(event.target.value, 3))}
               required
             />
             <Button variant="secondary" size="sm" disabled={Boolean(busyAction)} onClick={() => requestAction("reduce_time")}>

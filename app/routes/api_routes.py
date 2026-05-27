@@ -38,6 +38,7 @@ from app.utils.helpers import create_exam_report_pdf, create_result_certificate_
 from app.utils.pdf_base import pdf_response
 from app.utils.network import get_client_ip
 from app.utils.rate_limiter import rate_limit
+from app.utils.validators import normalize_phone_10
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 
@@ -463,24 +464,49 @@ def _require_attempt(session_code, payload=None, require_active=False, require_w
     return student_session, None
 
 
-def _parse_int_field(payload, field_name):
+def _parse_int_field(payload, field_name, minimum=None, maximum=None, max_digits=9):
     value = payload.get(field_name)
     if value in (None, ""):
         return None
+    if isinstance(value, bool):
+        return None
+    text_value = str(value).strip()
+    if not re.fullmatch(r"[+-]?\d+", text_value):
+        return None
+    digits = text_value[1:] if text_value[:1] in {"-", "+"} else text_value
+    if max_digits and len(digits) > max_digits:
+        return None
     try:
-        return int(value)
+        number = int(text_value)
     except (TypeError, ValueError):
         return None
+    if minimum is not None:
+        number = max(number, minimum)
+    if maximum is not None:
+        number = min(number, maximum)
+    return number
 
 
-def _parse_float_field(payload, field_name):
+def _parse_float_field(payload, field_name, minimum=None, maximum=None, max_digits=9):
     value = payload.get(field_name)
     if value in (None, ""):
         return None
+    if isinstance(value, bool):
+        return None
+    text_value = str(value).strip()
+    if not re.fullmatch(r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)", text_value):
+        return None
+    if max_digits and len(re.sub(r"\D", "", text_value)) > max_digits:
+        return None
     try:
-        return float(value)
+        number = float(text_value)
     except (TypeError, ValueError):
         return None
+    if minimum is not None:
+        number = max(number, minimum)
+    if maximum is not None:
+        number = min(number, maximum)
+    return number
 
 
 def _iso_datetime(value):
@@ -1133,10 +1159,7 @@ def _student_result_pdf_url(result):
 
 
 def _parse_extra_minutes(value):
-    try:
-        return max(int(value or 0), 0)
-    except (TypeError, ValueError):
-        return 0
+    return _parse_int_field({"extra_time_minutes": value}, "extra_time_minutes", minimum=0, maximum=1440) or 0
 
 
 def _parse_enrollment_line(raw_line):
@@ -1704,7 +1727,8 @@ def registration_request_api():
     full_name = _compact_text(payload.get("full_name") or payload.get("name"), 120)
     preferred_username = _compact_text(payload.get("preferred_username") or payload.get("username"), 80) or None
     email = (_compact_text(payload.get("email"), 120) or "").lower() or None
-    phone = _compact_text(payload.get("phone"), 30) or None
+    raw_phone = _compact_text(payload.get("phone"), 30)
+    phone = normalize_phone_10(raw_phone)
     roll_number = _compact_text(payload.get("roll_number") or payload.get("roll_no"), 50).upper()
     class_name = _compact_text(payload.get("class_name") or payload.get("className"), 80) or None
     message = _compact_text(payload.get("message"), 1500)
@@ -1713,6 +1737,8 @@ def registration_request_api():
         return jsonify({"ok": False, "message": "Please share your name, roll number, and message for the admin."}), 400
     if len(message) < 10:
         return jsonify({"ok": False, "message": "Please write a little more so the admin understands what you need."}), 400
+    if raw_phone and not phone:
+        return jsonify({"ok": False, "message": "Phone number must contain exactly 10 digits."}), 400
     if not email and not phone:
         return jsonify({"ok": False, "message": "Please provide an email address or phone number so the admin can reach you."}), 400
     if email and not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
@@ -3337,10 +3363,12 @@ def _json_exam_question_rows(payload):
             q_type = "long"
         if q_type == "code":
             q_type = "coding"
-        try:
-            marks = float(question.get("max_marks") or question.get("marks") or 1)
-        except (TypeError, ValueError):
-            marks = 1
+        marks = _parse_float_field(
+            {"marks": question.get("max_marks") or question.get("marks") or 1},
+            "marks",
+            minimum=0.01,
+            maximum=10000,
+        ) or 1
         options = parse_options(question.get("options") or [])
         if q_type == "mcq" and len(options) < 2:
             raise ValueError(f"Question {index} needs at least two MCQ options.")
@@ -3349,7 +3377,7 @@ def _json_exam_question_rows(payload):
                 "number": index,
                 "text": text,
                 "type": q_type,
-                "marks": max(marks, 0.01),
+                "marks": marks,
                 "options": options,
                 "answer": (question.get("correct_answer") or "").strip(),
                 "model_answer": (question.get("model_answer") or "").strip(),
@@ -3357,7 +3385,13 @@ def _json_exam_question_rows(payload):
                 "code_snippet": (question.get("code_snippet") or "").strip(),
                 "code_language": (question.get("code_language") or "").strip() or None,
                 "time_limit_seconds": 0,
-                "execution_time_limit_seconds": min(max(int(question.get("execution_time_limit_seconds") or 10), 1), 60),
+                "execution_time_limit_seconds": _parse_int_field(
+                    {"execution_time_limit_seconds": question.get("execution_time_limit_seconds") or 10},
+                    "execution_time_limit_seconds",
+                    minimum=1,
+                    maximum=60,
+                    max_digits=2,
+                ) or 10,
             }
         )
     return rows
@@ -3381,15 +3415,20 @@ def _multipart_exam_question_rows():
         text = (raw_text or "").strip()
         if not text:
             continue
-        try:
-            number = int(q_numbers[index]) if index < len(q_numbers) and q_numbers[index].strip() else index + 1
-        except ValueError:
-            number = index + 1
+        number = _parse_int_field(
+            {"question_number": q_numbers[index] if index < len(q_numbers) else ""},
+            "question_number",
+            minimum=1,
+            maximum=999,
+            max_digits=3,
+        ) or index + 1
         q_type = (q_types[index] if index < len(q_types) else "short").strip().lower()
-        try:
-            marks = float(q_marks[index]) if index < len(q_marks) and q_marks[index].strip() else 1
-        except ValueError:
-            marks = 1
+        marks = _parse_float_field(
+            {"marks": q_marks[index] if index < len(q_marks) else ""},
+            "marks",
+            minimum=0.01,
+            maximum=10000,
+        ) or 1
         options = parse_options(q_options[index] if index < len(q_options) else "")
         if q_type == "mcq" and len(options) < 2:
             raise ValueError(f"Question {number} needs at least two MCQ options.")
@@ -3400,20 +3439,25 @@ def _multipart_exam_question_rows():
             except json.JSONDecodeError:
                 existing_images = []
         image_paths = existing_images + _save_question_images(request.files.getlist(f"question_images_{index}"))
-        try:
-            execution_time_limit_seconds = (
-                int(q_execution_time_limits[index])
-                if index < len(q_execution_time_limits) and q_execution_time_limits[index].strip()
-                else 10
-            )
-        except ValueError:
-            execution_time_limit_seconds = 10
+        execution_time_limit_seconds = _parse_int_field(
+            {
+                "execution_time_limit_seconds": (
+                    q_execution_time_limits[index]
+                    if index < len(q_execution_time_limits)
+                    else ""
+                )
+            },
+            "execution_time_limit_seconds",
+            minimum=1,
+            maximum=60,
+            max_digits=2,
+        ) or 10
         rows.append(
             {
                 "number": number,
                 "text": text,
                 "type": q_type,
-                "marks": max(marks, 0.01),
+                "marks": marks,
                 "options": options,
                 "answer": (q_answers[index] if index < len(q_answers) else "").strip(),
                 "model_answer": (q_model_answers[index] if index < len(q_model_answers) else "").strip(),
@@ -3850,7 +3894,11 @@ def teacher_session_review_api(session_id):
         if not isinstance(marks_items, list):
             return jsonify({"ok": False, "message": "Marks payload must be a list."}), 400
 
-        marks_by_question = {int(item.get("question_id")): item for item in marks_items if item.get("question_id")}
+        marks_by_question = {}
+        for item in marks_items:
+            question_id = _parse_int_field(item, "question_id", minimum=1, max_digits=9)
+            if question_id:
+                marks_by_question[question_id] = item
         total_obtained = 0
         total_possible = sum(question.marks for question in questions)
         clean_marks = {}
@@ -3858,20 +3906,14 @@ def teacher_session_review_api(session_id):
 
         for question in questions:
             item = marks_by_question.get(question.id, {})
-            try:
-                marks_awarded = float(item.get("marks_awarded", 0) or 0)
-            except (TypeError, ValueError):
+            marks_awarded = _parse_float_field(
+                {"marks_awarded": item.get("marks_awarded", 0)},
+                "marks_awarded",
+                minimum=0,
+                maximum=question.marks,
+            )
+            if marks_awarded is None:
                 return jsonify({"ok": False, "message": f"Q{question.question_number} marks must be a number."}), 400
-            if marks_awarded < 0 or marks_awarded > question.marks:
-                return (
-                    jsonify(
-                        {
-                            "ok": False,
-                            "message": f"Q{question.question_number} marks must be between 0 and {question.marks}.",
-                        }
-                    ),
-                    400,
-                )
             clean_marks[question.id] = marks_awarded
             clean_remarks[question.id] = (item.get("teacher_remark") or "").strip()
             total_obtained += marks_awarded
@@ -5602,7 +5644,7 @@ def admin_proctoring_action_api(session_id):
         response_message = f"Second chance granted to {student_session.student_name}."
 
     elif action == "reduce_time":
-        minutes = _parse_int_field(payload, "minutes") or 0
+        minutes = _parse_int_field(payload, "minutes", minimum=1, maximum=480) or 0
         if minutes <= 0:
             return jsonify({"ok": False, "message": "Enter a positive number of minutes."}), 400
         if student_session.status not in {"active", "paused"}:

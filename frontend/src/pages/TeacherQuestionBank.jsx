@@ -465,6 +465,8 @@ function QuestionForm({ formData, setFormData, options, setOptions, onSubmit, sa
           label="Execution Time Limit"
           min="1"
           max="60"
+          integer
+          maxDigits={2}
           value={formData.execution_time_limit_seconds}
           onChange={event => update({ execution_time_limit_seconds: event.target.value })}
           helperText="Seconds allowed for each student code run."
