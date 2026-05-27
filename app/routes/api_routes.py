@@ -398,6 +398,15 @@ def _get_json_payload():
     return payload if isinstance(payload, dict) else {}
 
 
+def _clean_text_value(value, default=""):
+    if value is None:
+        value = default
+    text = str(value).strip()
+    if not text and default:
+        return str(default).strip()
+    return text
+
+
 def _submitted_redirect(session_code):
     return f"/react/student/submitted/{session_code}"
 
@@ -3510,15 +3519,24 @@ def _save_teacher_exam_from_request(teacher, exam=None):
     if exam and exam.status == "active":
         return None, (jsonify({"ok": False, "message": "Deactivate this published exam before editing it."}), 400)
 
-    exam_name = (request.form.get("exam_name") if is_multipart else payload.get("exam_name") or payload.get("name") or "").strip()
-    set_code = (request.form.get("set_code") if is_multipart else payload.get("set_code") or "").strip().upper()
-    subject = (request.form.get("subject") if is_multipart else payload.get("subject") or "").strip()
+    exam_name = _clean_text_value(
+        request.form.get("exam_name") if is_multipart else payload.get("exam_name") or payload.get("name")
+    )
+    set_code = _clean_text_value(
+        request.form.get("set_code") if is_multipart else payload.get("set_code")
+    ).upper()
+    subject = _clean_text_value(
+        request.form.get("subject") if is_multipart else payload.get("subject")
+    )
     duration_raw = request.form.get("duration_minutes") if is_multipart else payload.get("duration_minutes")
     passing_percentage = _parse_int_field(request.form if is_multipart else payload, "passing_percentage")
-    access_mode = (
-        request.form.get("access_mode") if is_multipart else payload.get("access_mode") or "open"
-    ).strip().lower()
-    access_code = (request.form.get("access_code") if is_multipart else payload.get("access_code") or "").strip().upper()
+    access_mode = _clean_text_value(
+        request.form.get("access_mode") if is_multipart else payload.get("access_mode"),
+        "open",
+    ).lower()
+    access_code = _clean_text_value(
+        request.form.get("access_code") if is_multipart else payload.get("access_code")
+    ).upper()
     start_time = _parse_datetime_local_value(request.form.get("start_time") if is_multipart else payload.get("start_time"))
     shuffle_questions = request.form.get("shuffle_questions") == "on" if is_multipart else bool(payload.get("shuffle_questions"))
     shuffle_options = request.form.get("shuffle_options") == "on" if is_multipart else bool(payload.get("shuffle_options"))
