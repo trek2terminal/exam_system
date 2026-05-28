@@ -9,7 +9,7 @@ from datetime import datetime, timezone, timedelta
 from difflib import SequenceMatcher
 
 from flask import Blueprint, current_app, jsonify, request, send_file, session, url_for
-from sqlalchemy import or_
+from sqlalchemy import and_, or_
 from werkzeug.utils import secure_filename
 
 from app.models.audit_model import AuditLog, ViolationLog
@@ -53,6 +53,25 @@ REALTIME_STUDENT_SESSION_ALLOWED_SUFFIXES = (
     "/submit",
     "/violation",
 )
+
+EXAM_NAVIGATOR_STATUSES = {
+    "NOT_VISITED",
+    "VISITED_UNANSWERED",
+    "ANSWERED",
+    "MARKED_REVIEW",
+    "ANSWERED_MARKED",
+}
+
+EXAM_VIOLATION_TYPES = {
+    "FULLSCREEN_EXIT",
+    "TAB_SWITCH",
+    "WINDOW_BLUR",
+    "RIGHT_CLICK",
+    "COPY_ATTEMPT",
+    "PASTE_ATTEMPT",
+    "KEYBOARD_SHORTCUT",
+    "DEVTOOLS_OPEN",
+}
 
 
 def _should_emit_realtime_change(response):
@@ -230,26 +249,180 @@ def _registration_request_payload(registration_request):
 
 
 def _notification_payload(item):
+    notification_type = (item.notification_type or "info").strip()
+    normalized_type = notification_type.lower()
+    related_type = (item.related_entity_type or "").strip().lower()
+    recipient_role = (getattr(item.recipient, "role", None) or "").strip().lower()
+
+    if "admin_pending_requests" in normalized_type:
+        title = "Registration queue"
+        category = "admin"
+        severity = "warning"
+        href = "/react/notifications"
+        action_label = "Review queue"
+    elif "registration_request" in normalized_type or related_type == "registration_request":
+        title = "Registration request"
+        category = "admin"
+        severity = "warning"
+        href = f"/react/notifications?request={item.related_entity_id}"
+        action_label = "Review request"
+    elif "pending_review" in normalized_type:
+        title = "Pending review"
+        category = "exams"
+        severity = "warning"
+        href = f"/react/teacher/exam/{item.related_entity_id}/review" if item.related_entity_id else "/react/teacher"
+        action_label = "Review submissions"
+    elif "exam_reminder" in normalized_type:
+        title = "Exam starts soon"
+        category = "exams"
+        severity = "warning"
+        href = "/react/student/exams"
+        action_label = "Open My Exams"
+    elif "exam_available" in normalized_type:
+        title = "Exam available"
+        category = "exams"
+        severity = "success"
+        href = "/react/student/exams"
+        action_label = "Start exam"
+    elif "result" in normalized_type:
+        title = "Result published"
+        category = "results"
+        severity = "success"
+        href = "/react/student/results"
+        action_label = "View result"
+    elif "violation" in normalized_type or "security" in normalized_type or "warning" in normalized_type:
+        title = "Integrity alert"
+        category = "security"
+        severity = "danger" if "terminated" in normalized_type else "warning"
+        href = "/react/teacher/proctoring" if recipient_role == "teacher" else "/react/admin/proctoring"
+        action_label = "Open proctoring"
+    elif "announcement" in normalized_type or related_type == "announcement":
+        title = "Announcement"
+        category = "announcements"
+        severity = "info"
+        href = "/react/notifications"
+        action_label = "Read"
+    elif "admin_message" in normalized_type or "private_message" in normalized_type or "message" in normalized_type:
+        title = "Message"
+        category = "messages"
+        severity = "info"
+        href = "/react/notifications"
+        action_label = "Open message"
+    elif "exam" in normalized_type or related_type in {"exam", "student_session"}:
+        title = "Exam update"
+        category = "exams"
+        severity = "info"
+        if related_type == "student_session" and item.related_entity_id:
+            href = "/react/teacher"
+        elif related_type == "exam" and item.related_entity_id:
+            if recipient_role == "teacher":
+                href = f"/react/teacher/exam/{item.related_entity_id}/review"
+            elif recipient_role == "admin":
+                href = "/react/admin/exams"
+            else:
+                href = "/react/student/exams"
+        else:
+            href = "/react/notifications"
+        action_label = "Open"
+    elif "student_registered" in normalized_type or related_type == "user":
+        title = "New account"
+        category = "admin"
+        severity = "success"
+        href = "/react/admin/users"
+        action_label = "View users"
+    else:
+        title = "System notice"
+        category = "system"
+        severity = "info"
+        href = "/react/notifications"
+        action_label = "Open"
+
+    summary = _compact_text(item.message, 180)
     payload = {
         "id": item.id,
-        "type": item.notification_type,
+        "type": notification_type,
+        "title": title,
+        "summary": summary,
         "message": item.message,
+        "category": category,
+        "severity": severity,
+        "href": href,
+        "action_label": action_label,
         "is_read": item.is_read,
         "read": item.is_read,
         "created_at": _iso_datetime(item.created_at),
         "related_entity_type": item.related_entity_type,
         "related_entity_id": item.related_entity_id,
     }
-    if item.related_entity_type == "registration_request":
-        payload.update(
-            {
-                "title": "Registration request",
-                "summary": item.message,
-                "href": f"/react/notifications?request={item.related_entity_id}",
-                "action_label": "View details",
-            }
-        )
     return payload
+
+
+def _notification_filter_query(query, filter_name):
+    if filter_name == "unread":
+        return query.filter_by(is_read=False)
+    if filter_name == "system":
+        return query.filter(Notification.notification_type.in_(["system", "info"]))
+    if filter_name == "admin":
+        return query.filter(
+            or_(
+                Notification.notification_type.like("%admin%"),
+                Notification.notification_type == "registration_request",
+                Notification.notification_type == "student_registered",
+                Notification.related_entity_type == "registration_request",
+            )
+        )
+    if filter_name == "exams":
+        return query.filter(
+            or_(
+                Notification.notification_type.like("%exam%"),
+                Notification.related_entity_type == "exam",
+                Notification.related_entity_type == "student_session",
+            )
+        )
+    if filter_name == "results":
+        return query.filter(Notification.notification_type.like("%result%"))
+    if filter_name == "security":
+        return query.filter(
+            or_(
+                Notification.notification_type.like("%violation%"),
+                Notification.notification_type.like("%security%"),
+                Notification.notification_type.like("%warning%"),
+            )
+        )
+    if filter_name == "messages":
+        return query.filter(
+            or_(
+                Notification.notification_type.like("%message%"),
+                Notification.notification_type.like("%announcement%"),
+                Notification.related_entity_type == "announcement",
+            )
+        )
+    return query
+
+
+def _notification_counts_payload(user_id):
+    base = Notification.query.filter_by(recipient_user_id=user_id)
+    return {
+        "all": base.count(),
+        "unread": base.filter_by(is_read=False).count(),
+        "admin": _notification_filter_query(base, "admin").count(),
+        "exams": _notification_filter_query(base, "exams").count(),
+        "results": _notification_filter_query(base, "results").count(),
+        "security": _notification_filter_query(base, "security").count(),
+        "messages": _notification_filter_query(base, "messages").count(),
+        "system": _notification_filter_query(base, "system").count(),
+    }
+
+
+def _run_due_notification_reminders(user):
+    if not user:
+        return 0
+    try:
+        return NotificationService.run_due_reminders_for_user(user)
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Notification reminder generation failed.")
+        return 0
 
 
 def _public_settings_payload(settings):
@@ -329,6 +502,81 @@ def _humanize_audit_action(action):
     return clean_action[:1].upper() + clean_action[1:]
 
 
+def _audit_category_from_values(action, resource_type):
+    action_text = (action or "").lower()
+    resource_text = (resource_type or "").lower()
+    if any(fragment in action_text for fragment in ("violation", "security", "terminate", "second_chance", "reduce_time", "pause", "proctor")):
+        return "security"
+    if any(fragment in action_text for fragment in ("export", "download", "report", "backup")):
+        return "exports"
+    if any(fragment in action_text for fragment in ("settings", "logo", "announcement", "platform")) or resource_text in {"settings", "system"}:
+        return "settings"
+    if resource_text == "user" or any(fragment in action_text for fragment in ("user", "account", "login", "registration", "password")):
+        return "accounts"
+    if resource_text in {"exam", "exam_set", "question", "answer", "student_session", "session", "result"} or any(fragment in action_text for fragment in ("exam", "result", "question", "session", "submit", "publish")):
+        return "exams"
+    return "system"
+
+
+def _audit_severity(item):
+    status = (item.status or "").lower()
+    action = (item.action or "").lower()
+    if status in {"failed", "error"} or any(fragment in action for fragment in ("terminate", "delete", "deactivate")):
+        return "danger"
+    if status == "warning" or any(fragment in action for fragment in ("violation", "security", "reduce_time", "second_chance", "pause")):
+        return "warning"
+    if any(fragment in action for fragment in ("create", "publish", "activate", "success")):
+        return "success"
+    return "info"
+
+
+def _audit_category_condition(category):
+    action = db.func.lower(AuditLog.action)
+    resource = db.func.lower(AuditLog.resource_type)
+    if category == "security":
+        return or_(
+            action.like("%violation%"),
+            action.like("%security%"),
+            action.like("%terminate%"),
+            action.like("%second_chance%"),
+            action.like("%reduce_time%"),
+            action.like("%pause%"),
+            action.like("%proctor%"),
+        )
+    if category == "exports":
+        return or_(action.like("%export%"), action.like("%download%"), action.like("%report%"), action.like("%backup%"))
+    if category == "settings":
+        return or_(
+            action.like("%settings%"),
+            action.like("%logo%"),
+            action.like("%announcement%"),
+            action.like("%platform%"),
+            resource.in_(["settings", "system"]),
+        )
+    if category == "accounts":
+        return or_(
+            resource == "user",
+            action.like("%user%"),
+            action.like("%account%"),
+            action.like("%login%"),
+            action.like("%registration%"),
+            action.like("%password%"),
+        )
+    if category == "exams":
+        return or_(
+            resource.in_(["exam", "exam_set", "question", "answer", "student_session", "session", "result"]),
+            action.like("%exam%"),
+            action.like("%result%"),
+            action.like("%question%"),
+            action.like("%session%"),
+            action.like("%submit%"),
+            action.like("%publish%"),
+        )
+    if category == "system":
+        return resource.in_(["system", "audit_logs"])
+    return None
+
+
 def _audit_formatted_message(item):
     action = item.action or ""
     subject = _audit_subject(item)
@@ -366,20 +614,238 @@ def _audit_formatted_message(item):
 def _audit_payload(item):
     actor_name = item.user.name if item.user else "System"
     formatted_message = _audit_formatted_message(item)
+    category = _audit_category_from_values(item.action, item.resource_type)
+    subject = _audit_subject(item)
     return {
         "id": item.id,
         "action": item.action,
         "action_type": item.action,
+        "category": category,
+        "severity": _audit_severity(item),
         "formatted_message": formatted_message,
         "description": formatted_message,
         "resource_type": item.resource_type,
         "resource_id": item.resource_id,
+        "resource_label": subject,
         "status": item.status,
         "user": actor_name,
         "actor_name": actor_name,
+        "actor_role": item.user.role if item.user else "system",
         "timestamp": _iso_datetime(item.created_at),
         "ip_address": item.ip_address,
+        "reason": item.reason,
+        "changes": item.changes,
+        "error_message": item.error_message,
+        "user_agent": item.user_agent,
     }
+
+
+def _parse_audit_date(value, end_of_day=False):
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if parsed.tzinfo:
+            parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+        return parsed
+    except (TypeError, ValueError):
+        pass
+    try:
+        parsed_date = datetime.strptime(str(value), "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        return None
+    return datetime.combine(parsed_date, datetime.max.time() if end_of_day else datetime.min.time())
+
+
+def _apply_audit_filters(query, args):
+    action_type = (args.get("action_type") or args.get("action") or "").strip()
+    if action_type:
+        query = query.filter(AuditLog.action == action_type)
+
+    status = (args.get("status") or "").strip().lower()
+    if status and status != "all":
+        query = query.filter(db.func.lower(AuditLog.status) == status)
+
+    resource_type = (args.get("resource_type") or args.get("resource") or "").strip().lower()
+    if resource_type and resource_type != "all":
+        query = query.filter(db.func.lower(AuditLog.resource_type) == resource_type)
+
+    category = (args.get("category") or "").strip().lower()
+    category_condition = _audit_category_condition(category)
+    if category_condition is not None:
+        query = query.filter(category_condition)
+
+    from_date = _parse_audit_date(args.get("from") or args.get("from_date"))
+    if from_date:
+        query = query.filter(AuditLog.created_at >= from_date)
+    to_date = _parse_audit_date(args.get("to") or args.get("to_date"), end_of_day=True)
+    if to_date:
+        query = query.filter(AuditLog.created_at <= to_date)
+
+    search = (args.get("q") or args.get("search") or "").strip().lower()
+    if search:
+        pattern = f"%{search}%"
+        actor_ids = [
+            user.id
+            for user in User.query.filter(
+                or_(
+                    db.func.lower(User.name).like(pattern),
+                    db.func.lower(User.username).like(pattern),
+                    db.func.lower(User.email).like(pattern),
+                    db.func.lower(User.role).like(pattern),
+                )
+            )
+            .limit(50)
+            .all()
+        ]
+        conditions = [
+            db.func.lower(AuditLog.action).like(pattern),
+            db.func.lower(AuditLog.resource_type).like(pattern),
+            db.func.lower(AuditLog.status).like(pattern),
+            db.func.lower(AuditLog.changes).like(pattern),
+            db.func.lower(AuditLog.reason).like(pattern),
+            db.func.lower(AuditLog.ip_address).like(pattern),
+        ]
+        if actor_ids:
+            conditions.append(AuditLog.user_id.in_(actor_ids))
+        query = query.filter(or_(*conditions))
+    return query
+
+
+def _audit_important_condition():
+    action = db.func.lower(AuditLog.action)
+    return or_(
+        db.func.lower(AuditLog.status).in_(["warning", "failed", "error"]),
+        action.like("%violation%"),
+        action.like("%terminate%"),
+        action.like("%second_chance%"),
+        action.like("%reduce_time%"),
+        action.like("%delete%"),
+        action.like("%deactivate%"),
+        action.like("%publish%"),
+        action.like("%settings%"),
+        action.like("%backup%"),
+    )
+
+
+def _audit_summary_payload(query):
+    today_start = datetime.combine(datetime.utcnow().date(), datetime.min.time())
+    return {
+        "total": query.count(),
+        "today": query.filter(AuditLog.created_at >= today_start).count(),
+        "important": query.filter(_audit_important_condition()).count(),
+        "warnings": query.filter(
+            or_(
+                db.func.lower(AuditLog.status).in_(["warning", "failed", "error"]),
+                _audit_category_condition("security"),
+            )
+        ).count(),
+        "security": query.filter(_audit_category_condition("security")).count(),
+        "exports": query.filter(_audit_category_condition("exports")).count(),
+    }
+
+
+def _audit_filter_options_payload(query):
+    actions = [
+        row[0]
+        for row in query.with_entities(AuditLog.action)
+        .filter(AuditLog.action.isnot(None))
+        .distinct()
+        .order_by(AuditLog.action.asc())
+        .limit(80)
+        .all()
+    ]
+    resources = [
+        row[0]
+        for row in query.with_entities(AuditLog.resource_type)
+        .filter(AuditLog.resource_type.isnot(None))
+        .distinct()
+        .order_by(AuditLog.resource_type.asc())
+        .limit(40)
+        .all()
+    ]
+    statuses = [
+        row[0]
+        for row in query.with_entities(AuditLog.status)
+        .filter(AuditLog.status.isnot(None))
+        .distinct()
+        .order_by(AuditLog.status.asc())
+        .limit(20)
+        .all()
+    ]
+    return {
+        "actions": [{"value": item, "label": _humanize_audit_action(item)} for item in actions],
+        "resources": [{"value": item, "label": _humanize_audit_action(item)} for item in resources],
+        "statuses": [{"value": item, "label": _humanize_audit_action(item)} for item in statuses],
+        "categories": [
+            {"value": "exams", "label": "Exams"},
+            {"value": "accounts", "label": "Accounts"},
+            {"value": "security", "label": "Security"},
+            {"value": "settings", "label": "Settings"},
+            {"value": "exports", "label": "Exports"},
+            {"value": "system", "label": "System"},
+        ],
+    }
+
+
+def _teacher_audit_query(teacher):
+    exam_ids = [exam.id for exam in ExamSet.query.filter_by(created_by=teacher.id).all()]
+    session_ids = []
+    if exam_ids:
+        session_ids = [
+            row[0]
+            for row in db.session.query(StudentSession.id)
+            .filter(StudentSession.exam_set_id.in_(exam_ids))
+            .all()
+        ]
+    scope_conditions = [AuditLog.user_id == teacher.id]
+    if exam_ids:
+        scope_conditions.append(
+            and_(
+                db.func.lower(AuditLog.resource_type).in_(["exam", "exam_set"]),
+                AuditLog.resource_id.in_(exam_ids),
+            )
+        )
+    if session_ids:
+        scope_conditions.append(
+            and_(
+                db.func.lower(AuditLog.resource_type).in_(["student_session", "session"]),
+                AuditLog.resource_id.in_(session_ids),
+            )
+        )
+    return AuditLog.query.filter(or_(*scope_conditions))
+
+
+def _audit_csv_response(query, actor, filename_prefix="AuditLog"):
+    logs = query.order_by(AuditLog.created_at.desc()).limit(5000).all()
+    headers = ["Date", "Time", "Actor", "Actor Role", "Category", "Severity", "Action", "Target", "IP Address", "Status", "Reason"]
+    rows = []
+    for item in logs:
+        created_at = item.created_at
+        payload = _audit_payload(item)
+        rows.append(
+            [
+                created_at.strftime("%Y-%m-%d") if created_at else "",
+                created_at.strftime("%H:%M:%S") if created_at else "",
+                item.user.name if item.user else "System",
+                item.user.role if item.user else "system",
+                payload["category"],
+                payload["severity"],
+                _audit_formatted_message(item),
+                f"{item.resource_type}:{item.resource_id}" if item.resource_id else item.resource_type,
+                item.ip_address,
+                item.status,
+                item.reason or "",
+            ]
+        )
+    return build_csv_response(
+        "Audit Log",
+        actor,
+        rows,
+        headers,
+        filename=f"{filename_prefix}_{datetime.utcnow().strftime('%Y%m%d')}.csv",
+        extra_metadata=[("Total Entries", len(rows))],
+    )
 
 
 def _forbidden_session_response(message="Unauthorized exam session", redirect=None, status_code=403):
@@ -619,6 +1085,9 @@ def _user_payload(user):
 def _account_preferences(user):
     defaults = {
         "exam_reminders": True,
+        "review_reminders": True,
+        "registration_reminders": True,
+        "reminder_lead_minutes": 30,
         "announcement_banners": True,
     }
     raw_preferences = getattr(user, "account_preferences", None)
@@ -630,8 +1099,17 @@ def _account_preferences(user):
         return defaults
     if not isinstance(loaded, dict):
         return defaults
+    reminder_lead_minutes = loaded.get("reminder_lead_minutes", defaults["reminder_lead_minutes"])
+    try:
+        reminder_lead_minutes = int(reminder_lead_minutes)
+    except (TypeError, ValueError):
+        reminder_lead_minutes = defaults["reminder_lead_minutes"]
+    reminder_lead_minutes = min(max(reminder_lead_minutes, 10), 1440)
     return {
         "exam_reminders": bool(loaded.get("exam_reminders", defaults["exam_reminders"])),
+        "review_reminders": bool(loaded.get("review_reminders", defaults["review_reminders"])),
+        "registration_reminders": bool(loaded.get("registration_reminders", defaults["registration_reminders"])),
+        "reminder_lead_minutes": reminder_lead_minutes,
         "announcement_banners": bool(loaded.get("announcement_banners", defaults["announcement_banners"])),
     }
 
@@ -841,6 +1319,85 @@ def _question_options_for_attempt(question, student_session=None):
         random.Random(f"{student_session.session_code}:{question.id}:options").shuffle(shuffled_options)
         return shuffled_options
     return options
+
+
+def _exam_question_type(question):
+    question_type = (question.question_type or "short").strip().lower()
+    if question_type == "coding":
+        return "code"
+    if question_type in {"long_answer", "essay"}:
+        return "long"
+    if question_type in {"mcq", "short", "long", "code"}:
+        return question_type
+    return "short"
+
+
+def _question_options_payload(question, student_session):
+    if _exam_question_type(question) != "mcq":
+        return []
+
+    payload = []
+    for index, option in enumerate(_question_options_for_attempt(question, student_session)):
+        if isinstance(option, dict):
+            text = str(option.get("text") or option.get("label") or option.get("value") or "").strip()
+            option_id = str(option.get("id") or option.get("value") or text or index + 1)
+        else:
+            text = str(option or "").strip()
+            option_id = text
+        if text:
+            payload.append({"id": option_id, "text": text})
+    return payload
+
+
+def _answer_text_for_question(question, data):
+    if _exam_question_type(question) == "code" and data.get("code_text") is not None:
+        return str(data.get("code_text") or "")
+    if _exam_question_type(question) == "mcq" and data.get("selected_option") is not None:
+        return str(data.get("selected_option") or "")
+    answer_text = data.get("answer_text", "")
+    return "" if answer_text is None else str(answer_text)
+
+
+def _navigator_status(data, fallback_answer=""):
+    return AutoSaveService.normalize_visit_status(
+        data.get("navigator_status") or data.get("visit_status"),
+        fallback_answer,
+    )
+
+
+def _pop_latest_admin_message(student_session, limit=10):
+    messages = NotificationService.pop_unread_session_messages(student_session.id, limit=limit)
+    admin_message = None
+    for item in messages:
+        message = (item.get("message") or "").strip()
+        if message:
+            admin_message = message
+    return admin_message, messages
+
+
+def _attempt_number(student_session):
+    return StudentSession.query.filter(
+        StudentSession.exam_set_id == student_session.exam_set_id,
+        db.func.upper(StudentSession.roll_no) == (student_session.roll_no or "").strip().upper(),
+        StudentSession.created_at <= student_session.created_at,
+    ).count()
+
+
+def _submitted_results_redirect(student_session):
+    return f"/react/student/results/{student_session.exam_set_id}"
+
+
+def _api_session_status(student_session):
+    status = (student_session.status or "").strip().lower()
+    return {
+        "active": "IN_PROGRESS",
+        "paused": "PAUSED",
+        "submitted": "SUBMITTED",
+        "auto_submitted": "SUBMITTED",
+        "terminated": "TERMINATED",
+        "evaluated": "EVALUATED",
+        "waiting": "WAITING",
+    }.get(status, status.upper() or "UNKNOWN")
 
 
 def _group_payload(group):
@@ -1347,6 +1904,7 @@ def _apply_teacher_enrollment_payload(exam, teacher, payload):
 def _result_question_payload(question, answer, question_mark, result):
     answer_text = answer.answer_text if answer else ""
     marks_awarded = question_mark.marks_awarded if question_mark else 0
+    time_spent_seconds = int(getattr(answer, "total_time_spent_seconds", 0) or 0) if answer else 0
     return {
         "id": question.id,
         "question_number": question.question_number,
@@ -1360,6 +1918,9 @@ def _result_question_payload(question, answer, question_mark, result):
         "code_output": answer.code_output if answer else None,
         "execution_output": answer.code_output if answer else None,
         "execution_status": answer.execution_status if answer else None,
+        "time_spent_seconds": time_spent_seconds,
+        "time_spent_minutes": round(time_spent_seconds / 60, 1) if time_spent_seconds else 0,
+        "visit_count": int(getattr(answer, "visit_count", 0) or 0) if answer else 0,
         "correct_answer": question.correct_answer if result and result.published else None,
         "correct_option": question.correct_answer if result and result.published else None,
         "model_answer": question.model_answer if result and result.published else None,
@@ -1369,6 +1930,198 @@ def _result_question_payload(question, answer, question_mark, result):
         "image_urls": [url_for("static", filename=path) for path in question.image_paths_as_list()],
         "code_snippet": question.code_snippet,
         "code_language": question.code_language or "python",
+    }
+
+
+def _answered_answer(answer):
+    return bool(answer and (answer.answer_text or "").strip())
+
+
+def _result_category_label(question):
+    question_type = _exam_question_type(question)
+    if question_type == "mcq":
+        return "MCQ"
+    if question_type == "code":
+        return "Code"
+    if question_type == "long":
+        return "Long Answer"
+    return "Short Answer"
+
+
+def _result_analytics_payload(student_session, result, questions, answers_by_question, marks_by_question):
+    total_questions = len(questions)
+    status_counts = {state: 0 for state in EXAM_NAVIGATOR_STATUSES}
+    category_map = {}
+    answered_count = 0
+    total_time_spent_seconds = 0
+
+    for question in questions:
+        answer = answers_by_question.get(question.id)
+        question_mark = marks_by_question.get(question.id)
+        answered = _answered_answer(answer)
+        if answered:
+            answered_count += 1
+
+        if answer:
+            visit_status = answer.visit_status if answer.visit_status in EXAM_NAVIGATOR_STATUSES else None
+            if not visit_status:
+                visit_status = "ANSWERED" if answered else "VISITED_UNANSWERED"
+        else:
+            visit_status = "NOT_VISITED"
+        status_counts[visit_status] = status_counts.get(visit_status, 0) + 1
+
+        time_spent_seconds = int(getattr(answer, "total_time_spent_seconds", 0) or 0) if answer else 0
+        total_time_spent_seconds += time_spent_seconds
+
+        category = _result_category_label(question)
+        bucket = category_map.setdefault(
+            category,
+            {
+                "label": category,
+                "questions": 0,
+                "answered": 0,
+                "marks_obtained": 0,
+                "max_marks": 0,
+                "percentage": 0,
+                "average_time_seconds": 0,
+                "_time_seconds": 0,
+            },
+        )
+        bucket["questions"] += 1
+        bucket["answered"] += 1 if answered else 0
+        bucket["marks_obtained"] += float(question_mark.marks_awarded or 0) if question_mark else 0
+        bucket["max_marks"] += float(question.marks or 0)
+        bucket["_time_seconds"] += time_spent_seconds
+
+    category_breakdown = []
+    for bucket in category_map.values():
+        max_marks = bucket["max_marks"]
+        percentage = round((bucket["marks_obtained"] / max_marks) * 100, 1) if max_marks else 0
+        category_breakdown.append(
+            {
+                "label": bucket["label"],
+                "questions": bucket["questions"],
+                "answered": bucket["answered"],
+                "marks_obtained": round(bucket["marks_obtained"], 2),
+                "max_marks": round(max_marks, 2),
+                "percentage": percentage,
+                "average_time_seconds": round(bucket["_time_seconds"] / bucket["questions"]) if bucket["questions"] else 0,
+            }
+        )
+    category_breakdown.sort(key=lambda item: ("MCQ", "Short Answer", "Long Answer", "Code").index(item["label"]) if item["label"] in {"MCQ", "Short Answer", "Long Answer", "Code"} else 99)
+
+    latest_violation = (
+        ViolationLog.query.filter_by(session_id=student_session.id)
+        .order_by(ViolationLog.occurred_at.desc())
+        .first()
+    )
+    violation_count = ViolationLog.query.filter_by(session_id=student_session.id).count()
+    max_warnings = SettingsService.max_violations_allowed()
+    warning_count = int(student_session.focus_violations or 0)
+    suspicion_score = int(student_session.suspicion_score or 0)
+    if warning_count == 0 and suspicion_score == 0 and violation_count == 0:
+        integrity_status = "Clear"
+    elif warning_count >= max_warnings or suspicion_score >= 75:
+        integrity_status = "Admin review"
+    else:
+        integrity_status = "Review suggested"
+
+    session_duration_seconds = 0
+    if student_session.start_time and student_session.submitted_at:
+        session_duration_seconds = max(int((student_session.submitted_at - student_session.start_time).total_seconds()), 0)
+    elif student_session.start_time and student_session.status in {"submitted", "auto_submitted", "evaluated"}:
+        end_time = student_session.end_time or datetime.utcnow()
+        session_duration_seconds = max(int((end_time - student_session.start_time).total_seconds()), 0)
+
+    unanswered_count = max(total_questions - answered_count, 0)
+    not_answered_count = status_counts.get("VISITED_UNANSWERED", 0)
+    not_visited_count = status_counts.get("NOT_VISITED", 0)
+    review_count = status_counts.get("MARKED_REVIEW", 0) + status_counts.get("ANSWERED_MARKED", 0)
+    answered_marked_count = status_counts.get("ANSWERED_MARKED", 0)
+    progress_percent = round((answered_count / total_questions) * 100) if total_questions else 0
+
+    strongest_area = max(category_breakdown, key=lambda item: item["percentage"], default=None)
+    improvement_area = min(category_breakdown, key=lambda item: item["percentage"], default=None)
+    recommendations = []
+    if unanswered_count:
+        recommendations.append(f"Review time planning: {unanswered_count} question(s) were left unanswered.")
+    if improvement_area and improvement_area["max_marks"] > 0 and improvement_area["percentage"] < 60:
+        recommendations.append(f"Focus revision on {improvement_area['label']} questions.")
+    if strongest_area and strongest_area["max_marks"] > 0 and strongest_area["percentage"] >= 75:
+        recommendations.append(f"Strongest area: {strongest_area['label']}.")
+    if not recommendations:
+        recommendations.append("Keep practicing with mixed question types to maintain consistency.")
+
+    return {
+        "total_questions": total_questions,
+        "answered_count": answered_count,
+        "unanswered_count": unanswered_count,
+        "not_answered_count": not_answered_count,
+        "not_visited_count": not_visited_count,
+        "review_count": review_count,
+        "answered_marked_count": answered_marked_count,
+        "progress_percent": progress_percent,
+        "status_counts": status_counts,
+        "time_spent_seconds": total_time_spent_seconds,
+        "time_spent_minutes": round(total_time_spent_seconds / 60, 1) if total_time_spent_seconds else 0,
+        "session_duration_seconds": session_duration_seconds,
+        "session_duration_minutes": round(session_duration_seconds / 60, 1) if session_duration_seconds else 0,
+        "average_time_per_question_seconds": round(total_time_spent_seconds / total_questions) if total_questions else 0,
+        "average_time_per_answered_seconds": round(total_time_spent_seconds / answered_count) if answered_count else 0,
+        "warning_count": warning_count,
+        "max_warnings": max_warnings,
+        "violation_count": violation_count,
+        "suspicion_score": suspicion_score,
+        "integrity_status": integrity_status,
+        "autosubmit_reason": student_session.autosubmit_reason,
+        "latest_violation": {
+            "type": latest_violation.violation_type,
+            "detail": latest_violation.detail,
+            "occurred_at": _iso_datetime(latest_violation.occurred_at),
+        }
+        if latest_violation
+        else None,
+        "category_breakdown": category_breakdown,
+        "recommendations": recommendations,
+    }
+
+
+def _student_result_payload(result):
+    student_session = result.session
+    exam = student_session.exam_set
+    answers_by_question = {answer.question_id: answer for answer in student_session.answers}
+    marks_by_question = {mark.question_id: mark for mark in result.question_marks}
+    questions = ExamService.get_session_questions(student_session)
+    analytics = _result_analytics_payload(student_session, result, questions, answers_by_question, marks_by_question)
+    return {
+        "id": result.id,
+        "session_id": student_session.id,
+        "session_code": student_session.session_code,
+        "exam_id": exam.id,
+        "exam_name": exam.exam_name,
+        "subject": exam.subject,
+        "teacher_name": exam.creator.name if exam.creator else None,
+        "submitted_at": _iso_datetime(student_session.submitted_at),
+        "published_at": _iso_datetime(result.published_at),
+        "total_marks_obtained": result.total_marks_obtained,
+        "total_marks": result.total_marks,
+        "percentage": result.percentage,
+        "time_taken": analytics["session_duration_minutes"] or analytics["time_spent_minutes"],
+        "time_taken_seconds": analytics["session_duration_seconds"] or analytics["time_spent_seconds"],
+        "teacher_remarks": result.teacher_remarks,
+        **_result_status_payload(result, exam),
+        "analytics": analytics,
+        "pdf_url": _student_result_pdf_url(result),
+        "certificate_url": f"/api/student/results/{exam.id}/certificate",
+        "questions": [
+            _result_question_payload(
+                question,
+                answers_by_question.get(question.id),
+                marks_by_question.get(question.id),
+                result,
+            )
+            for question in questions
+        ],
     }
 
 
@@ -1453,6 +2206,224 @@ def _student_exam_action_payload(exam, student_session, attempts_remaining, wind
     }
 
 
+def _student_session_progress_payload(student_session):
+    if not student_session:
+        return {
+            "answered_count": 0,
+            "unanswered_count": 0,
+            "not_visited_count": 0,
+            "review_count": 0,
+            "total_questions": 0,
+            "progress_percent": 0,
+            "time_spent_seconds": 0,
+            "time_spent_minutes": 0,
+        }
+
+    questions = ExamService.get_session_questions(student_session)
+    total_questions = len(questions)
+    question_ids = {question.id for question in questions}
+    answers = [
+        answer
+        for answer in Answer.query.filter_by(session_id=student_session.id).all()
+        if not question_ids or answer.question_id in question_ids
+    ]
+    answered_count = sum(1 for answer in answers if _answered_answer(answer))
+    status_counts = {state: 0 for state in EXAM_NAVIGATOR_STATUSES}
+    total_time_spent_seconds = 0
+    for answer in answers:
+        total_time_spent_seconds += int(getattr(answer, "total_time_spent_seconds", 0) or 0)
+        visit_status = answer.visit_status if answer.visit_status in EXAM_NAVIGATOR_STATUSES else None
+        if not visit_status:
+            visit_status = "ANSWERED" if _answered_answer(answer) else "VISITED_UNANSWERED"
+        status_counts[visit_status] = status_counts.get(visit_status, 0) + 1
+    status_counts["NOT_VISITED"] = max(
+        status_counts.get("NOT_VISITED", 0) + total_questions - len({answer.question_id for answer in answers}),
+        0,
+    )
+    return {
+        "answered_count": answered_count,
+        "unanswered_count": max(total_questions - answered_count, 0),
+        "not_visited_count": status_counts.get("NOT_VISITED", 0),
+        "review_count": status_counts.get("MARKED_REVIEW", 0) + status_counts.get("ANSWERED_MARKED", 0),
+        "total_questions": total_questions,
+        "progress_percent": round((answered_count / total_questions) * 100) if total_questions else 0,
+        "time_spent_seconds": total_time_spent_seconds,
+        "time_spent_minutes": round(total_time_spent_seconds / 60, 1) if total_time_spent_seconds else 0,
+    }
+
+
+def _student_exam_state_label(exam, latest_session, window, published_result):
+    if published_result:
+        return "result_published"
+    if latest_session and latest_session.status in {"active", "paused"}:
+        return "in_progress"
+    if latest_session and latest_session.status in LOCKED_SESSION_STATUSES:
+        return "submitted"
+    if window.get("time_state") == "not_started":
+        return "upcoming"
+    if window.get("is_open") and exam.status == "active":
+        return "available"
+    if window.get("has_ended") or exam.status == "closed":
+        return "closed"
+    return exam.status or "inactive"
+
+
+def _schedule_date_key(value):
+    text_value = str(value or "")
+    return text_value[:10] if len(text_value) >= 10 else "unscheduled"
+
+
+def _dashboard_schedule_payload(items, limit=8):
+    rank = {
+        "in_progress": 0,
+        "live": 0,
+        "available": 1,
+        "review_due": 1,
+        "upcoming": 2,
+        "draft": 3,
+        "submitted": 4,
+        "closed": 5,
+        "result_published": 6,
+    }
+    filtered_items = [item for item in items if item]
+    filtered_items.sort(
+        key=lambda item: (
+            rank.get(item.get("state"), 9),
+            item.get("primary_at") or "9999-12-31T23:59:59Z",
+            item.get("title") or "",
+        )
+    )
+    counts = {}
+    for item in filtered_items:
+        state = item.get("state") or "other"
+        counts[state] = counts.get(state, 0) + 1
+    return {
+        "items": filtered_items[:limit],
+        "counts": counts,
+        "total": len(filtered_items),
+    }
+
+
+def _student_schedule_payload(cards, now=None):
+    now = now or datetime.utcnow()
+    now_iso = _iso_datetime(now)
+    schedule_items = []
+    for card in cards:
+        state = card.get("state")
+        if state in {"closed", "result_published"}:
+            continue
+        primary_at = card.get("start_time")
+        if state in {"in_progress", "available"}:
+            primary_at = now_iso
+        if not primary_at:
+            primary_at = card.get("end_time") or now_iso
+        schedule_items.append(
+            {
+                "id": f"student-exam-{card.get('exam_id')}",
+                "exam_id": card.get("exam_id"),
+                "title": card.get("exam_name"),
+                "subject": card.get("subject"),
+                "set_code": card.get("set_code"),
+                "state": state,
+                "starts_at": card.get("start_time"),
+                "ends_at": card.get("end_time"),
+                "primary_at": primary_at,
+                "date_key": _schedule_date_key(primary_at),
+                "duration_minutes": card.get("effective_duration_minutes") or card.get("duration_minutes"),
+                "question_count": card.get("question_count"),
+                "attempts_remaining": card.get("attempts_remaining"),
+                "action": card.get("action") or {},
+                "progress": card.get("latest_session", {}).get("progress") if card.get("latest_session") else None,
+            }
+        )
+    return _dashboard_schedule_payload(schedule_items)
+
+
+def _teacher_schedule_item(exam, exam_payload, now=None):
+    now = now or datetime.utcnow()
+    pending_review_count = int(exam_payload.get("pending_review_count") or 0)
+    if pending_review_count:
+        state = "review_due"
+        primary_at = _iso_datetime(exam.end_time or exam.updated_at or now)
+        label = f"{pending_review_count} pending review"
+    elif exam.status == "active" and exam.is_open_for_student(now):
+        state = "live"
+        primary_at = _iso_datetime(now)
+        label = "Live now"
+    elif exam.status == "active" and exam.start_time and exam.start_time > now:
+        state = "upcoming"
+        primary_at = _iso_datetime(exam.start_time)
+        label = "Scheduled"
+    elif exam.status == "draft":
+        state = "draft"
+        primary_at = _iso_datetime(exam.start_time or exam.updated_at or exam.created_at)
+        label = "Draft"
+    else:
+        state = "closed" if exam.status == "closed" or exam.has_ended(now) else exam.status
+        primary_at = _iso_datetime(exam.end_time or exam.updated_at or exam.created_at)
+        label = state.replace("_", " ").title() if state else "Exam"
+
+    return {
+        "id": f"teacher-exam-{exam.id}",
+        "exam_id": exam.id,
+        "title": exam.exam_name,
+        "subject": exam.subject,
+        "set_code": exam.set_code,
+        "state": state,
+        "label": label,
+        "starts_at": _iso_datetime(exam.start_time),
+        "ends_at": _iso_datetime(exam.end_time),
+        "primary_at": primary_at,
+        "date_key": _schedule_date_key(primary_at),
+        "duration_minutes": exam.duration_minutes,
+        "question_count": exam_payload.get("question_count"),
+        "enrolled_count": exam_payload.get("enrolled_count"),
+        "submitted_count": exam_payload.get("submitted_count"),
+        "pending_review_count": pending_review_count,
+        "href": f"/react/teacher/exam/{exam.id}/review" if pending_review_count else f"/react/teacher/exam/{exam.id}/edit",
+    }
+
+
+def _student_attempt_history_payload(student_session):
+    exam = student_session.exam_set
+    result = student_session.result if student_session.result and student_session.result.published else None
+    progress = _student_session_progress_payload(student_session)
+    return {
+        "id": student_session.id,
+        "session_code": student_session.session_code,
+        "exam_id": exam.id,
+        "exam_name": exam.exam_name,
+        "subject": exam.subject,
+        "set_code": exam.set_code,
+        "teacher_name": exam.creator.name if exam.creator else None,
+        "status": student_session.status,
+        "started_at": _iso_datetime(student_session.start_time),
+        "submitted_at": _iso_datetime(student_session.submitted_at),
+        "created_at": _iso_datetime(student_session.created_at),
+        "duration_minutes": exam.duration_minutes + int(student_session.extra_time_minutes or 0),
+        "remaining_seconds": ExamService.remaining_seconds_for_session(student_session),
+        "focus_violations": student_session.focus_violations,
+        "autosubmit_reason": student_session.autosubmit_reason,
+        "progress": progress,
+        "result": {
+            "total_marks_obtained": result.total_marks_obtained,
+            "total_marks": result.total_marks,
+            "percentage": result.percentage,
+            **_result_status_payload(result, exam),
+            "published_at": _iso_datetime(result.published_at),
+            "href": f"/react/student/submitted/{student_session.session_code}",
+            "pdf_href": _student_result_pdf_url(result),
+        }
+        if result
+        else None,
+        "links": {
+            "submitted": f"/react/student/submitted/{student_session.session_code}",
+            "result": f"/react/student/submitted/{student_session.session_code}" if result else None,
+            "pdf": _student_result_pdf_url(result) if result else None,
+        },
+    }
+
+
 def _require_teacher_owner(exam_id=None, student_session=None):
     teacher, error = _require_teacher_api()
     if error:
@@ -1489,13 +2460,75 @@ def _question_payload(question):
 
 def _session_review_summary(student_session):
     result = student_session.result
+    questions = ExamService.get_session_questions(student_session)
+    total_questions = len(questions)
+    question_ids = {question.id for question in questions}
+    answers_by_question = {
+        answer.question_id: answer
+        for answer in student_session.answers
+        if not question_ids or answer.question_id in question_ids
+    }
+    answered_count = sum(1 for answer in answers_by_question.values() if _answered_answer(answer))
+    status_counts = {state: 0 for state in EXAM_NAVIGATOR_STATUSES}
+    for answer in answers_by_question.values():
+        visit_status = answer.visit_status if answer.visit_status in EXAM_NAVIGATOR_STATUSES else None
+        if not visit_status:
+            visit_status = "ANSWERED" if _answered_answer(answer) else "VISITED_UNANSWERED"
+        status_counts[visit_status] = status_counts.get(visit_status, 0) + 1
+    status_counts["NOT_VISITED"] = max(
+        status_counts.get("NOT_VISITED", 0) + total_questions - len(answers_by_question),
+        0,
+    )
+    total_time_spent_seconds = sum(
+        int(getattr(answer, "total_time_spent_seconds", 0) or 0)
+        for answer in answers_by_question.values()
+    )
+    locked_for_review = student_session.status in LOCKED_SESSION_STATUSES
+    if not locked_for_review:
+        review_status = "in_progress"
+    elif not result:
+        review_status = "pending"
+    elif result.published:
+        review_status = "published"
+    else:
+        review_status = "evaluated"
+    max_warnings = SettingsService.max_violations_allowed()
+    if review_status == "pending" and (
+        int(student_session.focus_violations or 0) >= max_warnings
+        or int(student_session.suspicion_score or 0) >= 75
+        or student_session.status == "terminated"
+    ):
+        review_priority = "critical"
+    elif review_status == "pending" and (
+        int(student_session.focus_violations or 0) > 0
+        or student_session.status == "auto_submitted"
+        or student_session.autosubmit_reason
+    ):
+        review_priority = "high"
+    elif review_status == "pending":
+        review_priority = "normal"
+    else:
+        review_priority = "complete"
     return {
         "id": student_session.id,
         "session_code": student_session.session_code,
         "student_name": student_session.student_name,
         "roll_no": student_session.roll_no,
         "status": student_session.status,
+        "review_status": review_status,
+        "review_priority": review_priority,
+        "locked_for_review": locked_for_review,
         "focus_violations": student_session.focus_violations,
+        "suspicion_score": student_session.suspicion_score,
+        "autosubmit_reason": student_session.autosubmit_reason,
+        "answered_count": answered_count,
+        "unanswered_count": max(total_questions - answered_count, 0),
+        "not_visited_count": status_counts.get("NOT_VISITED", 0),
+        "review_count": status_counts.get("MARKED_REVIEW", 0) + status_counts.get("ANSWERED_MARKED", 0),
+        "progress_percent": round((answered_count / total_questions) * 100) if total_questions else 0,
+        "total_questions": total_questions,
+        "time_spent_seconds": total_time_spent_seconds,
+        "time_spent_minutes": round(total_time_spent_seconds / 60, 1) if total_time_spent_seconds else 0,
         "started_at": _iso_datetime(student_session.start_time),
         "submitted_at": _iso_datetime(student_session.submitted_at),
         "result": {
@@ -1511,6 +2544,43 @@ def _session_review_summary(student_session):
             "review": f"/react/teacher/session/{student_session.id}/review",
             "answer_pdf": f"/api/teacher/reports/sessions/{student_session.id}/answer.pdf",
         },
+    }
+
+
+def _question_review_suggestion(question, answer, question_mark):
+    answer_text = (answer.answer_text or "").strip() if answer else ""
+    question_type = _exam_question_type(question)
+    is_auto_gradable = question_type == "mcq"
+    if is_auto_gradable:
+        suggested_marks = float(question.marks or 0) if answer_text and answer_text == (question.correct_answer or "").strip() else 0
+    elif not answer_text:
+        suggested_marks = 0
+    else:
+        suggested_marks = question_mark.marks_awarded if question_mark else None
+
+    if question_mark:
+        mark_status = "marked"
+    elif not answer_text:
+        mark_status = "no_answer"
+    elif is_auto_gradable:
+        mark_status = "suggested"
+    else:
+        mark_status = "unmarked"
+
+    max_marks = float(question.marks or 0)
+    half_marks = round(max_marks / 2, 2)
+    rubric = [
+        {"label": "No credit", "marks": 0, "hint": "Incorrect, missing, or unrelated answer."},
+        {"label": "Partial", "marks": half_marks, "hint": "Shows partial understanding or incomplete method."},
+        {"label": "Full", "marks": max_marks, "hint": "Meets the expected answer fully."},
+    ]
+    return {
+        "is_auto_gradable": is_auto_gradable,
+        "needs_manual_review": bool(answer_text and not is_auto_gradable and not question_mark),
+        "suggested_marks": suggested_marks,
+        "has_saved_mark": bool(question_mark),
+        "mark_status": mark_status,
+        "rubric": rubric,
     }
 
 
@@ -1582,12 +2652,28 @@ def _admin_password_matches(payload):
 def _proctor_session_payload(student_session):
     exam = student_session.exam_set
     student_user = _find_student_by_identifier(student_session.roll_no)
-    total_questions = Question.query.filter_by(exam_set_id=exam.id).count()
-    answered_count = (
-        Answer.query.filter_by(session_id=student_session.id)
-        .filter(Answer.answer_text != "")
-        .count()
+    questions = ExamService.get_session_questions(student_session)
+    total_questions = len(questions)
+    question_by_id = {question.id: question for question in questions}
+    answers = Answer.query.filter_by(session_id=student_session.id).all()
+    answered_question_ids = set()
+    status_counts = {state: 0 for state in EXAM_NAVIGATOR_STATUSES}
+    total_time_spent_seconds = 0
+    for answer in answers:
+        total_time_spent_seconds += int(getattr(answer, "total_time_spent_seconds", 0) or 0)
+        if (answer.answer_text or "").strip():
+            answered_question_ids.add(answer.question_id)
+        visit_status = answer.visit_status if answer.visit_status in EXAM_NAVIGATOR_STATUSES else None
+        if not visit_status:
+            visit_status = "ANSWERED" if (answer.answer_text or "").strip() else "VISITED_UNANSWERED"
+        status_counts[visit_status] = status_counts.get(visit_status, 0) + 1
+    status_counts["NOT_VISITED"] = max(
+        status_counts.get("NOT_VISITED", 0) + total_questions - len({answer.question_id for answer in answers}),
+        0,
     )
+    answered_count = len(answered_question_ids)
+    review_count = status_counts.get("MARKED_REVIEW", 0) + status_counts.get("ANSWERED_MARKED", 0)
+    progress_percent = round((answered_count / total_questions) * 100) if total_questions else 0
     latest_violation = (
         ViolationLog.query.filter_by(session_id=student_session.id)
         .order_by(ViolationLog.occurred_at.desc())
@@ -1597,6 +2683,36 @@ def _proctor_session_payload(student_session):
     heartbeat_age = None
     if student_session.last_heartbeat:
         heartbeat_age = int((datetime.utcnow() - student_session.last_heartbeat).total_seconds())
+    if heartbeat_age is None:
+        online_status = "offline"
+    elif heartbeat_age <= 35:
+        online_status = "online"
+    elif heartbeat_age <= 90:
+        online_status = "stale"
+    else:
+        online_status = "offline"
+
+    current_question = None
+    current_question_id = getattr(student_session, "current_question_id", None)
+    if current_question_id:
+        current_question = question_by_id.get(current_question_id)
+    current_question_index = getattr(student_session, "current_question_index", None)
+    if current_question is None and current_question_index is not None and 0 <= current_question_index < len(questions):
+        current_question = questions[current_question_index]
+        current_question_id = current_question.id
+    if current_question and current_question_index is None:
+        for index, question in enumerate(questions):
+            if question.id == current_question.id:
+                current_question_index = index
+                break
+
+    max_warnings = SettingsService.max_violations_allowed()
+    if student_session.focus_violations >= max_warnings or student_session.suspicion_score >= 75:
+        risk_level = "critical"
+    elif student_session.focus_violations > 0 or online_status == "offline" or student_session.pause_requested_at:
+        risk_level = "warning"
+    else:
+        risk_level = "normal"
 
     return {
         "id": student_session.id,
@@ -1610,12 +2726,28 @@ def _proctor_session_payload(student_session):
         "status": student_session.status,
         "remaining_seconds": ExamService.remaining_seconds_for_session(student_session),
         "answered_count": answered_count,
+        "not_answered_count": status_counts.get("VISITED_UNANSWERED", 0),
+        "not_visited_count": status_counts.get("NOT_VISITED", 0),
+        "review_count": review_count,
+        "answered_marked_count": status_counts.get("ANSWERED_MARKED", 0),
+        "progress_percent": progress_percent,
+        "status_counts": status_counts,
         "total_questions": total_questions,
         "focus_violations": student_session.focus_violations,
         "suspicion_score": student_session.suspicion_score,
+        "max_warnings": max_warnings,
+        "risk_level": risk_level,
+        "online_status": online_status,
         "last_heartbeat_age": heartbeat_age,
+        "time_spent_seconds": total_time_spent_seconds,
+        "average_time_per_answered_seconds": round(total_time_spent_seconds / answered_count) if answered_count else 0,
+        "current_question_index": current_question_index,
+        "current_question_id": current_question_id,
+        "current_question_number": current_question.question_number if current_question else None,
+        "current_question_type": _exam_question_type(current_question) if current_question else None,
         "latest_violation": latest_violation.violation_type if latest_violation else None,
         "latest_violation_at": _iso_datetime(latest_violation.occurred_at) if latest_violation else None,
+        "latest_violation_detail": latest_violation.detail if latest_violation else None,
         "pause_requested": bool(student_session.pause_requested_at),
         "pause_reason": student_session.pause_reason,
         "paused_at": _iso_datetime(student_session.paused_at),
@@ -1631,6 +2763,10 @@ def _proctor_counts(snapshots):
         "waiting_sessions": sum(1 for item in snapshots if item["status"] == "waiting"),
         "paused_sessions": sum(1 for item in snapshots if item["status"] == "paused"),
         "flagged_sessions": sum(1 for item in snapshots if item["focus_violations"] > 0),
+        "online_sessions": sum(1 for item in snapshots if item.get("online_status") == "online"),
+        "stale_sessions": sum(1 for item in snapshots if item.get("online_status") == "stale"),
+        "offline_sessions": sum(1 for item in snapshots if item.get("online_status") == "offline"),
+        "critical_sessions": sum(1 for item in snapshots if item.get("risk_level") == "critical"),
     }
 
 
@@ -1683,6 +2819,7 @@ def bootstrap():
     settings = SettingsService.get_settings()
     user_id = session.get("user_id")
     role = session.get("role")
+    user = None
     if user_id:
         user = User.query.get(user_id)
         if (
@@ -1694,6 +2831,9 @@ def bootstrap():
             session.clear()
             user_id = None
             role = None
+            user = None
+    if user_id and user:
+        _run_due_notification_reminders(user)
     return jsonify(
         {
             "ok": True,
@@ -1711,6 +2851,7 @@ def bootstrap():
             },
             "notifications": {
                 "unread_count": NotificationService.unread_count_for_user(user_id),
+                "counts": _notification_counts_payload(user_id) if user_id else {},
                 "recent": [
                     _notification_payload(item)
                     for item in NotificationService.unread_for_user(user_id, limit=6)
@@ -2695,9 +3836,16 @@ def account_preferences_api():
         return error_response
 
     payload = _get_json_payload()
+    current_preferences = _account_preferences(user)
+    reminder_lead_minutes = _parse_int_field(payload, "reminder_lead_minutes", minimum=10, maximum=1440, max_digits=4)
+    if reminder_lead_minutes is None:
+        reminder_lead_minutes = current_preferences.get("reminder_lead_minutes", 30)
     preferences = {
-        "exam_reminders": bool(payload.get("exam_reminders")),
-        "announcement_banners": bool(payload.get("announcement_banners")),
+        "exam_reminders": bool(payload.get("exam_reminders", current_preferences.get("exam_reminders", True))),
+        "review_reminders": bool(payload.get("review_reminders", current_preferences.get("review_reminders", True))),
+        "registration_reminders": bool(payload.get("registration_reminders", current_preferences.get("registration_reminders", True))),
+        "reminder_lead_minutes": reminder_lead_minutes,
+        "announcement_banners": bool(payload.get("announcement_banners", current_preferences.get("announcement_banners", True))),
     }
     user.account_preferences = json.dumps(preferences)
     db.session.commit()
@@ -2791,6 +3939,8 @@ def student_dashboard_api():
 
     roll_no = (session.get("roll_no") or "").strip().upper()
     student_user = _student_user_for_current_session()
+    if student_user:
+        _run_due_notification_reminders(student_user)
     student_group_memberships = []
     if student_user:
         student_group_memberships = (
@@ -2812,7 +3962,9 @@ def student_dashboard_api():
         "assigned": 0,
         "available": 0,
         "upcoming": 0,
+        "in_progress": 0,
         "submitted": 0,
+        "pending_results": 0,
         "published_results": 0,
     }
     for enrollment in enrollments:
@@ -2833,14 +3985,20 @@ def student_dashboard_api():
             if latest_session and latest_session.result and latest_session.result.published
             else None
         )
+        latest_progress = _student_session_progress_payload(latest_session) if latest_session else None
+        exam_state = _student_exam_state_label(exam, latest_session, window, published_result)
 
         stats["assigned"] += 1
         if window["is_open"] and exam.status == "active":
             stats["available"] += 1
         if window["time_state"] == "not_started":
             stats["upcoming"] += 1
+        if exam_state == "in_progress":
+            stats["in_progress"] += 1
         if latest_session and latest_session.status in LOCKED_SESSION_STATUSES:
             stats["submitted"] += 1
+        if exam_state == "submitted":
+            stats["pending_results"] += 1
         if published_result:
             stats["published_results"] += 1
 
@@ -2851,6 +4009,7 @@ def student_dashboard_api():
                 "subject": exam.subject,
                 "set_code": exam.set_code,
                 "status": exam.status,
+                "state": exam_state,
                 "passing_percentage": _exam_passing_percentage(exam),
                 "start_time": _iso_datetime(exam.start_time),
                 "end_time": _iso_datetime(exam.end_time),
@@ -2869,7 +4028,10 @@ def student_dashboard_api():
                     "status": latest_session.status,
                     "remaining_seconds": ExamService.remaining_seconds_for_session(latest_session),
                     "focus_violations": latest_session.focus_violations,
+                    "started_at": _iso_datetime(latest_session.start_time),
                     "submitted_at": _iso_datetime(latest_session.submitted_at),
+                    "autosubmit_reason": latest_session.autosubmit_reason,
+                    "progress": latest_progress,
                 }
                 if latest_session
                 else None,
@@ -2886,6 +4048,39 @@ def student_dashboard_api():
                 else None,
             }
         )
+
+    focus_priority = {
+        "in_progress": 0,
+        "available": 1,
+        "upcoming": 2,
+        "submitted": 3,
+        "result_published": 4,
+        "closed": 5,
+    }
+    focus_exam = min(
+        cards,
+        key=lambda item: (
+            focus_priority.get(item.get("state"), 9),
+            item.get("window", {}).get("seconds_until_start") or 0,
+            item.get("exam_name") or "",
+        ),
+        default=None,
+    )
+    attempt_sessions = (
+        StudentSession.query.filter(db.func.upper(StudentSession.roll_no) == roll_no)
+        .order_by(StudentSession.created_at.desc())
+        .limit(80)
+        .all()
+    )
+    attempt_history = [
+        _student_attempt_history_payload(student_session)
+        for student_session in attempt_sessions
+        if student_session.start_time
+        or student_session.submitted_at
+        or student_session.result
+        or student_session.status in {"active", "paused", "submitted", "auto_submitted", "terminated", "evaluated"}
+    ]
+    schedule = _student_schedule_payload(cards, now=now)
 
     hour = datetime.now().hour
     if hour < 12:
@@ -2922,6 +4117,10 @@ def student_dashboard_api():
             "server_time": _iso_datetime(now),
             "stats": stats,
             "exams": cards,
+            "focus_exam": focus_exam,
+            "schedule": schedule,
+            "activity": attempt_history[:6],
+            "attempt_history": attempt_history,
             "links": {
                 "join_exam": "/react/student/join",
                 "results": "/react/student/results",
@@ -2953,7 +4152,7 @@ def student_batches_api():
 
 
 @api_bp.route("/student/batches/join", methods=["POST"])
-@rate_limit("submit")
+@rate_limit("student_batch_join")
 def student_batch_join_api():
     student_name, roll_no, error_response = _require_student_api_details()
     if error_response:
@@ -2990,7 +4189,7 @@ def student_batch_join_api():
 
 
 @api_bp.route("/student/exams/<int:exam_id>/start", methods=["POST"])
-@rate_limit("submit")
+@rate_limit("exam_start")
 def react_start_exam_api(exam_id):
     student_name, roll_no, error_response = _require_student_api_details()
     if error_response:
@@ -3017,7 +4216,7 @@ def react_start_exam_api(exam_id):
 
 
 @api_bp.route("/student/join", methods=["POST"])
-@rate_limit("submit")
+@rate_limit("exam_join")
 def react_join_exam_api():
     student_name, roll_no, error_response = _require_student_api_details()
     if error_response:
@@ -3054,7 +4253,7 @@ def react_join_exam_api():
 
 
 @api_bp.route("/student/session/<session_code>/precheck", methods=["GET", "POST"])
-@rate_limit("submit", methods=("POST",))
+@rate_limit("exam_precheck", methods=("POST",))
 def react_precheck_api(session_code):
     student_session = _get_student_session(session_code)
     if not ExamSessionGuard.browser_owns_attempt(student_session):
@@ -3115,27 +4314,51 @@ def teacher_dashboard_api():
     teacher, error_response = _require_teacher_api()
     if error_response:
         return error_response
+    _run_due_notification_reminders(teacher)
 
+    now = datetime.utcnow()
     exams = ExamSet.query.filter_by(created_by=teacher.id).order_by(ExamSet.created_at.desc()).all()
+    submitted_statuses = ["submitted", "evaluated", "terminated", "auto_submitted"]
+    exam_items = []
+    schedule_items = []
+    for exam in exams:
+        exam_payload = {
+            "id": exam.id,
+            "exam_name": exam.exam_name,
+            "subject": exam.subject,
+            "set_code": exam.set_code,
+            "status": exam.status,
+            "total_marks": exam.total_marks,
+            "duration_minutes": exam.duration_minutes,
+            "question_count": len(exam.questions),
+            "enrolled_count": ExamEnrollment.query.filter_by(exam_set_id=exam.id).count(),
+            "session_count": len(exam.sessions),
+            "submitted_count": StudentSession.query.filter(
+                StudentSession.exam_set_id == exam.id,
+                StudentSession.status.in_(submitted_statuses),
+            ).count(),
+            "pending_review_count": (
+                StudentSession.query.filter(
+                    StudentSession.exam_set_id == exam.id,
+                    StudentSession.status.in_(submitted_statuses),
+                )
+                .outerjoin(Result, Result.session_id == StudentSession.id)
+                .filter(Result.id.is_(None))
+                .count()
+            ),
+            "start_time": _iso_datetime(exam.start_time),
+            "end_time": _iso_datetime(exam.end_time),
+            "review_url": f"/react/teacher/exam/{exam.id}/review",
+        }
+        exam_items.append(exam_payload)
+        schedule_items.append(_teacher_schedule_item(exam, exam_payload, now=now))
+
     return jsonify(
         {
             "ok": True,
             "teacher": {"id": teacher.id, "name": teacher.name},
-            "exams": [
-                {
-                    "id": exam.id,
-                    "exam_name": exam.exam_name,
-                    "subject": exam.subject,
-                    "set_code": exam.set_code,
-                    "status": exam.status,
-                    "total_marks": exam.total_marks,
-                    "duration_minutes": exam.duration_minutes,
-                    "question_count": len(exam.questions),
-                    "session_count": len(exam.sessions),
-                    "review_url": f"/react/teacher/exam/{exam.id}/review",
-                }
-                for exam in exams
-            ],
+            "exams": exam_items,
+            "schedule": _dashboard_schedule_payload(schedule_items),
         }
     )
 
@@ -3357,6 +4580,51 @@ def teacher_reports_answer_pdf_api(session_id):
     pdf_buffer = create_submission_pdf(student_session, include_unpublished_feedback=True)
     filename = f"answer_sheet_{student_session.roll_no}_{student_session.session_code}.pdf"
     return pdf_response(pdf_buffer, filename)
+
+
+@api_bp.route("/teacher/activity")
+def teacher_activity_api():
+    teacher, error_response = _require_teacher_api()
+    if error_response:
+        return error_response
+    page = max(request.args.get("page", 1, type=int), 1)
+    per_page = min(max(request.args.get("per_page", 20, type=int), 1), 100)
+    base_query = _teacher_audit_query(teacher)
+    query = _apply_audit_filters(base_query, request.args)
+    pagination = query.order_by(AuditLog.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
+    return jsonify(
+        {
+            "ok": True,
+            "items": [_audit_payload(item) for item in pagination.items],
+            "summary": _audit_summary_payload(query),
+            "important_events": [
+                _audit_payload(item)
+                for item in base_query.filter(_audit_important_condition())
+                .order_by(AuditLog.created_at.desc())
+                .limit(8)
+                .all()
+            ],
+            "filters": _audit_filter_options_payload(base_query),
+            "pagination": {
+                "page": pagination.page,
+                "per_page": pagination.per_page,
+                "pages": pagination.pages,
+                "total": pagination.total,
+            },
+        }
+    )
+
+
+@api_bp.route("/teacher/activity/export.csv")
+def teacher_activity_export_api():
+    teacher, error_response = _require_teacher_api()
+    if error_response:
+        return error_response
+    return _audit_csv_response(
+        _apply_audit_filters(_teacher_audit_query(teacher), request.args),
+        teacher,
+        filename_prefix="TeacherActivity",
+    )
 
 
 def _json_exam_question_rows(payload):
@@ -3819,11 +5087,22 @@ def teacher_exam_review_api(exam_id):
         .all()
     )
     questions = Question.query.filter_by(exam_set_id=exam.id).order_by(Question.question_number.asc()).all()
-    evaluated_count = sum(1 for student_session in sessions if student_session.result)
+    session_payloads = [_session_review_summary(student_session) for student_session in sessions]
+    evaluated_count = sum(1 for item in session_payloads if item.get("result"))
     published_count = sum(
-        1 for student_session in sessions if student_session.result and student_session.result.published
+        1 for item in session_payloads if item.get("result", {}).get("published")
     )
-    locked_count = sum(1 for student_session in sessions if student_session.status in LOCKED_SESSION_STATUSES)
+    locked_count = sum(1 for item in session_payloads if item.get("locked_for_review"))
+    pending_count = sum(1 for item in session_payloads if item.get("review_status") == "pending")
+    flagged_count = sum(
+        1
+        for item in session_payloads
+        if item.get("review_priority") in {"high", "critical"}
+        or int(item.get("focus_violations") or 0) > 0
+        or int(item.get("suspicion_score") or 0) >= 75
+    )
+    results = [item["result"] for item in session_payloads if item.get("result")]
+    average_score = round(sum(float(item.get("percentage") or 0) for item in results) / len(results), 1) if results else 0
 
     return jsonify(
         {
@@ -3843,10 +5122,14 @@ def teacher_exam_review_api(exam_id):
                 "submitted": locked_count,
                 "evaluated": evaluated_count,
                 "published": published_count,
-                "pending_review": max(locked_count - evaluated_count, 0),
+                "pending_review": pending_count,
+                "flagged": flagged_count,
+                "average_score": average_score,
+                "manual_questions": sum(1 for question in questions if _exam_question_type(question) != "mcq"),
+                "auto_gradable_questions": sum(1 for question in questions if _exam_question_type(question) == "mcq"),
             },
             "questions": [_question_payload(question) for question in questions],
-            "sessions": [_session_review_summary(student_session) for student_session in sessions],
+            "sessions": session_payloads,
             "links": {
                 "csv_export": f"/api/teacher/reports/exams/{exam.id}/results.csv",
                 "similarity": f"/react/teacher/exam/{exam.id}/review",
@@ -3986,6 +5269,7 @@ def teacher_session_review_api(session_id):
     for question in questions:
         answer = answer_by_question.get(question.id)
         question_mark = marks_by_question.get(question.id)
+        suggestion = _question_review_suggestion(question, answer, question_mark)
         review_questions.append(
             {
                 **_question_payload(question),
@@ -3994,11 +5278,16 @@ def teacher_session_review_api(session_id):
                     "code_output": answer.code_output if answer else "",
                     "execution_status": answer.execution_status if answer else None,
                     "execution_time_ms": answer.execution_time_ms if answer else None,
+                    "visit_status": answer.visit_status if answer else "NOT_VISITED",
+                    "answered": _answered_answer(answer),
+                    "time_spent_seconds": int(getattr(answer, "total_time_spent_seconds", 0) or 0) if answer else 0,
+                    "visit_count": int(getattr(answer, "visit_count", 0) or 0) if answer else 0,
                     "saved_at": _iso_datetime(answer.saved_at) if answer else None,
                 },
                 "mark": {
                     "marks_awarded": question_mark.marks_awarded if question_mark else 0,
                     "teacher_remark": question_mark.teacher_remark if question_mark else "",
+                    **suggestion,
                 },
             }
         )
@@ -4031,6 +5320,7 @@ def admin_dashboard_api():
     admin, error_response = _require_admin_api()
     if error_response:
         return error_response
+    _run_due_notification_reminders(admin)
 
     now = datetime.utcnow()
     last_7_days = [(now - timedelta(days=offset)).date() for offset in range(6, -1, -1)]
@@ -4150,7 +5440,17 @@ def admin_settings_api():
         "admin_lockout_count": payload.get("admin_lockout_count"),
         "admin_idle_timeout_minutes": payload.get("admin_idle_timeout_minutes"),
     }
+    previous_announcement = (SettingsService.get_settings().announcement_message or "").strip()
     settings = SettingsService.update_settings(settings_payload, updated_by=admin.id)
+    current_announcement = (settings.announcement_message or "").strip()
+    if current_announcement and current_announcement != previous_announcement:
+        NotificationService.notify_role(
+            "student",
+            current_announcement,
+            notification_type="announcement",
+            related_entity_type="announcement",
+            related_entity_id=settings.id,
+        )
     AuditLog(
         user_id=admin.id,
         action="update_platform_settings_api",
@@ -4830,10 +6130,8 @@ def admin_audit_log_api():
         return error_response
     page = max(request.args.get("page", 1, type=int), 1)
     per_page = min(max(request.args.get("per_page", 20, type=int), 1), 100)
-    action_type = (request.args.get("action_type") or "").strip()
-    query = AuditLog.query
-    if action_type:
-        query = query.filter(AuditLog.action == action_type)
+    base_query = AuditLog.query
+    query = _apply_audit_filters(base_query, request.args)
     pagination = query.order_by(AuditLog.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
     return jsonify(
         {
@@ -4846,6 +6144,15 @@ def admin_audit_log_api():
                 }
                 for item in pagination.items
             ],
+            "summary": _audit_summary_payload(query),
+            "important_events": [
+                _audit_payload(item)
+                for item in base_query.filter(_audit_important_condition())
+                .order_by(AuditLog.created_at.desc())
+                .limit(8)
+                .all()
+            ],
+            "filters": _audit_filter_options_payload(base_query),
             "pagination": {
                 "page": pagination.page,
                 "per_page": pagination.per_page,
@@ -4861,30 +6168,10 @@ def admin_audit_log_export_api():
     admin, error_response = _require_admin_api()
     if error_response:
         return error_response
-    logs = AuditLog.query.order_by(AuditLog.created_at.desc()).all()
-    headers = ["Date", "Time", "Actor", "Actor Role", "Action", "Target", "IP Address", "Status"]
-    rows = []
-    for item in logs:
-        created_at = item.created_at
-        rows.append(
-            [
-                created_at.strftime("%Y-%m-%d") if created_at else "",
-                created_at.strftime("%H:%M:%S") if created_at else "",
-                item.user.name if item.user else "System",
-                item.user.role if item.user else "system",
-                _audit_formatted_message(item),
-                f"{item.resource_type}:{item.resource_id}" if item.resource_id else item.resource_type,
-                item.ip_address,
-                item.status,
-            ]
-        )
-    return build_csv_response(
-        "Audit Log",
+    return _audit_csv_response(
+        _apply_audit_filters(AuditLog.query, request.args),
         admin,
-        rows,
-        headers,
-        filename=f"AuditLog_{datetime.utcnow().strftime('%Y%m%d')}.csv",
-        extra_metadata=[("Total Entries", len(rows))],
+        filename_prefix="AuditLog",
     )
 
 
@@ -5308,40 +6595,7 @@ def student_results_api():
 
     payload = []
     for result in published_results:
-        student_session = result.session
-        exam = student_session.exam_set
-        answers_by_question = {answer.question_id: answer for answer in student_session.answers}
-        marks_by_question = {mark.question_id: mark for mark in result.question_marks}
-        questions = Question.query.filter_by(exam_set_id=exam.id).order_by(Question.question_number.asc()).all()
-        payload.append(
-            {
-                "id": result.id,
-                "session_id": student_session.id,
-                "session_code": student_session.session_code,
-                "exam_id": exam.id,
-                "exam_name": exam.exam_name,
-                "subject": exam.subject,
-                "teacher_name": exam.creator.name if exam.creator else None,
-                "submitted_at": _iso_datetime(student_session.submitted_at),
-                "published_at": _iso_datetime(result.published_at),
-                "total_marks_obtained": result.total_marks_obtained,
-                "total_marks": result.total_marks,
-                "percentage": result.percentage,
-                "teacher_remarks": result.teacher_remarks,
-                **_result_status_payload(result, exam),
-                "pdf_url": _student_result_pdf_url(result),
-                "certificate_url": f"/api/student/results/{exam.id}/certificate",
-                "questions": [
-                    _result_question_payload(
-                        question,
-                        answers_by_question.get(question.id),
-                        marks_by_question.get(question.id),
-                        result,
-                    )
-                    for question in questions
-                ],
-            }
-        )
+        payload.append(_student_result_payload(result))
     return jsonify({"ok": True, "results": payload})
 
 
@@ -5375,41 +6629,10 @@ def student_result_detail_api(exam_id):
     if not result:
         return jsonify({"ok": False, "message": "Published result not found."}), 404
 
-    student_session = result.session
-    exam = student_session.exam_set
-    answers_by_question = {answer.question_id: answer for answer in student_session.answers}
-    marks_by_question = {mark.question_id: mark for mark in result.question_marks}
-    questions = Question.query.filter_by(exam_set_id=exam.id).order_by(Question.question_number.asc()).all()
     return jsonify(
         {
             "ok": True,
-            "result": {
-                "id": result.id,
-                "session_id": student_session.id,
-                "session_code": student_session.session_code,
-                "exam_id": exam.id,
-                "exam_name": exam.exam_name,
-                "subject": exam.subject,
-                "teacher_name": exam.creator.name if exam.creator else None,
-                "submitted_at": _iso_datetime(student_session.submitted_at),
-                "published_at": _iso_datetime(result.published_at),
-                "total_marks_obtained": result.total_marks_obtained,
-                "total_marks": result.total_marks,
-                "percentage": result.percentage,
-                "teacher_remarks": result.teacher_remarks,
-                **_result_status_payload(result, exam),
-                "pdf_url": _student_result_pdf_url(result),
-                "certificate_url": f"/api/student/results/{exam.id}/certificate",
-                "questions": [
-                    _result_question_payload(
-                        question,
-                        answers_by_question.get(question.id),
-                        marks_by_question.get(question.id),
-                        result,
-                    )
-                    for question in questions
-                ],
-            },
+            "result": _student_result_payload(result),
         }
     )
 
@@ -5508,21 +6731,11 @@ def notifications_api():
     if not user or not user.is_active or not current_session_matches_user(user):
         session.clear()
         return jsonify({"ok": False, "message": "This account is active in another browser. Please log in again here."}), 401
+    _run_due_notification_reminders(user)
     filter_name = (request.args.get("filter") or "all").strip().lower()
     page = max(request.args.get("page", 1, type=int), 1)
     per_page = min(max(request.args.get("per_page", 20, type=int), 1), 100)
-    query = Notification.query.filter_by(recipient_user_id=user_id)
-    if filter_name == "unread":
-        query = query.filter_by(is_read=False)
-    elif filter_name == "system":
-        query = query.filter(Notification.notification_type.in_(["system", "info"]))
-    elif filter_name == "admin":
-        query = query.filter(
-            or_(
-                Notification.notification_type.like("%admin%"),
-                Notification.notification_type == "registration_request",
-            )
-        )
+    query = _notification_filter_query(Notification.query.filter_by(recipient_user_id=user_id), filter_name)
     pagination = query.order_by(Notification.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
     items = [_notification_payload(item) for item in pagination.items]
     return jsonify(
@@ -5530,6 +6743,7 @@ def notifications_api():
             "ok": True,
             "items": items,
             "unread_count": NotificationService.unread_count_for_user(user_id),
+            "counts": _notification_counts_payload(user_id),
             "pagination": {
                 "page": pagination.page,
                 "per_page": pagination.per_page,
@@ -5548,7 +6762,14 @@ def notification_mark_read_api(notification_id):
     notification = Notification.query.filter_by(id=notification_id, recipient_user_id=user_id).first_or_404()
     notification.mark_read()
     db.session.commit()
-    return jsonify({"ok": True})
+    return jsonify(
+        {
+            "ok": True,
+            "notification": _notification_payload(notification),
+            "unread_count": NotificationService.unread_count_for_user(user_id),
+            "counts": _notification_counts_payload(user_id),
+        }
+    )
 
 
 @api_bp.route("/admin/proctoring/status")
@@ -5764,7 +6985,14 @@ def mark_notifications_read():
             "message": "This account is active in another browser. Please log in again here.",
         }), 401
     count = NotificationService.mark_user_notifications_read(user_id)
-    return jsonify({"ok": True, "read": count})
+    return jsonify(
+        {
+            "ok": True,
+            "read": count,
+            "unread_count": NotificationService.unread_count_for_user(user_id),
+            "counts": _notification_counts_payload(user_id),
+        }
+    )
 
 
 @api_bp.route("/student/session/<session_code>/status")
@@ -5841,7 +7069,41 @@ def exam_state(session_code):
     exam = student_session.exam_set
     time_state = ExamService.enforce_time_window(student_session)
     if ExamSessionGuard.is_locked(student_session) or time_state == "ended":
-        return _locked_session_response(student_session)
+        student_user = _find_student_by_identifier(student_session.roll_no)
+        max_warnings = SettingsService.max_violations_allowed()
+        return jsonify(
+            {
+                "ok": True,
+                "session_code": student_session.session_code,
+                "session_token": ExamSessionGuard.ensure_token(student_session),
+                "status": _api_session_status(student_session),
+                "remaining_seconds": 0,
+                "warning_count": student_session.focus_violations,
+                "max_warnings": max_warnings,
+                "is_paused": False,
+                "redirect": _submitted_results_redirect(student_session),
+                "exam": {
+                    "id": exam.id,
+                    "title": exam.exam_name,
+                    "set_code": exam.set_code,
+                    "instructions": getattr(exam, "instructions", "") or "",
+                    "total_marks": exam.total_marks,
+                    "total_questions": Question.query.filter_by(exam_set_id=exam.id).count(),
+                    "duration_minutes": exam.duration_minutes,
+                    "shuffle_questions": bool(getattr(exam, "shuffle_questions", False)),
+                    "allow_code_execution": True,
+                },
+                "student": {
+                    "name": student_session.student_name,
+                    "roll_number": student_session.roll_no,
+                    "email": student_user.email if student_user else None,
+                },
+                "questions": [],
+                "saved_answers": {},
+                "admin_message": None,
+                "attempt_number": _attempt_number(student_session),
+            }
+        )
     if exam.status != "active" or time_state == "not_started":
         return _forbidden_session_response(
             "This exam is temporarily inactive while changes are being made." if exam.status == "draft" else "This exam has not opened yet.",
@@ -5858,38 +7120,62 @@ def exam_state(session_code):
     questions = ExamService.get_session_questions(student_session)
     answers = Answer.query.filter_by(session_id=student_session.id).all()
     answers_by_question = {answer.question_id: answer for answer in answers}
+    student_user = _find_student_by_identifier(student_session.roll_no)
+    admin_message, session_messages = _pop_latest_admin_message(student_session)
 
     question_payloads = []
-    status_counts = {state: 0 for state in AutoSaveService.VALID_VISIT_STATUSES}
-    for question in questions:
+    saved_answers = {}
+    status_counts = {state: 0 for state in EXAM_NAVIGATOR_STATUSES}
+    for order_index, question in enumerate(questions, start=1):
         answer = answers_by_question.get(question.id)
         visit_status = (
             answer.visit_status
-            if answer and answer.visit_status in AutoSaveService.VALID_VISIT_STATUSES
+            if answer and answer.visit_status in EXAM_NAVIGATOR_STATUSES
             else "ANSWERED"
             if answer and (answer.answer_text or "").strip()
             else "NOT_VISITED"
         )
         status_counts[visit_status] = status_counts.get(visit_status, 0) + 1
+        question_type = _exam_question_type(question)
+        answer_text = answer.answer_text if answer else ""
+        saved_answers[str(question.id)] = {
+            "answer_text": answer_text if question_type != "code" else "",
+            "selected_option": answer_text if question_type == "mcq" else None,
+            "code_text": answer_text if question_type == "code" else "",
+            "code_output": answer.code_output if answer else "",
+            "navigator_status": visit_status,
+            "time_spent_seconds": int(getattr(answer, "total_time_spent_seconds", 0) or 0) if answer else 0,
+            "visit_count": int(getattr(answer, "visit_count", 0) or 0) if answer else 0,
+        }
         question_payloads.append(
             {
                 "id": question.id,
+                "order_index": order_index,
+                "type": question_type,
                 "question_number": question.question_number,
                 "question_text": question.question_text,
                 "question_type": question.question_type,
                 "marks": question.marks,
-                "options": _question_options_for_attempt(question, student_session),
+                "max_marks": question.marks,
+                "options": _question_options_payload(question, student_session),
                 "image_urls": [url_for("static", filename=path) for path in question.image_paths_as_list()],
                 "code_snippet": question.code_snippet,
                 "code_language": question.code_language or "python",
+                "starter_code": "",
                 "time_limit_seconds": question.time_limit_seconds or 0,
                 "execution_time_limit_seconds": question.execution_time_limit_seconds or 10,
+                "navigator_status": visit_status,
                 "answer": {
-                    "answer_text": answer.answer_text if answer else "",
+                    "answer_text": answer_text,
+                    "selected_option": answer_text if question_type == "mcq" else None,
+                    "code_text": answer_text if question_type == "code" else "",
                     "code_output": answer.code_output if answer else "",
                     "execution_status": answer.execution_status if answer else None,
                     "execution_time_ms": answer.execution_time_ms if answer else None,
                     "visit_status": visit_status,
+                    "navigator_status": visit_status,
+                    "time_spent_seconds": int(getattr(answer, "total_time_spent_seconds", 0) or 0) if answer else 0,
+                    "visit_count": int(getattr(answer, "visit_count", 0) or 0) if answer else 0,
                     "question_time_expired": bool(answer and answer.question_time_expired),
                     "question_expires_at": _iso_datetime(answer.question_expires_at) if answer else None,
                     "saved_at": _iso_datetime(answer.saved_at) if answer else None,
@@ -5898,22 +7184,40 @@ def exam_state(session_code):
         )
 
     remaining_seconds = ExamService.remaining_seconds_for_session(student_session)
+    max_warnings = SettingsService.max_violations_allowed()
+    session_token = ExamSessionGuard.ensure_token(student_session)
     return jsonify(
         {
             "ok": True,
-            "attempt_token": ExamSessionGuard.ensure_token(student_session),
-            "max_violations_allowed": SettingsService.max_violations_allowed(),
+            "session_code": student_session.session_code,
+            "session_token": session_token,
+            "attempt_token": session_token,
+            "status": _api_session_status(student_session),
             "remaining_seconds": remaining_seconds,
+            "warning_count": student_session.focus_violations,
+            "max_warnings": max_warnings,
+            "is_paused": student_session.status == "paused",
+            "max_violations_allowed": max_warnings,
             "status_counts": status_counts,
             "exam": {
                 "id": exam.id,
+                "title": exam.exam_name,
                 "exam_name": exam.exam_name,
                 "subject": exam.subject,
                 "set_code": exam.set_code,
+                "instructions": getattr(exam, "instructions", "") or "",
                 "duration_minutes": exam.duration_minutes,
                 "total_marks": exam.total_marks,
+                "total_questions": len(questions),
+                "shuffle_questions": bool(getattr(exam, "shuffle_questions", False)),
+                "allow_code_execution": True,
                 "start_time": _iso_datetime(exam.start_time),
                 "end_time": _iso_datetime(exam.end_time),
+            },
+            "student": {
+                "name": student_session.student_name,
+                "roll_number": student_session.roll_no,
+                "email": student_user.email if student_user else None,
             },
             "student_session": {
                 "id": student_session.id,
@@ -5926,6 +7230,10 @@ def exam_state(session_code):
                 "submitted_url": f"/react/student/submitted/{session_code}",
             },
             "questions": question_payloads,
+            "saved_answers": saved_answers,
+            "admin_message": admin_message,
+            "session_messages": session_messages,
+            "attempt_number": _attempt_number(student_session),
         }
     )
 
@@ -5945,6 +7253,48 @@ def acquire_window_lock(session_code):
     return jsonify({"ok": True, "message": "Exam window locked"})
 
 
+def _autosave_response(student_session, data, require_window=False, legacy=False):
+    if require_window and not ExamSessionGuard.request_window_owns_attempt(student_session, data):
+        return _window_lock_response(student_session)
+
+    question_id = _parse_int_field(data, "question_id")
+    if question_id is None:
+        return jsonify({"ok": False, "saved": False, "message": "Valid question_id is required"}), 400
+
+    question = Question.query.filter_by(id=question_id, exam_set_id=student_session.exam_set_id).first()
+    if not question:
+        return jsonify({"ok": False, "saved": False, "message": "Question not found for this exam."}), 404
+
+    answer_text = _answer_text_for_question(question, data)
+    navigator_status = _navigator_status(data, answer_text)
+    time_spent_seconds = _parse_int_field(data, "time_spent_seconds", minimum=0, maximum=86400, max_digits=6)
+    time_spent_delta_seconds = _parse_int_field(data, "time_spent_delta_seconds", minimum=0, maximum=3600, max_digits=5)
+    success, message = AutoSaveService.save_answer(
+        student_session.session_code,
+        question_id,
+        answer_text,
+        visit_status=navigator_status,
+        time_spent_seconds=time_spent_seconds,
+        time_spent_delta_seconds=time_spent_delta_seconds,
+    )
+
+    if legacy:
+        return jsonify({"ok": success, "message": message}), 200 if success else 400
+
+    admin_message, _messages = _pop_latest_admin_message(student_session)
+    payload = {
+        "ok": success,
+        "saved": bool(success),
+        "message": message,
+        "remaining_seconds": ExamService.remaining_seconds_for_session(student_session),
+        "warning_count": student_session.focus_violations,
+        "max_warnings": SettingsService.max_violations_allowed(),
+        "is_paused": student_session.status == "paused",
+        "admin_message": admin_message,
+    }
+    return jsonify(payload), 200 if success else 400
+
+
 @api_bp.route("/student/session/<session_code>/save", methods=["POST"])
 @rate_limit("autosave")
 def save_answer(session_code):
@@ -5954,21 +7304,29 @@ def save_answer(session_code):
         session_code,
         data,
         require_active=True,
-        require_window=True,
+        require_window=False,
     )
     if error_response:
         return error_response
 
-    question_id = _parse_int_field(data, "question_id")
-    answer_text = (data.get("answer_text", "") or "").strip()
-    visit_status = data.get("visit_status")
+    return _autosave_response(student_session, data, require_window=True, legacy=True)
 
-    if question_id is None:
-        return jsonify({"ok": False, "message": "Valid question_id is required"}), 400
 
-    success, message = AutoSaveService.save_answer(session_code, question_id, answer_text, visit_status=visit_status)
+@api_bp.route("/student/session/<session_code>/autosave", methods=["POST"])
+@rate_limit("autosave")
+def autosave_answer(session_code):
+    data = _get_json_payload()
+    student_session, error_response = _require_attempt(
+        session_code,
+        data,
+        require_active=True,
+        require_window=False,
+        allowed_statuses={"active", "paused"},
+    )
+    if error_response:
+        return error_response
 
-    return jsonify({"ok": success, "message": message}), 200 if success else 400
+    return _autosave_response(student_session, data, require_window=False, legacy=False)
 
 
 @api_bp.route("/student/session/<session_code>/question-status", methods=["POST"])
@@ -5985,13 +7343,51 @@ def save_question_status(session_code):
         return error_response
 
     question_id = _parse_int_field(data, "question_id")
-    visit_status = data.get("visit_status")
+    visit_status = data.get("navigator_status") or data.get("visit_status")
 
     if question_id is None:
         return jsonify({"ok": False, "message": "Valid question_id is required"}), 400
 
-    success, message = AutoSaveService.save_visit_status(session_code, question_id, visit_status)
+    success, message = AutoSaveService.save_visit_status(
+        session_code,
+        question_id,
+        visit_status,
+        time_spent_seconds=_parse_int_field(data, "time_spent_seconds", minimum=0, maximum=86400, max_digits=6),
+        time_spent_delta_seconds=_parse_int_field(data, "time_spent_delta_seconds", minimum=0, maximum=3600, max_digits=5),
+    )
     return jsonify({"ok": success, "message": message}), 200 if success else 400
+
+
+@api_bp.route("/student/session/<session_code>/navigator-update", methods=["POST"])
+@rate_limit("autosave")
+def navigator_update(session_code):
+    data = _get_json_payload()
+    student_session, error_response = _require_attempt(
+        session_code,
+        data,
+        require_active=True,
+        require_window=False,
+        allowed_statuses={"active", "paused"},
+    )
+    if error_response:
+        return error_response
+
+    question_id = _parse_int_field(data, "question_id")
+    if question_id is None:
+        return jsonify({"ok": False, "updated": False, "message": "Valid question_id is required"}), 400
+
+    requested_status = data.get("navigator_status") or data.get("visit_status") or "VISITED_UNANSWERED"
+    existing_answer = Answer.query.filter_by(session_id=student_session.id, question_id=question_id).first()
+    if not existing_answer:
+        requested_status = "VISITED_UNANSWERED"
+    success, message = AutoSaveService.save_visit_status(
+        student_session.session_code,
+        question_id,
+        requested_status,
+        time_spent_seconds=_parse_int_field(data, "time_spent_seconds", minimum=0, maximum=86400, max_digits=6),
+        time_spent_delta_seconds=_parse_int_field(data, "time_spent_delta_seconds", minimum=0, maximum=3600, max_digits=5),
+    )
+    return jsonify({"ok": success, "updated": bool(success), "message": message}), 200 if success else 400
 
 
 @api_bp.route("/student/session/<session_code>/question-expired", methods=["POST"])
@@ -6011,7 +7407,8 @@ def mark_question_expired(session_code):
     if question_id is None:
         return jsonify({"ok": False, "message": "Valid question_id is required"}), 400
 
-    answer_text = (data.get("answer_text", "") or "").strip()
+    answer_text = data.get("answer_text", "")
+    answer_text = "" if answer_text is None else str(answer_text)
     visit_status = data.get("visit_status")
     if answer_text:
         AutoSaveService.save_answer(session_code, question_id, answer_text, visit_status=visit_status)
@@ -6052,22 +7449,12 @@ def request_pause(session_code):
     return jsonify({"ok": True, "message": "Pause request sent to admin."})
 
 
-@api_bp.route("/student/session/<session_code>/execute", methods=["POST"])
-@rate_limit("code_execution")
-def execute_code(session_code):
-    """Run Python code for an authorized coding question."""
-    data = _get_json_payload()
-    student_session, error_response = _require_attempt(
-        session_code,
-        data,
-        require_active=True,
-        require_window=True,
-    )
-    if error_response:
-        return error_response
-
+def _code_run_response(student_session, data, legacy=False):
     question_id = _parse_int_field(data, "question_id")
-    code = data.get("code") or ""
+    code = data.get("code")
+    if code is None:
+        code = data.get("code_text")
+    code = code or ""
     stdin_text = data.get("stdin") or ""
 
     if question_id is None:
@@ -6076,7 +7463,7 @@ def execute_code(session_code):
     question = Question.query.filter_by(id=question_id, exam_set_id=student_session.exam_set_id).first()
     if not question:
         return jsonify({"ok": False, "message": "Question not found for this exam."}), 404
-    if question.question_type != "coding":
+    if _exam_question_type(question) != "code":
         return jsonify({"ok": False, "message": "This question is not a coding question."}), 400
 
     answer = Answer.query.filter_by(session_id=student_session.id, question_id=question.id).first()
@@ -6110,17 +7497,19 @@ def execute_code(session_code):
         memory_mb=current_app.config.get("CODE_EXECUTION_MEMORY_MB", 128),
     )
 
-    output_parts = [f"[{result.status.upper()}] {result.message}"]
+    output_parts = []
     if result.stdout:
-        output_parts.append(f"STDOUT:\n{result.stdout}")
-    if result.stderr:
-        output_parts.append(f"STDERR:\n{result.stderr}")
+        output_parts.append(result.stdout)
+    if result.message and not result.stdout:
+        output_parts.append(result.message)
+    output_text = "\n".join(part for part in output_parts if part)
+    error_text = result.stderr or (result.message if result.status in {"error", "timeout", "rejected"} and not result.stdout else "")
 
     answer.answer_text = code
-    answer.code_output = "\n".join(part for part in output_parts if part)
+    answer.code_output = output_text or error_text or result.message
     answer.execution_status = result.status
     answer.execution_time_ms = result.execution_time_ms
-    answer.visit_status = AutoSaveService.normalize_visit_status(data.get("visit_status"), code)
+    answer.visit_status = AutoSaveService.normalize_visit_status(data.get("navigator_status") or data.get("visit_status"), code)
     student_session.last_heartbeat = datetime.utcnow()
     student_session.updated_at = datetime.utcnow()
     db.session.add(
@@ -6138,9 +7527,55 @@ def execute_code(session_code):
     )
     db.session.commit()
 
-    payload = result.as_dict()
-    payload["message"] = result.message
-    return jsonify(payload), 200 if result.status in ["success", "error", "timeout", "rejected"] else 400
+    if legacy:
+        legacy_payload = result.as_dict()
+        legacy_payload["message"] = result.message
+        return jsonify(legacy_payload), 200 if result.status in ["success", "error", "timeout", "rejected"] else 400
+
+    return jsonify(
+        {
+            "ok": True,
+            "output": output_text,
+            "error": error_text,
+            "execution_time_seconds": round((result.execution_time_ms or 0) / 1000, 3),
+            "timed_out": result.status == "timeout",
+            "status": result.status,
+            "message": result.message,
+        }
+    )
+
+
+@api_bp.route("/student/session/<session_code>/execute", methods=["POST"])
+@rate_limit("code_execution")
+def execute_code(session_code):
+    """Run Python code for an authorized coding question."""
+    data = _get_json_payload()
+    student_session, error_response = _require_attempt(
+        session_code,
+        data,
+        require_active=True,
+        require_window=True,
+    )
+    if error_response:
+        return error_response
+
+    return _code_run_response(student_session, data, legacy=True)
+
+
+@api_bp.route("/student/session/<session_code>/code-run", methods=["POST"])
+@rate_limit("code_execution")
+def code_run(session_code):
+    data = _get_json_payload()
+    student_session, error_response = _require_attempt(
+        session_code,
+        data,
+        require_active=True,
+        require_window=False,
+    )
+    if error_response:
+        return error_response
+
+    return _code_run_response(student_session, data, legacy=False)
 
 
 @api_bp.route("/student/session/<session_code>/heartbeat", methods=["POST"])
@@ -6151,18 +7586,40 @@ def heartbeat(session_code):
     student_session, error_response = _require_attempt(
         session_code,
         data,
-        require_active=True,
-        require_window=True,
-        allowed_statuses={"active", "paused"},
+        require_active=False,
+        require_window=False,
     )
     if error_response:
         return error_response
 
-    remaining_seconds = ExamService.remaining_seconds_for_session(student_session)
+    if ExamSessionGuard.request_window_token(data):
+        ExamSessionGuard.request_window_owns_attempt(student_session, data)
 
+    ExamService.enforce_time_window(student_session)
+    remaining_seconds = ExamService.remaining_seconds_for_session(student_session)
     focused = bool(data.get("focused", True))
     violation_count = _parse_int_field(data, "violation_count")
     violation_count = violation_count if violation_count is not None else 0
+    current_question_index = _parse_int_field(data, "current_question_index", minimum=0, maximum=10000, max_digits=5)
+    current_question_id = _parse_int_field(data, "current_question_id", minimum=1, max_digits=9)
+    if current_question_id:
+        question = Question.query.filter_by(id=current_question_id, exam_set_id=student_session.exam_set_id).first()
+        if question:
+            student_session.current_question_id = question.id
+            student_session.current_question_index = current_question_index
+    elif current_question_index is not None:
+        student_session.current_question_index = current_question_index
+        session_questions = ExamService.get_session_questions(student_session)
+        if current_question_index < len(session_questions):
+            student_session.current_question_id = session_questions[current_question_index].id
+
+    if current_question_id:
+        AutoSaveService.record_question_time(
+            session_code,
+            current_question_id,
+            time_spent_seconds=_parse_int_field(data, "time_spent_seconds", minimum=0, maximum=86400, max_digits=6),
+            time_spent_delta_seconds=_parse_int_field(data, "time_spent_delta_seconds", minimum=0, maximum=3600, max_digits=5),
+        )
 
     if student_session.status == "active":
         SecurityService.record_heartbeat(session_code, focused, violation_count)
@@ -6174,33 +7631,39 @@ def heartbeat(session_code):
 
     if should_submit and student_session.status == "active":
         ExamService.end_exam(session_code, reason="Auto-submitted due to security violations")
+        remaining_seconds = 0
+
+    is_locked = ExamSessionGuard.is_locked(student_session)
+    terminated = student_session.status == "terminated"
+    max_warnings = SettingsService.max_violations_allowed()
+    admin_message, session_messages = _pop_latest_admin_message(student_session)
 
     emit_to_proctors(
         student_session.exam_set_id,
         "proctor:student_status",
-        {
-            "session_id": student_session.id,
-            "student_name": student_session.student_name,
-            "roll_no": student_session.roll_no,
-            "status": student_session.status,
-            "remaining_seconds": remaining_seconds,
-            "focus_violations": student_session.focus_violations,
-        },
+        _proctor_session_payload(student_session),
     )
 
     return jsonify(
         {
             "ok": True,
-            "submitted": ExamSessionGuard.is_locked(student_session),
+            "submitted": is_locked,
             "session_status": student_session.status,
-            "redirect": _submitted_redirect(session_code) if ExamSessionGuard.is_locked(student_session) else None,
+            "redirect": _submitted_results_redirect(student_session) if is_locked else None,
             "remaining_seconds": remaining_seconds,
+            "warning_count": student_session.focus_violations,
             "focus_violations": student_session.focus_violations,
-            "max_violations_allowed": SettingsService.max_violations_allowed(),
+            "max_warnings": max_warnings,
+            "max_violations_allowed": max_warnings,
+            "is_paused": student_session.status == "paused",
             "paused": student_session.status == "paused",
             "pause_requested": bool(student_session.pause_requested_at),
             "pause_reason": student_session.pause_reason,
-            "session_messages": NotificationService.pop_unread_session_messages(student_session.id),
+            "terminated": terminated,
+            "second_chance": False,
+            "time_reduced": False,
+            "admin_message": admin_message,
+            "session_messages": session_messages,
             "should_submit": should_submit,
         }
     )
@@ -6215,22 +7678,28 @@ def record_violation(session_code):
         session_code,
         data,
         require_active=True,
-        require_window=True,
+        require_window=False,
+        allowed_statuses={"active", "paused"},
     )
     if error_response:
         return error_response
 
-    violation_type = (data.get("type") or "UNKNOWN").strip()
+    violation_type = (data.get("violation_type") or data.get("type") or "UNKNOWN").strip()
+    normalized_type = violation_type.upper().replace(" ", "_")
+    if normalized_type not in EXAM_VIOLATION_TYPES:
+        return jsonify({"ok": False, "message": "Unsupported violation_type."}), 400
     detail = (data.get("detail") or "").strip()
     client_count = _parse_int_field(data, "violation_count") or 0
+    should_warn = normalized_type not in {"RIGHT_CLICK"} and not bool(data.get("silent"))
 
     violation = SecurityService.record_violation(
         session_code=session_code,
-        violation_type=violation_type,
+        violation_type=normalized_type,
         detail=detail,
         client_count=client_count,
         ip_address=get_client_ip(),
         user_agent=request.headers.get("User-Agent"),
+        count_warning=should_warn,
     )
 
     max_violations = SettingsService.max_violations_allowed()
@@ -6242,7 +7711,7 @@ def record_violation(session_code):
             "session_id": student_session.id,
             "student_name": student_session.student_name,
             "roll_no": student_session.roll_no,
-            "type": violation.violation_type if violation else violation_type,
+            "type": violation.violation_type if violation else normalized_type,
             "detail": detail,
             "count": student_session.focus_violations,
             "admin_review_required": admin_review_required,
@@ -6252,8 +7721,11 @@ def record_violation(session_code):
     return jsonify(
         {
             "ok": True,
+            "warning_count": student_session.focus_violations,
             "focus_violations": student_session.focus_violations,
+            "max_warnings": max_violations,
             "max_violations_allowed": max_violations,
+            "should_warn": should_warn,
             "admin_review_required": admin_review_required,
             "message": "Violation recorded",
         }
@@ -6261,7 +7733,7 @@ def record_violation(session_code):
 
 
 @api_bp.route("/student/session/<session_code>/submit", methods=["POST"])
-@rate_limit("submit")
+@rate_limit("exam_submit")
 def submit_session(session_code):
     """Manual or auto exam submission"""
     data = _get_json_payload()
@@ -6275,6 +7747,28 @@ def submit_session(session_code):
         return error_response
 
     reason = (data.get("reason") or "Manual submission").strip()
+    final_answer = data.get("final_answer") if isinstance(data.get("final_answer"), dict) else None
+    if final_answer:
+        question_id = _parse_int_field(final_answer, "question_id")
+        if question_id is not None:
+            question = Question.query.filter_by(id=question_id, exam_set_id=student_session.exam_set_id).first()
+            if question:
+                answer_text = _answer_text_for_question(question, final_answer)
+                navigator_status = _navigator_status(final_answer, answer_text)
+                time_spent_seconds = _parse_int_field(
+                    final_answer,
+                    "time_spent_seconds",
+                    minimum=0,
+                    maximum=86400,
+                    max_digits=6,
+                )
+                AutoSaveService.save_answer(
+                    student_session.session_code,
+                    question_id,
+                    answer_text,
+                    visit_status=navigator_status,
+                    time_spent_seconds=time_spent_seconds,
+                )
 
     ExamService.end_exam(session_code, reason=reason)
     AuditLog(
@@ -6296,8 +7790,9 @@ def submit_session(session_code):
             jsonify(
                 {
                     "ok": True,
+                    "submitted": True,
                     "warning": "Submission saved, but result calculation failed",
-                    "redirect": f"/react/student/submitted/{session_code}",
+                    "redirect": _submitted_results_redirect(student_session),
                 }
             ),
             200,
@@ -6324,7 +7819,7 @@ def submit_session(session_code):
     emit_to_session(
         student_session,
         "exam:submitted",
-        {"message": "Your exam has been submitted.", "redirect": f"/react/student/submitted/{session_code}"},
+        {"message": "Your exam has been submitted.", "redirect": _submitted_results_redirect(student_session)},
     )
 
-    return jsonify({"ok": True, "redirect": f"/react/student/submitted/{session_code}"})
+    return jsonify({"ok": True, "submitted": True, "redirect": _submitted_results_redirect(student_session)})

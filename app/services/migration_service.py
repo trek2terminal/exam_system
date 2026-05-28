@@ -424,6 +424,25 @@ class MigrationService:
         )
 
     @staticmethod
+    def _migration_answer_time_tracking():
+        MigrationService._add_column_if_missing(
+            "answers",
+            "total_time_spent_seconds",
+            "INTEGER NOT NULL DEFAULT 0",
+        )
+        MigrationService._add_column_if_missing("answers", "last_visited_at", "DATETIME")
+        MigrationService._add_column_if_missing(
+            "answers",
+            "visit_count",
+            "INTEGER NOT NULL DEFAULT 0",
+        )
+
+    @staticmethod
+    def _migration_session_current_question_tracking():
+        MigrationService._add_column_if_missing("student_sessions", "current_question_index", "INTEGER")
+        MigrationService._add_column_if_missing("student_sessions", "current_question_id", "INTEGER")
+
+    @staticmethod
     def _migration_platform_settings_seed():
         if PlatformSettings.query.first():
             return
@@ -581,6 +600,16 @@ class MigrationService:
             "Add student registration access requests",
             _migration_registration_requests.__func__,
         ),
+        (
+            "20260527_028_answer_time_tracking",
+            "Track cumulative time spent on each answered question",
+            _migration_answer_time_tracking.__func__,
+        ),
+        (
+            "20260527_029_session_current_question_tracking",
+            "Track the student's current question for live proctoring",
+            _migration_session_current_question_tracking.__func__,
+        ),
     ]
 
     @staticmethod
@@ -723,6 +752,17 @@ class MigrationService:
                 MigrationService._has_table("registration_requests")
                 and MigrationService._has_column("registration_requests", "message")
                 and MigrationService._has_index("registration_requests", "ix_registration_requests_status")
+            )
+        if version == "20260527_028_answer_time_tracking":
+            return (
+                MigrationService._has_column("answers", "total_time_spent_seconds")
+                and MigrationService._has_column("answers", "last_visited_at")
+                and MigrationService._has_column("answers", "visit_count")
+            )
+        if version == "20260527_029_session_current_question_tracking":
+            return (
+                MigrationService._has_column("student_sessions", "current_question_index")
+                and MigrationService._has_column("student_sessions", "current_question_id")
             )
         return False
 

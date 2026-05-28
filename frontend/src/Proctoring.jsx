@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import {
+  Activity,
   AlertTriangle,
+  BarChart3,
   BellRing,
   CheckCircle2,
   Clock3,
@@ -10,11 +12,14 @@ import {
   PlayCircle,
   Radio,
   RefreshCw,
+  Search,
   ShieldAlert,
   Volume2,
   VolumeX,
   TimerReset,
   UserCheck,
+  Wifi,
+  WifiOff,
   XCircle
 } from "lucide-react";
 import { api } from "./services/api";
@@ -39,6 +44,22 @@ function formatSeconds(value) {
   return [hours, minutes, seconds].map(part => String(part).padStart(2, "0")).join(":");
 }
 
+function formatShortDuration(value) {
+  const total = Math.max(Number(value || 0), 0);
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  if (minutes <= 0) return `${seconds}s`;
+  if (minutes < 60) return `${minutes}m ${String(seconds).padStart(2, "0")}s`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ${minutes % 60}m`;
+}
+
+function onlineMeta(status) {
+  if (status === "online") return { label: "Online", icon: Wifi, tone: "online" };
+  if (status === "stale") return { label: "Stale", icon: Activity, tone: "stale" };
+  return { label: "Offline", icon: WifiOff, tone: "offline" };
+}
+
 function violationTone(count) {
   if (count >= 3) return "danger";
   if (count > 0) return "warning";
@@ -50,7 +71,11 @@ function countSessions(sessions) {
     active_sessions: sessions.filter(item => item.status === "active").length,
     waiting_sessions: sessions.filter(item => item.status === "waiting").length,
     paused_sessions: sessions.filter(item => item.status === "paused").length,
-    flagged_sessions: sessions.filter(item => item.focus_violations > 0).length
+    flagged_sessions: sessions.filter(item => item.focus_violations > 0).length,
+    online_sessions: sessions.filter(item => item.online_status === "online").length,
+    stale_sessions: sessions.filter(item => item.online_status === "stale").length,
+    offline_sessions: sessions.filter(item => item.online_status === "offline").length,
+    critical_sessions: sessions.filter(item => item.risk_level === "critical").length
   };
 }
 
@@ -68,6 +93,9 @@ export default function Proctoring({ mode }) {
   const [data, setData] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
   const [selectedExamId, setSelectedExamId] = useState("all");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [riskFilter, setRiskFilter] = useState("all");
   const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(() => window.localStorage.getItem("proctorSoundEnabled") === "true");
   const [loading, setLoading] = useState(true);
@@ -254,17 +282,55 @@ export default function Proctoring({ mode }) {
       ...Array.from(exams.entries()).map(([value, label]) => ({ value, label }))
     ];
   }, [data?.sessions]);
+  const statusOptions = [
+    { value: "all", label: "All Statuses" },
+    { value: "active", label: "Active" },
+    { value: "waiting", label: "Waiting" },
+    { value: "paused", label: "Paused" },
+    { value: "online", label: "Online" },
+    { value: "stale", label: "Stale" },
+    { value: "offline", label: "Offline" }
+  ];
+  const riskOptions = [
+    { value: "all", label: "All Risk Levels" },
+    { value: "flagged", label: "Has Warnings" },
+    { value: "critical", label: "Critical" },
+    { value: "pause", label: "Pause Requested" }
+  ];
 
   const sortedSessions = useMemo(() => {
     const sessions = data?.sessions || [];
+    const search = searchTerm.trim().toLowerCase();
     const filtered = selectedExamId === "all"
       ? sessions
       : sessions.filter(item => String(item.exam_id) === String(selectedExamId));
-    return [...filtered].sort((left, right) => {
-      if (right.focus_violations !== left.focus_violations) return right.focus_violations - left.focus_violations;
-      return (right.remaining_seconds || 0) - (left.remaining_seconds || 0);
-    });
-  }, [data, selectedExamId]);
+    return filtered
+      .filter(item => {
+        if (!search) return true;
+        return `${item.student_name || ""} ${item.roll_no || ""} ${item.exam_name || ""} ${item.set_code || ""}`.toLowerCase().includes(search);
+      })
+      .filter(item => {
+        if (statusFilter === "all") return true;
+        if (["online", "stale", "offline"].includes(statusFilter)) return item.online_status === statusFilter;
+        return item.status === statusFilter;
+      })
+      .filter(item => {
+        if (riskFilter === "all") return true;
+        if (riskFilter === "flagged") return Number(item.focus_violations || 0) > 0;
+        if (riskFilter === "critical") return item.risk_level === "critical";
+        if (riskFilter === "pause") return Boolean(item.pause_requested);
+        return true;
+      })
+      .sort((left, right) => {
+        const riskWeight = { critical: 3, warning: 2, normal: 1 };
+        const rightRisk = riskWeight[right.risk_level] || 0;
+        const leftRisk = riskWeight[left.risk_level] || 0;
+        if (rightRisk !== leftRisk) return rightRisk - leftRisk;
+        if (right.focus_violations !== left.focus_violations) return right.focus_violations - left.focus_violations;
+        if ((left.online_status === "offline") !== (right.online_status === "offline")) return left.online_status === "offline" ? -1 : 1;
+        return (left.remaining_seconds || 0) - (right.remaining_seconds || 0);
+      });
+  }, [data?.sessions, riskFilter, searchTerm, selectedExamId, statusFilter]);
 
   const selectedSession = sortedSessions.find(item => item.id === selectedId) || sortedSessions[0] || null;
   const waitingSessions = sortedSessions.filter(item => item.status === "waiting");
@@ -314,15 +380,26 @@ export default function Proctoring({ mode }) {
 
       <section className="studentStats">
         <Card className="statsCard border-success/30 bg-success/5"><PlayCircle size={18} className="text-success" /><span>Active</span><strong>{counts.active_sessions || 0}</strong></Card>
+        <Card className="statsCard border-info/30 bg-info/5"><Wifi size={18} className="text-info" /><span>Online</span><strong>{counts.online_sessions || 0}</strong></Card>
         <Card className="statsCard border-warning/30 bg-warning/5"><Clock3 size={18} className="text-warning" /><span>Waiting</span><strong>{counts.waiting_sessions || 0}</strong></Card>
         <Card className={cn("statsCard border-orange-300/30 bg-orange-500/5", Number(counts.paused_sessions || 0) > 0 && "border-orange-400/70 bg-orange-500/10")}><PauseCircle size={18} className="text-orange-500" /><span>Paused</span><strong>{counts.paused_sessions || 0}</strong></Card>
         <Card className={cn("statsCard border-danger/30 bg-danger/5", Number(counts.flagged_sessions || 0) > 0 && "border-danger/70 bg-danger/10")}><ShieldAlert size={18} className="text-danger" /><span>Flagged</span><strong>{counts.flagged_sessions || 0}</strong></Card>
+        <Card className={cn("statsCard border-slate-300/40 bg-slate-500/5", Number(counts.offline_sessions || 0) > 0 && "border-danger/50 bg-danger/5")}><WifiOff size={18} className={Number(counts.offline_sessions || 0) > 0 ? "text-danger" : "text-text-muted"} /><span>Offline</span><strong>{counts.offline_sessions || 0}</strong></Card>
       </section>
 
       <Card className="p-4">
-        <div className="grid gap-3 md:grid-cols-[minmax(0,320px)_1fr] md:items-end">
+        <div className="proctorFilters">
           <Select label="Active Exam" value={selectedExamId} onChange={setSelectedExamId} options={examOptions} required />
-          <p className="mb-0 text-sm text-text-muted">
+          <Input
+            label="Search"
+            value={searchTerm}
+            onChange={event => setSearchTerm(event.target.value)}
+            placeholder="Name, roll, exam, set"
+          />
+          <Select label="Status" value={statusFilter} onChange={setStatusFilter} options={statusOptions} required />
+          <Select label="Risk" value={riskFilter} onChange={setRiskFilter} options={riskOptions} required />
+          <p className="proctorFilterSummary">
+            <Search size={16} />
             Showing {sortedSessions.length} of {(data?.sessions || []).length} active, waiting, or paused attempts.
           </p>
         </div>
@@ -365,35 +442,50 @@ export default function Proctoring({ mode }) {
 
       <div className="proctorLayout">
         <section className="proctorCardGrid">
-          {sortedSessions.map(item => (
-            <button
-              type="button"
-              className={`proctorStudentCard ${violationTone(item.focus_violations)} ${selectedSession?.id === item.id ? "selected" : ""}`}
-              key={item.id}
-              onClick={() => {
-                setSelectedId(item.id);
-                setMobileDetailOpen(true);
-              }}
-            >
-              <div className="proctorCardTop">
-                <Avatar name={item.student_name} src={item.profile_picture} size="md" />
-                <div className="min-w-0 flex-1">
-                  <strong>{item.student_name}</strong>
-                  <span>Roll {item.roll_no} | {item.exam_name}</span>
+          {sortedSessions.map(item => {
+            const connection = onlineMeta(item.online_status);
+            const ConnectionIcon = connection.icon;
+            const progress = Math.max(0, Math.min(Number(item.progress_percent || 0), 100));
+            return (
+              <button
+                type="button"
+                className={`proctorStudentCard ${violationTone(item.focus_violations)} ${item.risk_level || "normal"} ${selectedSession?.id === item.id ? "selected" : ""}`}
+                key={item.id}
+                onClick={() => {
+                  setSelectedId(item.id);
+                  setMobileDetailOpen(true);
+                }}
+              >
+                <div className="proctorCardTop">
+                  <Avatar name={item.student_name} src={item.profile_picture} size="md" />
+                  <div className="min-w-0 flex-1">
+                    <strong>{item.student_name}</strong>
+                    <span>Roll {item.roll_no} | {item.exam_name}</span>
+                  </div>
+                  <span className={`proctorConnection ${connection.tone}`}><ConnectionIcon size={15} /> {connection.label}</span>
                 </div>
-                <Badge variant={violationTone(item.focus_violations)}>{item.focus_violations}</Badge>
-              </div>
-              <div className="proctorMetrics">
-                <span><Clock3 size={15} /> {formatSeconds(item.remaining_seconds)}</span>
-                <span><CheckCircle2 size={15} /> {item.answered_count}/{item.total_questions}</span>
-                <Badge variant={item.status === "active" ? "success" : item.status === "paused" ? "warning" : "secondary"}>{item.status}</Badge>
-              </div>
-              <div className="proctorCardFoot">
-                <span>{item.latest_violation || "No violation"}</span>
-                <span>{item.last_heartbeat_age == null ? "No heartbeat" : `${item.last_heartbeat_age}s ago`}</span>
-              </div>
-            </button>
-          ))}
+                <div className="proctorProgressLine" aria-label={`${progress}% answered`}>
+                  <span style={{ width: `${progress}%` }} />
+                </div>
+                <div className="proctorMetrics">
+                  <span><Clock3 size={15} /> {formatSeconds(item.remaining_seconds)}</span>
+                  <span><CheckCircle2 size={15} /> {item.answered_count}/{item.total_questions}</span>
+                  <span><BarChart3 size={15} /> {progress}%</span>
+                  <Badge variant={item.status === "active" ? "success" : item.status === "paused" ? "warning" : "secondary"}>{item.status}</Badge>
+                  <Badge variant={violationTone(item.focus_violations)}>{item.focus_violations} warn</Badge>
+                </div>
+                <div className="proctorCardMeta">
+                  <span>Current: {item.current_question_number ? `Q${item.current_question_number}` : "-"}</span>
+                  <span>Review: {item.review_count || 0}</span>
+                  <span>Skipped: {item.not_answered_count || 0}</span>
+                </div>
+                <div className="proctorCardFoot">
+                  <span>{item.latest_violation || "No violation"}</span>
+                  <span>{item.last_heartbeat_age == null ? "No heartbeat" : `${item.last_heartbeat_age}s ago`}</span>
+                </div>
+              </button>
+            );
+          })}
 
           {!sortedSessions.length && (
             <div className="emptyState">
@@ -515,6 +607,9 @@ function SessionDetail({ sessionItem, isAdmin, onActionMessage, onActionError, o
     }
     runAction(action);
   };
+  const connection = onlineMeta(sessionItem.online_status);
+  const ConnectionIcon = connection.icon;
+  const progress = Math.max(0, Math.min(Number(sessionItem.progress_percent || 0), 100));
 
   return (
     <div className="proctorDetail">
@@ -529,12 +624,30 @@ function SessionDetail({ sessionItem, isAdmin, onActionMessage, onActionError, o
         <div><span>Answered</span><strong>{sessionItem.answered_count}/{sessionItem.total_questions}</strong></div>
         <div><span>Violations</span><strong>{sessionItem.focus_violations}</strong></div>
         <div><span>Suspicion</span><strong>{sessionItem.suspicion_score || 0}</strong></div>
+        <div><span>Connection</span><strong className={`connectionText ${connection.tone}`}><ConnectionIcon size={17} /> {connection.label}</strong></div>
+        <div><span>Time Spent</span><strong>{formatShortDuration(sessionItem.time_spent_seconds)}</strong></div>
+      </div>
+
+      <div className="proctorDetailProgress">
+        <div className="rowBetween">
+          <span>Answer progress</span>
+          <strong>{progress}%</strong>
+        </div>
+        <div className="proctorProgressLine"><span style={{ width: `${progress}%` }} /></div>
+        <div>
+          <small>Answered {sessionItem.answered_count || 0}</small>
+          <small>Skipped {sessionItem.not_answered_count || 0}</small>
+          <small>Unseen {sessionItem.not_visited_count || 0}</small>
+          <small>Review {sessionItem.review_count || 0}</small>
+        </div>
       </div>
 
       <div className="proctorInfoList">
         <div><span>Status</span><strong>{sessionItem.status}</strong></div>
+        <div><span>Current question</span><strong>{sessionItem.current_question_number ? `Q${sessionItem.current_question_number} (${sessionItem.current_question_type || "question"})` : "Not reported"}</strong></div>
         <div><span>Latest violation</span><strong>{sessionItem.latest_violation || "None"}</strong></div>
         <div><span>Heartbeat</span><strong>{sessionItem.last_heartbeat_age == null ? "No heartbeat" : `${sessionItem.last_heartbeat_age}s ago`}</strong></div>
+        <div><span>Avg time / answered</span><strong>{formatShortDuration(sessionItem.average_time_per_answered_seconds)}</strong></div>
         <div><span>Pause request</span><strong>{sessionItem.pause_requested ? sessionItem.pause_reason || "Requested" : "No"}</strong></div>
       </div>
 

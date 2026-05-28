@@ -11,6 +11,7 @@ from reportlab.lib.utils import ImageReader, simpleSplit
 from reportlab.pdfgen import canvas
 from reportlab.platypus import Spacer, Table, TableStyle
 
+from app.models.audit_model import ViolationLog
 from app.models.exam_model import Question
 from app.models.submission_model import Answer
 from app.models.result_model import Result
@@ -265,24 +266,107 @@ def create_submission_pdf(student_session, include_unpublished_feedback=False):
     marks_map = {mark.question_id: mark for mark in result.question_marks} if result_visible else {}
     doc_type = "ANSWER SHEET" if include_unpublished_feedback else "RESULT SHEET"
 
+    def format_duration(seconds):
+        safe_seconds = max(int(seconds or 0), 0)
+        hours = safe_seconds // 3600
+        minutes = (safe_seconds % 3600) // 60
+        remainder = safe_seconds % 60
+        if hours:
+            return f"{hours}h {minutes}m {remainder}s"
+        if minutes:
+            return f"{minutes}m {remainder}s"
+        return f"{remainder}s"
+
+    def answer_submitted(answer):
+        return bool(answer and (answer.answer_text or "").strip())
+
     def question_category(question):
         if question.question_type == "mcq":
             return "MCQ"
-        if question.question_type == "coding":
+        if question.question_type in {"coding", "code"}:
             return "Code"
+        if question.question_type in {"long", "long_answer", "essay"}:
+            return "Long Answer"
         return "Written"
+
+    def report_analytics():
+        total_time_spent_seconds = 0
+        answered_count = 0
+        review_count = 0
+        not_visited_count = 0
+        category_summary = {}
+        for question in questions:
+            answer = answers_map.get(question.id)
+            question_mark = marks_map.get(question.id)
+            answered = answer_submitted(answer)
+            if answered:
+                answered_count += 1
+            if answer and answer.visit_status in {"MARKED_REVIEW", "ANSWERED_MARKED"}:
+                review_count += 1
+            if not answer or answer.visit_status == "NOT_VISITED":
+                not_visited_count += 1
+            time_spent = int(getattr(answer, "total_time_spent_seconds", 0) or 0) if answer else 0
+            total_time_spent_seconds += time_spent
+            category = question_category(question)
+            bucket = category_summary.setdefault(
+                category,
+                {"questions": 0, "answered": 0, "awarded": 0, "marks": 0, "time": 0},
+            )
+            bucket["questions"] += 1
+            bucket["answered"] += 1 if answered else 0
+            bucket["awarded"] += float(question_mark.marks_awarded or 0) if question_mark else 0
+            bucket["marks"] += float(question.marks or 0)
+            bucket["time"] += time_spent
+
+        session_duration_seconds = 0
+        if student_session.start_time and student_session.submitted_at:
+            session_duration_seconds = max(int((student_session.submitted_at - student_session.start_time).total_seconds()), 0)
+        latest_violation = (
+            ViolationLog.query.filter_by(session_id=student_session.id)
+            .order_by(ViolationLog.occurred_at.desc())
+            .first()
+        )
+        violation_count = ViolationLog.query.filter_by(session_id=student_session.id).count()
+        warning_count = int(student_session.focus_violations or 0)
+        max_warnings = SettingsService.max_violations_allowed()
+        suspicion_score = int(student_session.suspicion_score or 0)
+        if warning_count == 0 and suspicion_score == 0 and violation_count == 0:
+            integrity_status = "Clear"
+        elif warning_count >= max_warnings or suspicion_score >= 75:
+            integrity_status = "Admin review"
+        else:
+            integrity_status = "Review suggested"
+        return {
+            "answered_count": answered_count,
+            "unanswered_count": max(len(questions) - answered_count, 0),
+            "review_count": review_count,
+            "not_visited_count": not_visited_count,
+            "total_time_spent_seconds": total_time_spent_seconds,
+            "session_duration_seconds": session_duration_seconds,
+            "average_time_seconds": round(total_time_spent_seconds / len(questions)) if questions else 0,
+            "category_summary": category_summary,
+            "warning_count": warning_count,
+            "max_warnings": max_warnings,
+            "violation_count": violation_count,
+            "suspicion_score": suspicion_score,
+            "integrity_status": integrity_status,
+            "latest_violation": latest_violation,
+        }
 
     def add_question(story, question):
         answer = answers_map.get(question.id)
         question_mark = marks_map.get(question.id)
         awarded = question_mark.marks_awarded if question_mark else 0
+        time_spent = int(getattr(answer, "total_time_spent_seconds", 0) or 0) if answer else 0
+        visit_count = int(getattr(answer, "visit_count", 0) or 0) if answer else 0
         header = Table(
             [[
                 paragraph(f"Q{question.question_number}", "H3"),
                 status_badge(question.question_type, BRAND_PRIMARY),
+                paragraph(f"Time: {format_duration(time_spent)}\nVisits: {visit_count}", "BODY_SMALL"),
                 paragraph(f"{awarded if result_visible else '-'} / {question.marks} marks", "H3"),
             ]],
-            colWidths=[250, 100, 120],
+            colWidths=[150, 95, 105, 120],
         )
         header.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE")]))
         story.extend([header, Spacer(1, 6), paragraph(question.question_text), Spacer(1, 6)])
@@ -300,7 +384,7 @@ def create_submission_pdf(student_session, include_unpublished_feedback=False):
                 story.extend([Spacer(1, 4), paragraph("Captured Output", "LABEL"), code_box(answer.code_output)])
         else:
             story.append(code_box(answer_text) if len(answer_text) > 180 else paragraph(answer_text))
-        if question.question_type == "mcq" and question.correct_answer and answer_text != question.correct_answer:
+        if result_visible and question.question_type == "mcq" and question.correct_answer and answer_text != question.correct_answer:
             story.append(paragraph(f"Correct Answer: {question.correct_answer}", "BODY_SMALL"))
         if result_visible:
             story.extend([Spacer(1, 6), paragraph(f"Marks Awarded: {awarded} / {question.marks}", "LABEL"), marks_bar(awarded, question.marks)])
@@ -314,6 +398,7 @@ def create_submission_pdf(student_session, include_unpublished_feedback=False):
         story.append(paragraph(exam.exam_name, "H1"))
         story.append(horizontal_rule())
         story.append(Spacer(1, 10))
+        analytics = report_analytics()
         story.append(
             info_table(
                 [
@@ -352,6 +437,65 @@ def create_submission_pdf(student_session, include_unpublished_feedback=False):
                 )
             )
             story.extend([score_card, Spacer(1, 8), marks_bar(result.total_marks_obtained, result.total_marks), Spacer(1, 14)])
+            story.append(section_heading("Performance Snapshot"))
+            story.append(Spacer(1, 8))
+            story.append(
+                info_table(
+                    [
+                        (("Attempted", f"{analytics['answered_count']} / {len(questions)}"), ("Unanswered", analytics["unanswered_count"])),
+                        (("Time Used", format_duration(analytics["session_duration_seconds"] or analytics["total_time_spent_seconds"])), ("Tracked Work Time", format_duration(analytics["total_time_spent_seconds"]))),
+                        (("Avg Time / Question", format_duration(analytics["average_time_seconds"])), ("Marked Review", analytics["review_count"])),
+                        (("Warnings", f"{analytics['warning_count']} / {analytics['max_warnings']}"), ("Integrity", analytics["integrity_status"])),
+                    ]
+                )
+            )
+            if analytics["latest_violation"]:
+                story.extend(
+                    [
+                        Spacer(1, 6),
+                        paragraph(
+                            f"Latest integrity event: {analytics['latest_violation'].violation_type}",
+                            "BODY_SMALL",
+                        ),
+                    ]
+                )
+            story.append(Spacer(1, 12))
+            category_rows = [[
+                paragraph("Category", "TABLE_HEADER"),
+                paragraph("Answered", "TABLE_HEADER"),
+                paragraph("Score", "TABLE_HEADER"),
+                paragraph("Percent", "TABLE_HEADER"),
+                paragraph("Avg Time", "TABLE_HEADER"),
+            ]]
+            for category, values in analytics["category_summary"].items():
+                max_marks = values["marks"]
+                percentage = round((values["awarded"] / max_marks) * 100, 1) if max_marks else 0
+                avg_time = round(values["time"] / values["questions"]) if values["questions"] else 0
+                category_rows.append(
+                    [
+                        paragraph(category, "TABLE_CELL"),
+                        paragraph(f"{values['answered']} / {values['questions']}", "TABLE_CELL"),
+                        paragraph(f"{round(values['awarded'], 2)} / {round(max_marks, 2)}", "TABLE_CELL"),
+                        paragraph(f"{percentage}%", "TABLE_CELL"),
+                        paragraph(format_duration(avg_time), "TABLE_CELL"),
+                    ]
+                )
+            category_table = Table(category_rows, colWidths=[120, 80, 100, 75, 95])
+            category_table.setStyle(
+                TableStyle(
+                    [
+                        ("BACKGROUND", (0, 0), (-1, 0), BRAND_PRIMARY),
+                        ("TEXTCOLOR", (0, 0), (-1, 0), WHITE),
+                        ("GRID", (0, 0), (-1, -1), 0.5, BORDER),
+                        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                        ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                        ("TOPPADDING", (0, 0), (-1, -1), 6),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                    ]
+                )
+            )
+            story.extend([section_heading("Category Performance"), Spacer(1, 8), category_table, Spacer(1, 14)])
         story.append(section_heading("Answer Review"))
         story.append(Spacer(1, 10))
         for question in questions:

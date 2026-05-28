@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import {
   Bell,
@@ -125,6 +125,12 @@ function formatDateTime(value) {
 }
 
 function examTone(exam) {
+  if (exam.state === "result_published") return "result";
+  if (exam.state === "in_progress") return "active";
+  if (exam.state === "submitted") return "submitted";
+  if (exam.state === "upcoming") return "upcoming";
+  if (exam.state === "closed") return "closed";
+  if (exam.state === "available") return "active";
   if (exam.result) return "result";
   if (exam.latest_session?.status === "active") return "active";
   if (exam.latest_session?.status && ["submitted", "evaluated", "terminated", "auto_submitted"].includes(exam.latest_session.status)) {
@@ -133,6 +139,27 @@ function examTone(exam) {
   if (exam.window?.time_state === "not_started") return "upcoming";
   if (exam.window?.has_ended || exam.status === "closed") return "closed";
   return exam.status || "draft";
+}
+
+function studentStateLabel(state) {
+  const labels = {
+    available: "Available now",
+    in_progress: "In progress",
+    upcoming: "Upcoming",
+    submitted: "Submitted",
+    result_published: "Result ready",
+    closed: "Closed",
+    draft: "Inactive",
+  };
+  return labels[state] || String(state || "Inactive").replace(/_/g, " ");
+}
+
+function studentStateVariant(state) {
+  if (state === "available" || state === "in_progress") return "success";
+  if (state === "upcoming" || state === "submitted") return "warning";
+  if (state === "result_published") return "primary";
+  if (state === "closed") return "danger";
+  return "secondary";
 }
 
 function actionIcon(label) {
@@ -147,6 +174,64 @@ function actionIcon(label) {
 function toRouterPath(target, fallback = "/") {
   if (!target) return fallback;
   return String(target).replace(/^\/react/, "") || fallback;
+}
+
+const scheduleDayFormatter = new Intl.DateTimeFormat("en-US", {
+  weekday: "short",
+  month: "short",
+  day: "numeric"
+});
+
+const scheduleTimeFormatter = new Intl.DateTimeFormat("en-US", {
+  hour: "numeric",
+  minute: "2-digit"
+});
+
+function parseScheduleDate(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function scheduleDayLabel(value) {
+  const date = parseScheduleDate(value);
+  return date ? scheduleDayFormatter.format(date) : "Flexible";
+}
+
+function scheduleTimeLabel(value) {
+  const date = parseScheduleDate(value);
+  return date ? scheduleTimeFormatter.format(date) : "";
+}
+
+function scheduleTimeRange(item) {
+  const start = scheduleTimeLabel(item.starts_at);
+  const end = scheduleTimeLabel(item.ends_at);
+  if (start && end) return `${start} - ${end}`;
+  if (start) return start;
+  if (end) return `Until ${end}`;
+  return "Open window";
+}
+
+function scheduleVariant(state) {
+  if (state === "live" || state === "available" || state === "in_progress") return "success";
+  if (state === "review_due" || state === "upcoming" || state === "submitted") return "warning";
+  if (state === "closed") return "danger";
+  if (state === "draft") return "secondary";
+  return "info";
+}
+
+function scheduleLabel(state) {
+  const labels = {
+    available: "Available",
+    in_progress: "Active",
+    live: "Live",
+    review_due: "Review",
+    upcoming: "Upcoming",
+    draft: "Draft",
+    submitted: "Submitted",
+    closed: "Closed"
+  };
+  return labels[state] || String(state || "Scheduled").replace(/_/g, " ");
 }
 
 function Shell({ children, platformName, platformLogoUrl, auth, notifications, theme, onToggleTheme, onMarkAllRead }) {
@@ -174,15 +259,31 @@ function LoginPanel() {
 
 function StudentDashboard({ dashboard }) {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [examFilter, setExamFilter] = useState("all");
+  const [examSearch, setExamSearch] = useState("");
   const loadDashboard = useAppStore(state => state.loadDashboard);
   const stats = dashboard?.stats || {};
-  const exams = dashboard?.exams || [];
+  const exams = useMemo(() => dashboard?.exams || [], [dashboard?.exams]);
   const student = dashboard?.student || {};
+  const focusExam = dashboard?.focus_exam;
+  const activity = dashboard?.activity || [];
+  const schedule = dashboard?.schedule || {};
   const greeting = getGreeting();
   const announcementMessage = dashboard?.announcement_message?.trim();
   const announcementText = announcementMessage
     ? announcementMessage.replace(/^good\s+(morning|afternoon|evening)/i, greeting)
     : "";
+  const visibleExams = useMemo(() => {
+    const search = examSearch.trim().toLowerCase();
+    return exams.filter(exam => {
+      const state = exam.state || examTone(exam);
+      const matchesFilter = examFilter === "all"
+        || (examFilter === "results" ? state === "result_published" : state === examFilter);
+      const matchesSearch = !search
+        || `${exam.exam_name || ""} ${exam.subject || ""} ${exam.set_code || ""}`.toLowerCase().includes(search);
+      return matchesFilter && matchesSearch;
+    });
+  }, [examFilter, examSearch, exams]);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -243,9 +344,22 @@ function StudentDashboard({ dashboard }) {
       <section className="grid grid-cols-2 gap-4 min-[900px]:grid-cols-4">
         <StatCard icon={BookOpenCheck} label="Assigned" value={stats.assigned || 0} variant="default" />
         <StatCard icon={Play} label="Available" value={stats.available || 0} variant="default" />
-        <StatCard icon={Clock3} label="Upcoming" value={stats.upcoming || 0} variant="default" />
+        <StatCard icon={Clock3} label="Active" value={stats.in_progress || 0} variant="default" />
         <StatCard icon={Trophy} label="Results" value={stats.published_results || 0} variant="default" />
       </section>
+
+      <section className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+        <StudentFocusCard exam={focusExam} elapsedSeconds={elapsedSeconds} />
+        <StudentActivityPanel activity={activity} />
+      </section>
+
+      <DashboardSchedulePanel
+        title="Upcoming schedule"
+        description="Your next open, active, and scheduled exams in one timeline."
+        schedule={schedule}
+        role="student"
+        emptyLabel="No upcoming exam windows yet."
+      />
 
       {/* Exams Section */}
       <div>
@@ -266,6 +380,39 @@ function StudentDashboard({ dashboard }) {
           </div>
         </div>
 
+        <Card className="mb-4 grid gap-3 p-3 lg:grid-cols-[minmax(220px,1fr)_auto] lg:items-center">
+          <Input
+            value={examSearch}
+            onChange={event => setExamSearch(event.target.value)}
+            placeholder="Search assigned exams"
+            aria-label="Search assigned exams"
+          />
+          <div className="flex flex-wrap gap-2">
+            {[
+              ["all", "All"],
+              ["available", "Available"],
+              ["in_progress", "Active"],
+              ["upcoming", "Upcoming"],
+              ["submitted", "Submitted"],
+              ["results", "Results"],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                className={cn(
+                  "min-h-10 rounded-md border px-3 text-sm font-semibold transition",
+                  examFilter === value
+                    ? "border-brand-primary bg-brand-primary text-white"
+                    : "border-border bg-background-card text-text-secondary hover:bg-background-elevated"
+                )}
+                onClick={() => setExamFilter(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </Card>
+
         {exams.length === 0 ? (
           <div className="rounded-card border border-border bg-background-surface p-12 text-center shadow-card">
             <CalendarClock size={40} className="mx-auto mb-4 text-text-muted" />
@@ -275,15 +422,236 @@ function StudentDashboard({ dashboard }) {
               <KeyRound size={16} /> Open exam lobby
             </Button>
           </div>
+        ) : visibleExams.length === 0 ? (
+          <Card className="p-10 text-center">
+            <Search size={32} className="mx-auto mb-3 text-text-muted" />
+            <h3 className="font-semibold text-text-primary">No exams match this view</h3>
+            <p className="mt-1 text-sm text-text-secondary">Try a different filter or search term.</p>
+          </Card>
         ) : (
           <section className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {exams.map((exam, index) => (
+            {visibleExams.map((exam, index) => (
               <div key={exam.exam_id} style={{ "--stagger-delay": `${index * 50}ms` }}>
                 <StudentExamCard exam={exam} elapsedSeconds={elapsedSeconds} />
               </div>
             ))}
           </section>
         )}
+      </div>
+    </div>
+  );
+}
+
+function StudentFocusCard({ exam, elapsedSeconds }) {
+  const navigate = useNavigate();
+  const [starting, setStarting] = useState(false);
+  if (!exam) {
+    return (
+      <Card className="p-5">
+        <div className="flex items-start gap-3">
+          <span className="grid h-11 w-11 place-items-center rounded-lg bg-brand-primary/10 text-brand-primary">
+            <CalendarClock size={22} />
+          </span>
+          <div>
+            <p className="text-sm font-semibold text-text-primary">No immediate exam action</p>
+            <p className="mt-1 text-sm text-text-secondary">Assigned exams and activity will appear here when available.</p>
+          </div>
+        </div>
+      </Card>
+    );
+  }
+
+  const state = exam.state || examTone(exam);
+  const secondsUntilStart = Math.max((exam.window?.seconds_until_start || 0) - elapsedSeconds, 0);
+  const progress = exam.latest_session?.progress;
+  const action = exam.action || {};
+  const actionLabel = action.ready_label || action.label || "Open";
+  const openExam = async () => {
+    if (!action.api_path) return;
+    setStarting(true);
+    try {
+      const { data } = await api.post(action.api_path);
+      if (data.message) notify.success(data.message);
+      navigate(toRouterPath(data.redirect, "/student"), { replace: false });
+    } catch (error) {
+      notify.error(error.message || "Could not open exam");
+    } finally {
+      setStarting(false);
+    }
+  };
+  return (
+    <Card className="overflow-hidden border-brand-primary/25 bg-brand-primary/5">
+      <div className="flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between">
+        <div className="min-w-0">
+          <Badge variant={studentStateVariant(state)}>{studentStateLabel(state)}</Badge>
+          <h2 className="mt-3 truncate text-2xl font-bold text-text-primary">{exam.exam_name}</h2>
+          <p className="mt-1 text-sm text-text-secondary">
+            {exam.subject || "Subject"} {exam.set_code ? `| Set ${exam.set_code}` : ""}
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Badge variant="secondary">{exam.effective_duration_minutes || exam.duration_minutes} min</Badge>
+            <Badge variant="secondary">{Number(exam.question_count || 0).toLocaleString()} questions</Badge>
+            {secondsUntilStart > 0 && <Badge variant="warning">Starts in {formatCountdown(secondsUntilStart)}</Badge>}
+          </div>
+        </div>
+        {action.method === "post" ? (
+          <Button
+            type="button"
+            variant={state === "in_progress" || state === "available" ? "primary" : "secondary"}
+            size="sm"
+            loading={starting}
+            loadingLabel="Opening..."
+            disabled={action.disabled}
+            onClick={openExam}
+          >
+            {actionIcon(actionLabel)}
+            {actionLabel}
+          </Button>
+        ) : (
+          <Button
+            as="a"
+            href={action.href}
+            variant={state === "in_progress" || state === "available" ? "primary" : "secondary"}
+            size="sm"
+            disabled={action.disabled}
+          >
+            {actionIcon(actionLabel)}
+            {actionLabel}
+          </Button>
+        )}
+      </div>
+      {progress && (
+        <div className="border-t border-border/60 bg-background-card/70 px-5 py-3">
+          <div className="mb-2 flex items-center justify-between text-xs font-semibold text-text-muted">
+            <span>{progress.answered_count || 0}/{progress.total_questions || 0} answered</span>
+            <span>{progress.progress_percent || 0}%</span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-background-elevated">
+            <div
+              className="h-full rounded-full bg-brand-primary transition-all duration-300"
+              style={{ width: `${Math.max(0, Math.min(Number(progress.progress_percent || 0), 100))}%` }}
+            />
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function StudentActivityPanel({ activity = [] }) {
+  return (
+    <Card className="p-5">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase text-text-muted">Recent activity</p>
+          <h3 className="text-lg font-semibold text-text-primary">Attempt timeline</h3>
+        </div>
+        <Button as={Link} to="/student/history" variant="ghost" size="sm">History</Button>
+      </div>
+      {activity.length === 0 ? (
+        <p className="rounded-lg border border-border bg-background-base p-4 text-sm text-text-secondary">No attempts yet.</p>
+      ) : (
+        <div className="space-y-3">
+          {activity.slice(0, 4).map(item => (
+            <div key={item.id} className="flex gap-3 rounded-lg border border-border/70 bg-background-base p-3">
+              <span className={cn(
+                "mt-1 h-2.5 w-2.5 shrink-0 rounded-full",
+                item.result ? "bg-success" : item.status === "active" ? "bg-info" : item.status === "terminated" ? "bg-danger" : "bg-warning"
+              )} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-text-primary">{item.exam_name}</p>
+                <p className="text-xs text-text-muted">
+                  {studentStateLabel(item.result ? "result_published" : item.status === "active" ? "in_progress" : "submitted")} · {formatDate(item.submitted_at || item.started_at || item.created_at)}
+                </p>
+              </div>
+              {item.result && <Badge variant={item.result.passed ? "success" : "danger"}>{item.result.percentage}%</Badge>}
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function DashboardSchedulePanel({ title, description, schedule, role, emptyLabel }) {
+  const items = schedule?.items;
+  const visibleItems = items || [];
+  const groups = useMemo(() => {
+    const grouped = new Map();
+    (items || []).forEach(item => {
+      const key = item.date_key || "unscheduled";
+      if (!grouped.has(key)) grouped.set(key, []);
+      grouped.get(key).push(item);
+    });
+    return Array.from(grouped.entries()).map(([key, rows]) => ({ key, rows }));
+  }, [items]);
+
+  return (
+    <Card className="overflow-hidden">
+      <div className="flex flex-col gap-3 border-b border-border p-5 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase text-text-muted">Calendar</p>
+          <h3 className="text-xl font-bold text-text-primary">{title}</h3>
+          <p className="mt-1 text-sm text-text-secondary">{description}</p>
+        </div>
+        <Badge variant="purple" size="md">{Number(schedule?.total || visibleItems.length || 0).toLocaleString()} items</Badge>
+      </div>
+
+      {visibleItems.length === 0 ? (
+        <div className="p-8 text-center">
+          <CalendarClock size={34} className="mx-auto mb-3 text-text-muted" />
+          <p className="font-semibold text-text-primary">{emptyLabel}</p>
+        </div>
+      ) : (
+        <div className="divide-y divide-border">
+          {groups.map(group => (
+            <div key={group.key} className="grid gap-3 p-5 md:grid-cols-[130px_minmax(0,1fr)]">
+              <div>
+                <p className="text-sm font-bold text-text-primary">{scheduleDayLabel(group.rows[0]?.primary_at)}</p>
+                <p className="mt-1 text-xs text-text-muted">{group.rows.length} scheduled</p>
+              </div>
+              <div className="space-y-3">
+                {group.rows.map(item => (
+                  <ScheduleRow key={item.id} item={item} role={role} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function ScheduleRow({ item, role }) {
+  const isTeacher = role === "teacher";
+  const target = isTeacher
+    ? toRouterPath(item.href, item.exam_id ? `/teacher/exam/${item.exam_id}/review` : "/teacher")
+    : "/student/exams";
+  const actionLabel = isTeacher && item.state === "review_due" ? "Review" : isTeacher ? "Open" : "My Exams";
+  const details = [
+    item.subject,
+    item.set_code ? `Set ${item.set_code}` : null,
+    item.duration_minutes ? `${item.duration_minutes} min` : null,
+    item.question_count ? `${item.question_count} questions` : null
+  ].filter(Boolean).join(" | ");
+
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border border-border bg-background-base p-4 transition hover:bg-background-elevated sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant={scheduleVariant(item.state)}>{scheduleLabel(item.state)}</Badge>
+          {item.pending_review_count ? <Badge variant="warning">{item.pending_review_count} pending</Badge> : null}
+          {item.progress?.progress_percent ? <Badge variant="success">{item.progress.progress_percent}% done</Badge> : null}
+        </div>
+        <h4 className="mt-2 truncate text-base font-semibold text-text-primary">{item.title}</h4>
+        <p className="mt-1 text-sm text-text-secondary">{details || item.label || "Exam window"}</p>
+      </div>
+      <div className="flex shrink-0 items-center justify-between gap-3 sm:justify-end">
+        <span className="text-right text-sm font-semibold text-text-primary">{scheduleTimeRange(item)}</span>
+        <Button variant="secondary" size="sm" as={Link} to={target}>
+          {actionLabel}
+        </Button>
       </div>
     </div>
   );
@@ -461,6 +829,7 @@ function StudentExamCard({ exam, elapsedSeconds }) {
   const navigate = useNavigate();
   const [starting, setStarting] = useState(false);
   const tone = examTone(exam);
+  const state = exam.state || tone;
   const secondsUntilStart = Math.max((exam.window?.seconds_until_start || 0) - elapsedSeconds, 0);
   const isReadyNow = exam.status === "active" && secondsUntilStart === 0 && !exam.window?.has_ended;
   const action = exam.action || {};
@@ -498,7 +867,7 @@ function StudentExamCard({ exam, elapsedSeconds }) {
       <div className="flex items-start justify-between gap-3 border-b border-border/50 p-4">
         <div className="flex-1 min-w-0">
           <Badge variant={config.variant} size="sm" className="capitalize">
-            {tone.replace(/_/g, " ")}
+            {studentStateLabel(state)}
           </Badge>
           <h3 className="mt-2 truncate text-lg font-semibold text-text-primary">{exam.exam_name}</h3>
           <p className="truncate text-sm text-text-secondary">{exam.subject} {exam.set_code && `| Set ${exam.set_code}`}</p>
@@ -576,6 +945,21 @@ function StudentExamCard({ exam, elapsedSeconds }) {
         </div>
       ) : null}
 
+      {exam.latest_session?.progress && !exam.result && (
+        <div className="border-b border-border/50 px-4 py-3">
+          <div className="mb-2 flex justify-between text-xs font-semibold text-text-muted">
+            <span>{exam.latest_session.progress.answered_count || 0}/{exam.latest_session.progress.total_questions || 0} answered</span>
+            <span>{exam.latest_session.progress.progress_percent || 0}%</span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-background-elevated">
+            <div
+              className="h-full rounded-full bg-success transition-all duration-300"
+              style={{ width: `${Math.max(0, Math.min(Number(exam.latest_session.progress.progress_percent || 0), 100))}%` }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Action buttons */}
       <div className="flex flex-col gap-2 p-4">
         {action.disabled ? (
@@ -651,6 +1035,7 @@ function TeacherDashboard({ dashboard }) {
   };
 
   const exams = localExams;
+  const schedule = dashboard?.schedule || {};
   const stats = {
     total: exams.length,
     published: exams.filter(exam => ["active", "published"].includes(exam.status)).length,
@@ -676,6 +1061,14 @@ function TeacherDashboard({ dashboard }) {
         <StatCard icon={FileText} label="Pending Reviews" value={stats.pending} />
         <StatCard icon={Users} label="Students Enrolled" value={stats.enrolled} />
       </section>
+
+      <DashboardSchedulePanel
+        title="Teaching schedule"
+        description="Live exams, upcoming windows, and review deadlines from your workspace."
+        schedule={schedule}
+        role="teacher"
+        emptyLabel="No scheduled exams or pending reviews."
+      />
 
       <section className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1001,6 +1394,16 @@ export default function App() {
         />
         <Route
           path="/student/results"
+          element={role === "student" ? (
+            <PageSuspense label="Loading results...">
+              <StudentResults />
+            </PageSuspense>
+          ) : (
+            <LoginPanel settings={bootstrap?.settings} />
+          )}
+        />
+        <Route
+          path="/student/results/:examId"
           element={role === "student" ? (
             <PageSuspense label="Loading results...">
               <StudentResults />

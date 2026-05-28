@@ -20,7 +20,11 @@ export default [
       globals: {
         console: "readonly",
         document: "readonly",
-        window: "readonly"
+        window: "readonly",
+        Blob: "readonly",
+        File: "readonly",
+        FileList: "readonly",
+        URLSearchParams: "readonly"
       }
     },
     plugins: {

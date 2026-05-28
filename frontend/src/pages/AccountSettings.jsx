@@ -123,7 +123,13 @@ export default function AccountSettings({ auth, mode = "settings" }) {
     avatar_url: auth?.profile_picture || ""
   });
   const [security, setSecurity] = useState({ current: "", next: "", confirm: "" });
-  const [preferences, setPreferences] = useState({ exam_reminders: true, announcement_banners: true });
+  const [preferences, setPreferences] = useState({
+    exam_reminders: true,
+    review_reminders: true,
+    registration_reminders: true,
+    reminder_lead_minutes: 30,
+    announcement_banners: true
+  });
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPreferences, setSavingPreferences] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -154,6 +160,9 @@ export default function AccountSettings({ auth, mode = "settings" }) {
         }));
         setPreferences({
           exam_reminders: data.preferences?.exam_reminders !== false,
+          review_reminders: data.preferences?.review_reminders !== false,
+          registration_reminders: data.preferences?.registration_reminders !== false,
+          reminder_lead_minutes: data.preferences?.reminder_lead_minutes || 30,
           announcement_banners: data.preferences?.announcement_banners !== false
         });
       })
@@ -419,13 +428,53 @@ export default function AccountSettings({ auth, mode = "settings" }) {
       <Card className="p-6">
         {sectionLabel("Notifications")}
         <div className="grid gap-4">
-          <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-background-base p-4">
-            <div className="flex items-center gap-3">
-              <Bell size={20} className="text-brand-primary" />
-              <span className="font-semibold text-text-primary">Receive exam reminders</span>
+          {role === "student" && (
+            <div className="grid gap-4 rounded-lg border border-border bg-background-base p-4">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <Bell size={20} className="text-brand-primary" />
+                  <span className="font-semibold text-text-primary">Receive exam reminders</span>
+                </div>
+                <Toggle checked={preferences.exam_reminders} onChange={checked => setPreferences(current => ({ ...current, exam_reminders: checked }))} />
+              </div>
+              {preferences.exam_reminders && (
+                <div className="flex flex-wrap gap-2 pl-0 md:pl-8">
+                  {[15, 30, 60, 1440].map(minutes => (
+                    <button
+                      key={minutes}
+                      type="button"
+                      className={`min-h-10 rounded-md border px-3 text-sm font-semibold transition ${
+                        Number(preferences.reminder_lead_minutes) === minutes
+                          ? "border-brand-primary bg-brand-primary text-white"
+                          : "border-border bg-background-card text-text-secondary hover:bg-background-elevated"
+                      }`}
+                      onClick={() => setPreferences(current => ({ ...current, reminder_lead_minutes: minutes }))}
+                    >
+                      {minutes === 1440 ? "24 hours" : `${minutes} min`}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-            <Toggle checked={preferences.exam_reminders} onChange={checked => setPreferences(current => ({ ...current, exam_reminders: checked }))} />
-          </div>
+          )}
+          {role === "teacher" && (
+            <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-background-base p-4">
+              <div className="flex items-center gap-3">
+                <Bell size={20} className="text-brand-primary" />
+                <span className="font-semibold text-text-primary">Receive pending review reminders</span>
+              </div>
+              <Toggle checked={preferences.review_reminders} onChange={checked => setPreferences(current => ({ ...current, review_reminders: checked }))} />
+            </div>
+          )}
+          {role === "admin" && (
+            <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-background-base p-4">
+              <div className="flex items-center gap-3">
+                <Bell size={20} className="text-brand-primary" />
+                <span className="font-semibold text-text-primary">Receive registration queue reminders</span>
+              </div>
+              <Toggle checked={preferences.registration_reminders} onChange={checked => setPreferences(current => ({ ...current, registration_reminders: checked }))} />
+            </div>
+          )}
           <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-background-base p-4">
             <div className="flex items-center gap-3">
               <Users size={20} className="text-brand-primary" />

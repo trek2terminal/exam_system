@@ -1,5 +1,19 @@
 import { useCallback, useEffect, useState } from "react";
-import { ChevronDown, ChevronUp, Download, CheckCircle2, XCircle, FileText, MessageSquare, X } from "lucide-react";
+import {
+  AlertTriangle,
+  BarChart3,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Clock3,
+  Download,
+  FileText,
+  MessageSquare,
+  ShieldCheck,
+  Target,
+  X,
+  XCircle
+} from "lucide-react";
 import Editor from "@monaco-editor/react";
 import { Badge, Button, Card, Skeleton } from "../components/ui";
 import { api } from "../services/api";
@@ -20,6 +34,23 @@ function getResultStatus(result) {
     label: passed ? "PASSED" : "FAILED",
     variant: passed ? "success" : "danger"
   };
+}
+
+function formatDuration(seconds) {
+  const safeSeconds = Math.max(Math.floor(Number(seconds) || 0), 0);
+  const hours = Math.floor(safeSeconds / 3600);
+  const minutes = Math.floor(safeSeconds / 60);
+  const remainder = safeSeconds % 60;
+  if (hours > 0) return `${hours}h ${String(minutes % 60).padStart(2, "0")}m`;
+  if (minutes <= 0) return `${remainder}s`;
+  return `${minutes}m ${String(remainder).padStart(2, "0")}s`;
+}
+
+function integrityVariant(status) {
+  const normalized = String(status || "").toLowerCase();
+  if (normalized.includes("clear")) return "success";
+  if (normalized.includes("admin")) return "danger";
+  return "warning";
 }
 
 export default function StudentResults() {
@@ -118,6 +149,8 @@ export default function StudentResults() {
 
 function ResultCard({ result, expanded, onToggle, onImageClick }) {
   const resultStatus = getResultStatus(result);
+  const analytics = result.analytics || {};
+  const durationSeconds = result.time_taken_seconds || analytics.session_duration_seconds || analytics.time_spent_seconds || 0;
   return (
     <Card>
       {/* Header */}
@@ -165,14 +198,34 @@ function ResultCard({ result, expanded, onToggle, onImageClick }) {
             </div>
             <div>
               <p className="text-xs font-semibold text-text-muted">DURATION</p>
-              <p className="text-lg font-bold text-text-primary">{result.time_taken ? `${result.time_taken} min` : formatDateShort(result.published_at)}</p>
+              <p className="text-lg font-bold text-text-primary">{durationSeconds ? formatDuration(durationSeconds) : "-"}</p>
             </div>
           </div>
+
+          <ResultAnalytics analytics={analytics} totalQuestions={result.questions?.length || 0} />
 
           {result.teacher_remarks && (
             <div className="flex gap-3 rounded-lg border border-info/30 bg-info/5 p-4 text-sm text-text-secondary">
               <MessageSquare className="mt-0.5 shrink-0 text-info" size={18} />
               <p>{result.teacher_remarks}</p>
+            </div>
+          )}
+
+          <CategoryBreakdown categories={analytics.category_breakdown || []} />
+
+          {analytics.recommendations?.length > 0 && (
+            <div className="rounded-lg border border-brand-primary/20 bg-brand-primary/5 p-4">
+              <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-text-primary">
+                <Target size={17} className="text-brand-primary" />
+                Study focus
+              </div>
+              <div className="grid gap-2 md:grid-cols-2">
+                {analytics.recommendations.map(item => (
+                  <div key={item} className="rounded-md border border-border/50 bg-background-base px-3 py-2 text-sm text-text-secondary">
+                    {item}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
@@ -202,6 +255,98 @@ function ResultCard({ result, expanded, onToggle, onImageClick }) {
         </div>
       )}
     </Card>
+  );
+}
+
+function ResultAnalytics({ analytics, totalQuestions }) {
+  if (!analytics || Object.keys(analytics).length === 0) return null;
+  const unanswered = analytics.unanswered_count ?? Math.max(totalQuestions - Number(analytics.answered_count || 0), 0);
+  return (
+    <div className="grid gap-3 md:grid-cols-4">
+      <AnalyticsTile
+        icon={CheckCircle2}
+        label="Answered"
+        value={`${analytics.answered_count || 0}/${analytics.total_questions || totalQuestions}`}
+        accent="text-success"
+      />
+      <AnalyticsTile
+        icon={AlertTriangle}
+        label="Unanswered"
+        value={unanswered}
+        accent={unanswered > 0 ? "text-warning" : "text-success"}
+      />
+      <AnalyticsTile
+        icon={Clock3}
+        label="Work Time"
+        value={formatDuration(analytics.time_spent_seconds || 0)}
+        detail={`Avg ${formatDuration(analytics.average_time_per_question_seconds || 0)}/Q`}
+        accent="text-info"
+      />
+      <AnalyticsTile
+        icon={ShieldCheck}
+        label="Integrity"
+        value={analytics.integrity_status || "Clear"}
+        detail={`${analytics.warning_count || 0}/${analytics.max_warnings || 3} warnings`}
+        badgeVariant={integrityVariant(analytics.integrity_status)}
+        accent="text-brand-primary"
+      />
+    </div>
+  );
+}
+
+function AnalyticsTile({ icon: Icon, label, value, detail, accent, badgeVariant }) {
+  return (
+    <div className="rounded-lg border border-border/50 bg-background-elevated/40 p-4">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">{label}</p>
+        <Icon size={18} className={accent} />
+      </div>
+      {badgeVariant ? (
+        <Badge variant={badgeVariant} size="md">{value}</Badge>
+      ) : (
+        <p className="text-xl font-bold text-text-primary">{value}</p>
+      )}
+      {detail && <p className="mt-2 text-xs text-text-muted">{detail}</p>}
+    </div>
+  );
+}
+
+function CategoryBreakdown({ categories }) {
+  if (!categories.length) return null;
+  return (
+    <div className="rounded-lg border border-border/50 bg-background-elevated/30 p-4">
+      <div className="mb-4 flex items-center gap-2">
+        <BarChart3 size={18} className="text-brand-primary" />
+        <h4 className="font-semibold text-text-primary">Category Performance</h4>
+      </div>
+      <div className="space-y-3">
+        {categories.map(category => {
+          const percentage = Math.max(0, Math.min(Number(category.percentage || 0), 100));
+          return (
+            <div key={category.label} className="rounded-lg border border-border/50 bg-background-base p-3">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="font-semibold text-text-primary">{category.label}</p>
+                  <p className="text-xs text-text-muted">
+                    {category.answered}/{category.questions} answered · avg {formatDuration(category.average_time_seconds || 0)}
+                  </p>
+                </div>
+                <Badge variant={percentage >= 70 ? "success" : percentage >= 40 ? "warning" : "danger"}>
+                  {category.marks_obtained}/{category.max_marks} marks
+                </Badge>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-background-elevated">
+                <div
+                  className="h-full rounded-full bg-brand-primary transition-all duration-500"
+                  style={{ width: `${percentage}%` }}
+                />
+              </div>
+              <p className="mt-1 text-right text-xs font-semibold text-text-muted">{percentage}%</p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -269,6 +414,11 @@ function QuestionResult({ question, index, onImageClick }) {
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-3">
+            {Number(question.time_spent_seconds || 0) > 0 && (
+              <Badge variant="secondary" size="sm">
+                {formatDuration(question.time_spent_seconds)}
+              </Badge>
+            )}
             <Badge variant={isMcq ? "info" : isCode ? "purple" : "secondary"} size="sm">
               {question.question_type || question.type || "written"}
             </Badge>
@@ -285,6 +435,11 @@ function QuestionResult({ question, index, onImageClick }) {
           {/* Question Text */}
           <div>
             <p className="text-xs font-semibold text-text-muted">QUESTION</p>
+            {Number(question.time_spent_seconds || 0) > 0 && (
+              <p className="mt-1 text-xs font-semibold text-text-muted">
+                Time spent: {formatDuration(question.time_spent_seconds)}
+              </p>
+            )}
             <p className="mt-2 text-text-primary">{question.question_text || question.text}</p>
             {question.image_urls?.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-3">

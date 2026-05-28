@@ -18,6 +18,7 @@ class CodeExecutionResult:
     stderr: str = ""
     message: str = ""
     execution_time_ms: int = 0
+    exit_code: int | None = None
 
     def as_dict(self):
         return {
@@ -27,6 +28,7 @@ class CodeExecutionResult:
             "stderr": self.stderr,
             "message": self.message,
             "execution_time_ms": self.execution_time_ms,
+            "exit_code": self.exit_code,
         }
 
 
@@ -336,6 +338,7 @@ class CodeExecutionService:
                 stderr=stderr,
                 message="Execution completed.",
                 execution_time_ms=elapsed_ms,
+                exit_code=completed.returncode,
             )
 
         return CodeExecutionResult(
@@ -345,6 +348,7 @@ class CodeExecutionService:
             stderr=stderr,
             message=f"Execution failed with exit code {completed.returncode}.",
             execution_time_ms=elapsed_ms,
+            exit_code=completed.returncode,
         )
 
     @staticmethod

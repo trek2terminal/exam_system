@@ -1,19 +1,50 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { AlertTriangle, Bell, CheckCircle2, Hash, Info, Mail, MailCheck, MessageCircle, Phone, User } from "lucide-react";
-import { Badge, Button, Card, EmptyState, Modal, Textarea } from "../components/ui";
+import {
+  Bell,
+  CalendarClock,
+  CheckCircle2,
+  Hash,
+  Info,
+  Mail,
+  MailCheck,
+  Megaphone,
+  MessageCircle,
+  Phone,
+  ShieldAlert,
+  Trophy,
+  User
+} from "lucide-react";
+import { Badge, Button, Card, EmptyState, Input, Modal, Textarea } from "../components/ui";
 import { api } from "../services/api";
 import { notify } from "../components/ui/Toast";
 import { normalizeReactHref } from "../components/layout/navigation";
 import { timeAgo } from "../utils/dateFormat";
 import { useLiveRefresh } from "../hooks/useLiveRefresh";
 
-function notificationIcon(type) {
-  if (String(type).includes("registration_request")) return MessageCircle;
-  if (String(type).includes("warning") || String(type).includes("violation")) return AlertTriangle;
-  if (String(type).includes("result") || String(type).includes("success")) return CheckCircle2;
-  if (String(type).includes("system")) return Info;
+function notificationIcon(item) {
+  if (item?.category === "admin" || String(item?.type || "").includes("registration_request")) return MessageCircle;
+  if (item?.category === "security" || item?.severity === "danger" || item?.severity === "warning") return ShieldAlert;
+  if (item?.category === "results") return Trophy;
+  if (item?.category === "exams") return CalendarClock;
+  if (item?.category === "announcements") return Megaphone;
+  if (item?.severity === "success") return CheckCircle2;
+  if (item?.category === "system") return Info;
   return Bell;
+}
+
+function severityClasses(severity) {
+  if (severity === "danger") return "bg-danger/10 text-danger";
+  if (severity === "warning") return "bg-warning/10 text-warning";
+  if (severity === "success") return "bg-success/10 text-success";
+  return "bg-info/10 text-info";
+}
+
+function severityBadge(severity) {
+  if (severity === "danger") return "danger";
+  if (severity === "warning") return "warning";
+  if (severity === "success") return "success";
+  return "info";
 }
 
 function isRegistrationRequest(item) {
@@ -33,6 +64,8 @@ export default function NotificationsPage({ notifications, auth, onMarkAllRead }
   const [filter, setFilter] = useState("all");
   const [items, setItems] = useState(() => notifications?.recent || notifications?.items || []);
   const [unreadCount, setUnreadCount] = useState(notifications?.unread_count || 0);
+  const [counts, setCounts] = useState(notifications?.counts || {});
+  const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [requestLoading, setRequestLoading] = useState(false);
@@ -47,6 +80,7 @@ export default function NotificationsPage({ notifications, auth, onMarkAllRead }
       const { data } = await api.get("/notifications", { params: { filter, per_page: 50 } });
       setItems(data.items || []);
       setUnreadCount(data.unread_count || 0);
+      setCounts(data.counts || {});
     } catch (error) {
       notify.warning(error.message || "Could not refresh notifications.");
     } finally {
@@ -59,22 +93,22 @@ export default function NotificationsPage({ notifications, auth, onMarkAllRead }
   }, [loadNotifications]);
   useLiveRefresh(loadNotifications, { intervalMs: 20000 });
 
-  const filteredItems = useMemo(() => {
+  const displayedItems = useMemo(() => {
+    const search = searchTerm.trim().toLowerCase();
     return items.filter(item => {
-      if (filter === "all") return true;
-      if (filter === "unread") return item.is_read === false || item.read === false;
-      if (filter === "admin") return String(item.type || "").includes("admin") || isRegistrationRequest(item);
-      if (filter === "system") return String(item.type || "").includes("system") || !item.type;
-      return true;
+      if (!search) return true;
+      return `${item.title || ""} ${item.summary || ""} ${item.message || ""} ${item.type || ""}`.toLowerCase().includes(search);
     });
-  }, [filter, items]);
+  }, [items, searchTerm]);
 
   const markNotificationRead = async item => {
     if (item.is_read === true || !item.id) return;
     setItems(current => current.map(row => row.id === item.id ? { ...row, is_read: true, read: true } : row));
     setUnreadCount(current => Math.max(current - 1, 0));
     try {
-      await api.post(`/notifications/${item.id}/read`);
+      const { data } = await api.post(`/notifications/${item.id}/read`);
+      setUnreadCount(data.unread_count || 0);
+      setCounts(data.counts || {});
     } catch {
       notify.warning("Could not mark notification as read.");
     }
@@ -141,14 +175,20 @@ export default function NotificationsPage({ notifications, auth, onMarkAllRead }
   const markAll = async () => {
     setItems(current => current.map(item => ({ ...item, is_read: true, read: true })));
     setUnreadCount(0);
+    setCounts(current => ({ ...current, unread: 0 }));
     await onMarkAllRead?.();
+    await loadNotifications(true);
   };
 
   const tabs = [
-    { id: "all", label: "All" },
-    { id: "unread", label: "Unread" },
-    ...(auth?.role === "admin" ? [{ id: "admin", label: "Admin" }] : []),
-    { id: "system", label: "System" }
+    { id: "all", label: "All", count: counts.all },
+    { id: "unread", label: "Unread", count: counts.unread ?? unreadCount },
+    { id: "exams", label: "Exams", count: counts.exams },
+    { id: "results", label: "Results", count: counts.results },
+    { id: "security", label: "Security", count: counts.security },
+    { id: "messages", label: "Messages", count: counts.messages },
+    ...(auth?.role === "admin" ? [{ id: "admin", label: "Admin", count: counts.admin }] : []),
+    { id: "system", label: "System", count: counts.system }
   ];
 
   return (
@@ -164,11 +204,25 @@ export default function NotificationsPage({ notifications, auth, onMarkAllRead }
         </Button>
       </div>
 
-      <Card className="p-3">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <NotificationMetric icon={Mail} label="Unread" value={unreadCount} tone="info" />
+        <NotificationMetric icon={CalendarClock} label="Exam Updates" value={counts.exams || 0} tone="info" />
+        <NotificationMetric icon={ShieldAlert} label="Security" value={counts.security || 0} tone={counts.security ? "warning" : "success"} />
+        <NotificationMetric icon={Trophy} label="Results" value={counts.results || 0} tone="success" />
+      </section>
+
+      <Card className="grid gap-3 p-3 lg:grid-cols-[minmax(220px,1fr)_auto] lg:items-center">
+        <Input
+          value={searchTerm}
+          onChange={event => setSearchTerm(event.target.value)}
+          placeholder="Search notifications"
+          aria-label="Search notifications"
+        />
         <div className="flex flex-wrap gap-2">
           {tabs.map(tab => (
             <Button key={tab.id} variant={filter === tab.id ? "primary" : "ghost"} size="sm" onClick={() => setFilter(tab.id)}>
               {tab.label}
+              {Number(tab.count || 0) > 0 && <Badge variant={filter === tab.id ? "secondary" : "calm"}>{tab.count}</Badge>}
             </Button>
           ))}
         </div>
@@ -176,27 +230,31 @@ export default function NotificationsPage({ notifications, auth, onMarkAllRead }
 
       {loading ? (
         <Card className="p-8 text-center text-text-muted">Loading notifications...</Card>
-      ) : filteredItems.length === 0 ? (
+      ) : displayedItems.length === 0 ? (
         <EmptyState icon={Bell} heading="No notifications" description="You are all caught up." />
       ) : (
         <Card className="overflow-hidden">
           <div className="divide-y divide-border">
-            {filteredItems.slice(0, 20).map(item => {
-              const Icon = notificationIcon(item.type);
+            {displayedItems.slice(0, 50).map(item => {
+              const Icon = notificationIcon(item);
               const unread = item.is_read === false || item.read === false;
               return (
                 <div
                   key={item.id || `${item.message}-${item.created_at}`}
-                  className="group flex min-h-20 items-start gap-4 bg-background-surface px-5 py-4 transition hover:bg-background-elevated"
+                  className={[
+                    "group flex min-h-20 items-start gap-4 px-5 py-4 transition hover:bg-background-elevated",
+                    unread ? "bg-background-surface" : "bg-background-card/70"
+                  ].join(" ")}
                 >
                   <span className="mt-1 h-2 w-2 rounded-full bg-brand-primary opacity-0 group-hover:opacity-100 data-[unread=true]:opacity-100" data-unread={unread || undefined} />
-                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-background-elevated text-text-secondary">
+                  <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-lg ${severityClasses(item.severity)}`}>
                     <Icon size={20} />
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="mb-1 flex flex-wrap items-center gap-2">
                       <strong className="text-text-primary">{item.title || item.message || "Notification"}</strong>
-                      <Badge variant={item.type === "result_published" ? "success" : "info"}>{item.type || "system"}</Badge>
+                      <Badge variant={severityBadge(item.severity)}>{item.category || item.type || "system"}</Badge>
+                      {unread && <Badge variant="purple">new</Badge>}
                     </span>
                     {item.summary && <span className="block text-sm text-text-secondary">{item.summary}</span>}
                     {item.message && item.title && item.message !== item.summary && <span className="block text-sm text-text-secondary">{item.message}</span>}
@@ -226,7 +284,7 @@ export default function NotificationsPage({ notifications, auth, onMarkAllRead }
                         className="inline-flex min-h-11 items-center rounded-md px-3 text-sm font-semibold text-brand-primary"
                         onClick={() => markNotificationRead(item)}
                       >
-                        Open
+                        {item.action_label || "Open"}
                       </a>
                     )}
                   </span>
@@ -234,9 +292,9 @@ export default function NotificationsPage({ notifications, auth, onMarkAllRead }
               );
             })}
           </div>
-          {filteredItems.length > 20 && (
+          {displayedItems.length > 50 && (
             <div className="border-t border-border px-5 py-3 text-sm text-text-muted">
-              Showing the latest 20 notifications.
+              Showing the latest 50 notifications.
             </div>
           )}
         </Card>
@@ -304,6 +362,17 @@ export default function NotificationsPage({ notifications, auth, onMarkAllRead }
         ) : null}
       </Modal>
     </div>
+  );
+}
+
+function NotificationMetric({ icon: Icon, label, value, tone }) {
+  const color = tone === "warning" ? "text-warning" : tone === "success" ? "text-success" : "text-brand-primary";
+  return (
+    <Card className="p-4">
+      <Icon size={18} className={`mb-3 ${color}`} />
+      <p className="text-xs font-semibold uppercase text-text-muted">{label}</p>
+      <p className="mt-1 text-2xl font-bold text-text-primary">{Number(value || 0).toLocaleString()}</p>
+    </Card>
   );
 }
 

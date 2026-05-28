@@ -27,7 +27,7 @@ class SecurityService:
 
     @staticmethod
     def record_violation(session_code: str, violation_type: str, detail: str = "", client_count: int = 0,
-                         ip_address: str = None, user_agent: str = None):
+                         ip_address: str = None, user_agent: str = None, count_warning: bool = True):
         session = StudentSession.query.filter_by(session_code=session_code).first()
         if not session:
             return None
@@ -36,10 +36,11 @@ class SecurityService:
         detail = (detail or "").strip()
         client_count = max(int(client_count or 0), 0)
 
-        session.focus_violations = max(session.focus_violations + 1, client_count)
-        if normalized_type in {"TAB_SWITCH", "WINDOW_BLUR"}:
+        if count_warning:
+            session.focus_violations = max(session.focus_violations + 1, client_count)
+            session.suspicion_score = min(100, session.suspicion_score + 15)
+        if normalized_type in {"TAB_SWITCH", "WINDOW_BLUR"} and count_warning:
             session.tab_switch_count += 1
-        session.suspicion_score = min(100, session.suspicion_score + 15)
         session.last_heartbeat = datetime.utcnow()
 
         violation = ViolationLog(
@@ -56,7 +57,7 @@ class SecurityService:
             from app.services.settings_service import SettingsService
 
             threshold = SettingsService.max_violations_allowed()
-            if session.focus_violations >= threshold:
+            if count_warning and session.focus_violations >= threshold:
                 NotificationService.notify_role(
                     "admin",
                     f"{session.student_name} reached {session.focus_violations} violation(s) in {session.exam_set.exam_name}.",

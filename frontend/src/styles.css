@@ -441,6 +441,57 @@ html.live-data-updated body::after {
   background: rgba(17, 24, 39, 0.96);
 }
 
+.selectFloatingMenu {
+  scrollbar-color: rgb(var(--color-text-muted) / 0.55) transparent;
+  scrollbar-width: thin;
+  animation: selectMenuFloatIn 170ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.selectFloatingMenuTop {
+  animation-name: selectMenuFloatInTop;
+}
+
+.selectFloatingMenu::-webkit-scrollbar {
+  width: 8px;
+}
+
+.selectFloatingMenu::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.selectFloatingMenu::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 9999px;
+  background: rgb(var(--color-text-muted) / 0.45);
+  background-clip: padding-box;
+}
+
+@keyframes selectMenuFloatIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes selectMenuFloatInTop {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
 /* modal backdrop tuned for light/dark via .dark */
 .modal-backdrop {
   background: rgba(2, 6, 23, 0.55);
@@ -1997,7 +2048,9 @@ p {
 
 .reviewHeader,
 .teacherSummaryBox,
+.reviewAssistantPanel,
 .teacherQuestionReview,
+.reviewFilters,
 .reviewTable,
 .stickySaveBar {
   background: var(--panel);
@@ -2041,10 +2094,63 @@ p {
   overflow: hidden;
 }
 
+.reviewFilters {
+  padding: 14px;
+  display: grid;
+  grid-template-columns: minmax(220px, 1.4fr) minmax(160px, 0.8fr) minmax(160px, 0.8fr) 90px;
+  gap: 12px;
+  align-items: end;
+}
+
+.reviewFilters label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.reviewFilters label span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.reviewFilters input,
+.reviewFilters select {
+  min-height: 40px;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+  text-transform: none;
+}
+
+.reviewFilterCount {
+  min-height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.reviewFilterCount strong {
+  color: var(--text);
+  font-size: 1rem;
+}
+
 .reviewTableHead,
 .reviewRow {
   display: grid;
-  grid-template-columns: minmax(210px, 1.4fr) 120px 100px 120px 100px minmax(180px, 1fr);
+  grid-template-columns: minmax(210px, 1.25fr) 130px minmax(180px, 1fr) 100px minmax(125px, 0.8fr) minmax(170px, 0.9fr);
   gap: 12px;
   align-items: center;
   padding: 14px 16px;
@@ -2062,6 +2168,44 @@ p {
 
 .reviewRow p {
   margin-bottom: 0;
+}
+
+.reviewStatusStack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.reviewProgressCell {
+  display: grid;
+  gap: 4px;
+}
+
+.reviewProgressCell strong {
+  color: var(--text);
+}
+
+.reviewProgressCell span,
+.reviewTinyText {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.reviewProgressTrack {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: rgba(102, 112, 133, 0.16);
+}
+
+.reviewProgressTrack i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgb(var(--color-brand-primary)), rgb(var(--color-success)));
+  transition: width 240ms ease;
 }
 
 .teacherSummaryBox {
@@ -2085,6 +2229,115 @@ p {
   display: inline-flex;
   align-items: center;
   gap: 9px;
+}
+
+.teacherMarkLayout {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.reviewAssistantPanel {
+  position: sticky;
+  top: 92px;
+  padding: 16px;
+  display: grid;
+  gap: 14px;
+}
+
+.reviewAssistantPanel strong {
+  display: block;
+  margin: 4px 0 8px;
+  color: var(--text);
+  font-size: 1.7rem;
+}
+
+.reviewAssistantPanel p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.reviewQuickStats {
+  display: grid;
+  gap: 8px;
+}
+
+.reviewQuickStats span {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.questionFilterPills,
+.rubricBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.questionFilterPills button,
+.rubricBar button {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(102, 112, 133, 0.07);
+  color: var(--text);
+  cursor: pointer;
+  transition: transform 150ms ease, border-color 150ms ease, background 150ms ease;
+}
+
+.questionFilterPills button {
+  min-height: 34px;
+  padding: 0 10px;
+  font-weight: 800;
+}
+
+.questionFilterPills button.active {
+  border-color: rgb(var(--color-brand-primary));
+  background: rgb(var(--color-brand-primary) / 0.12);
+  color: rgb(var(--color-brand-primary));
+}
+
+.rubricBar button {
+  min-width: 110px;
+  padding: 9px 11px;
+  text-align: left;
+}
+
+.rubricBar button:hover:not(:disabled),
+.questionFilterPills button:hover {
+  transform: translateY(-1px);
+  border-color: rgb(var(--color-brand-primary));
+}
+
+.rubricBar button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.rubricBar strong,
+.rubricBar span {
+  display: block;
+}
+
+.rubricBar strong {
+  color: var(--text);
+  font-size: 0.82rem;
+}
+
+.rubricBar span {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 800;
 }
 
 .teacherQuestionReviewList {
@@ -2419,6 +2672,134 @@ p {
   min-height: 220px;
 }
 
+.proctorFilters {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.2fr) minmax(190px, 1fr) minmax(150px, 0.7fr) minmax(160px, 0.8fr);
+  gap: 12px;
+  align-items: end;
+}
+
+.proctorFilterSummary {
+  grid-column: 1 / -1;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.proctorConnection,
+.connectionText {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.proctorConnection {
+  min-height: 30px;
+  border-radius: 999px;
+  padding: 0 9px;
+  font-size: 0.74rem;
+  font-weight: 900;
+}
+
+.proctorConnection.online,
+.connectionText.online {
+  color: var(--success);
+}
+
+.proctorConnection.online {
+  background: rgba(15, 118, 110, 0.1);
+}
+
+.proctorConnection.stale,
+.connectionText.stale {
+  color: var(--warning);
+}
+
+.proctorConnection.stale {
+  background: rgba(217, 119, 6, 0.12);
+}
+
+.proctorConnection.offline,
+.connectionText.offline {
+  color: var(--danger);
+}
+
+.proctorConnection.offline {
+  background: rgba(220, 38, 38, 0.1);
+}
+
+.proctorProgressLine {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border) 72%, transparent);
+}
+
+.proctorProgressLine span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #16a34a, #2563eb);
+  transition: width 300ms ease;
+}
+
+.proctorCardMeta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.proctorCardMeta span {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--muted);
+  padding: 7px 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.proctorStudentCard.critical {
+  background: color-mix(in srgb, var(--panel) 92%, rgba(220, 38, 38, 0.18));
+}
+
+.proctorDetailProgress {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.proctorDetailProgress .rowBetween {
+  align-items: center;
+  flex-direction: row;
+  gap: 10px;
+}
+
+.proctorDetailProgress > div:last-child {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.proctorDetailProgress small {
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--panel) 82%, var(--border));
+  color: var(--muted);
+  padding: 7px 8px;
+  text-align: center;
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
 .backLink {
   display: inline-flex;
   align-items: center;
@@ -2598,14 +2979,21 @@ p {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .proctorFilters {
+    grid-template-columns: 1fr;
+  }
+
   .reactExamHeader,
   .reactExamGrid,
-  .proctorLayout {
+  .proctorLayout,
+  .teacherMarkLayout,
+  .reviewFilters {
     grid-template-columns: 1fr;
   }
 
   .reactQuestionPanel,
-  .proctorDetailPanel {
+  .proctorDetailPanel,
+  .reviewAssistantPanel {
     position: static;
   }
 
@@ -2666,5 +3054,3847 @@ p {
 @media (max-width: 767px) {
   .reactExamGrid {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Advanced dark coding exam workspace */
+.reactExamShell {
+  --exam-bg-primary: #0f1923;
+  --exam-bg-secondary: #162032;
+  --exam-bg-tertiary: #1e2d42;
+  --exam-bg-elevated: #243049;
+  --exam-primary-blue: #1a3a5c;
+  --exam-accent-blue: #0066cc;
+  --exam-run-blue: #0052a3;
+  --exam-success: #00875a;
+  --exam-error: #d32f2f;
+  --exam-warning: #f59e0b;
+  --exam-teal: #00bcd4;
+  --exam-purple: #7c3aed;
+  --exam-border: #2a3f5a;
+  --exam-text-primary: #e8edf2;
+  --exam-text-secondary: #8ba3be;
+  --exam-text-muted: #4a6080;
+  --color-brand-primary: 0 102 204;
+  --color-brand-primary-hover: 0 82 163;
+  --color-success: 0 135 90;
+  --color-warning: 245 158 11;
+  --color-danger: 211 47 47;
+  --color-info: 0 188 212;
+  height: 100vh;
+  min-width: 1024px;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: 4px 56px minmax(0, 1fr) 32px;
+  gap: 0;
+  background: var(--exam-bg-primary);
+  color: var(--exam-text-primary);
+  font-family: Inter, "IBM Plex Sans", "DM Sans", system-ui, sans-serif;
+}
+
+.examProgressTop {
+  height: 4px;
+  overflow: hidden;
+  background: #07111d;
+}
+
+.examProgressTop span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--exam-accent-blue), var(--exam-success));
+  box-shadow: 0 0 18px rgba(0, 102, 204, 0.45);
+  transition: width 220ms ease;
+}
+
+.reactExamShell .reactExamHeader {
+  position: relative;
+  top: auto;
+  z-index: 40;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  height: 56px;
+  padding: 6px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--exam-border);
+  border-radius: 0;
+  background: #101827;
+  box-shadow: none;
+}
+
+.examBrandBlock {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.examPlatformLogo,
+.examLogoMark {
+  display: grid;
+  height: 36px;
+  width: 48px;
+  place-items: center;
+  border: 1px solid #315071;
+  border-radius: 5px;
+  background: #0b1420;
+  color: #d9e8ff;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.examPlatformLogo {
+  background: #07111d;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 0 0 1px rgba(0, 102, 204, 0.12);
+}
+
+.examPlatformLogoImage {
+  max-height: 32px;
+  max-width: 42px;
+  padding: 2px;
+}
+
+.examPlatformLogoFallback {
+  background: linear-gradient(135deg, var(--exam-accent-blue), #1a3a5c);
+  color: #fff;
+}
+
+.reactExamHeader .eyebrow {
+  display: block;
+  color: var(--exam-text-secondary);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.reactExamHeader h1 {
+  margin: 0;
+  overflow: hidden;
+  color: var(--exam-text-primary);
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reactExamHeader p {
+  margin: 0;
+  overflow: hidden;
+  color: var(--exam-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reactExamShell .examHeaderActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.reactExamShell .reactTimer {
+  min-width: 110px;
+  border: 1px solid var(--exam-border);
+  border-radius: 6px;
+  background: #0c1422;
+  padding: 5px 12px;
+  text-align: center;
+}
+
+.reactExamShell .reactTimer span {
+  color: var(--exam-text-secondary);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.reactExamShell .reactTimer strong {
+  display: block;
+  color: var(--exam-text-primary);
+  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+  font-size: 21px;
+  line-height: 1.05;
+}
+
+.reactExamShell .reactTimer.warning {
+  background: var(--exam-warning);
+  color: #111827;
+  animation: softPulse 1.25s ease-in-out infinite;
+}
+
+.reactExamShell .reactTimer.warning span,
+.reactExamShell .reactTimer.warning strong {
+  color: #111827;
+}
+
+.reactExamShell .reactTimer.danger {
+  border-color: var(--exam-error);
+  background: var(--exam-error);
+  animation: softPulse 700ms ease-in-out infinite;
+}
+
+.reactExamShell .reactTimer.danger span,
+.reactExamShell .reactTimer.danger strong {
+  color: #fff;
+}
+
+.reactExamShell .autosavePill {
+  min-height: 36px;
+  border: 1px solid var(--exam-border);
+  border-radius: 6px;
+  background: #0c1422;
+  color: var(--exam-text-secondary);
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.reactExamShell .autosavePill.saved {
+  color: var(--exam-success);
+}
+
+.reactExamShell .autosavePill.saving {
+  color: var(--exam-warning);
+}
+
+.reactExamShell .autosavePill.unsaved {
+  color: var(--exam-error);
+}
+
+.reactExamShell .reactExamGrid {
+  position: relative;
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 0;
+  min-height: 0;
+  overflow: hidden;
+  transition: grid-template-columns 200ms ease;
+}
+
+.reactExamShell .reactExamGrid.navigatorCollapsed {
+  grid-template-columns: 0 minmax(0, 1fr);
+}
+
+.reactExamShell .reactQuestionPanel {
+  position: static;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 10px;
+  min-width: 0;
+  overflow: hidden auto;
+  border-right: 1px solid var(--exam-border);
+  background: #0d1625;
+  padding: 10px;
+  transition: opacity 180ms ease;
+}
+
+.reactExamShell .reactQuestionPanel.collapsed {
+  width: 0;
+  padding: 0;
+  border-right: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.navigatorRestoreButton {
+  position: absolute;
+  left: 8px;
+  top: 10px;
+  z-index: 25;
+  height: 34px;
+  min-height: 34px;
+  width: 34px;
+  padding: 0;
+}
+
+.reactExamShell .examSideCard,
+.reactExamShell .reactQuestionCard {
+  border: 1px solid var(--exam-border);
+  border-radius: 6px;
+  background: var(--exam-bg-secondary);
+  box-shadow: none;
+}
+
+.reactExamShell .examSideCard {
+  padding: 12px;
+}
+
+.reactExamShell .rowBetween {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.reactExamShell .rowBetween span,
+.reactExamShell .examSideCard p,
+.reactExamShell .statusSummary span {
+  color: var(--exam-text-secondary);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.reactExamShell .rowBetween strong,
+.reactExamShell .statusSummary strong {
+  color: var(--exam-text-primary);
+  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+}
+
+.reactExamShell .progressLine {
+  height: 7px;
+  background: #253247;
+}
+
+.reactExamShell .progressLine span {
+  background: var(--exam-success);
+}
+
+.reactExamShell .warningDots span {
+  background: #263349;
+}
+
+.reactExamShell .warningDots span.active {
+  background: var(--exam-warning);
+}
+
+.reactExamShell .reactPalette {
+  grid-template-columns: repeat(5, 30px);
+  gap: 8px;
+}
+
+.reactExamShell .reactPalette button {
+  width: 30px;
+  min-height: 30px;
+  border: 1px solid var(--exam-border);
+  border-radius: 6px;
+  padding: 0;
+  color: var(--exam-text-primary);
+  font-size: 12px;
+  transition: transform 120ms ease, border-color 120ms ease;
+}
+
+.reactExamShell .reactPalette button:focus-visible,
+.reactExamShell .consoleHeader button:focus-visible,
+.reactExamShell .stdinHeader button:focus-visible,
+.reactExamShell .editorTools button:focus-visible,
+.submitReviewList button:focus-visible {
+  outline: 2px solid var(--exam-accent-blue);
+  outline-offset: 2px;
+}
+
+.reactExamShell .reactPalette button:hover {
+  transform: translateY(-1px);
+}
+
+.reactExamShell .reactPalette .not-visited {
+  background: #1b2637;
+}
+
+.reactExamShell .reactPalette .visited-unanswered {
+  border-color: var(--exam-warning);
+  background: #1b2637;
+  color: var(--exam-warning);
+}
+
+.reactExamShell .reactPalette .answered {
+  border-color: var(--exam-success);
+  background: var(--exam-success);
+}
+
+.reactExamShell .reactPalette .marked-review {
+  border-color: var(--exam-accent-blue);
+  background: var(--exam-accent-blue);
+}
+
+.reactExamShell .reactPalette .answered-marked {
+  border-color: var(--exam-teal);
+  background: var(--exam-teal);
+  color: #06202a;
+}
+
+.reactExamShell .statusSummary {
+  grid-template-columns: 1fr 1fr;
+}
+
+.reactExamShell .statusSummary div {
+  border-color: var(--exam-border);
+  background: #101a2a;
+}
+
+.reactExamShell .reactQuestionMain {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 10px;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--exam-bg-primary);
+  padding: 10px;
+}
+
+.reactExamShell .reactQuestionCard {
+  display: grid;
+  gap: 12px;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+}
+
+.reactExamShell .reactQuestionCard.codingQuestionCard {
+  grid-template-columns: minmax(340px, 42%) minmax(0, 1fr);
+  gap: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.questionPromptPane {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-height: 0;
+}
+
+.codingProblemPane {
+  overflow: auto;
+  border-right: 1px solid var(--exam-border);
+  background:
+    linear-gradient(180deg, rgba(0, 102, 204, 0.055), transparent 160px),
+    #0d1625;
+  padding: 14px 16px 18px;
+}
+
+.codingWorkPane {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: #070d16;
+  padding: 10px;
+}
+
+.problemTabs {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  gap: 6px;
+  border-bottom: 1px solid var(--exam-border);
+  background: rgba(13, 22, 37, 0.96);
+  padding: 0 0 10px;
+  backdrop-filter: blur(10px);
+}
+
+.problemTabs span {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--exam-text-secondary);
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.problemTabs .active {
+  border-color: rgba(0, 102, 204, 0.42);
+  background: rgba(0, 102, 204, 0.14);
+  color: var(--exam-text-primary);
+}
+
+.reactExamShell .questionCardHead {
+  align-items: start;
+}
+
+.reactExamShell .questionNumber {
+  color: var(--exam-accent-blue);
+  font-size: 14px;
+}
+
+.reactExamShell .questionCardHead h2 {
+  margin: 0;
+  color: var(--exam-text-primary);
+  font-size: 21px;
+  line-height: 1.4;
+}
+
+.reactExamShell .questionCardHead h2 strong {
+  font-weight: 900;
+}
+
+.reactExamShell .questionCardHead h2 code {
+  border: 1px solid var(--exam-border);
+  border-radius: 4px;
+  background: #0b111c;
+  color: #a8d8a8;
+  padding: 1px 5px;
+  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+  font-size: 0.92em;
+}
+
+.reactExamShell .questionToolset {
+  flex: 0 0 auto;
+}
+
+.questionSupportBlocks {
+  display: grid;
+  gap: 8px;
+}
+
+.constraintBadges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.questionSupportBlocks details {
+  border: 1px solid var(--exam-border);
+  border-radius: 6px;
+  background: #101a2a;
+  color: var(--exam-text-secondary);
+}
+
+.questionSupportBlocks summary {
+  cursor: pointer;
+  padding: 8px 10px;
+  font-weight: 900;
+}
+
+.sampleGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  border-top: 1px solid var(--exam-border);
+  padding: 8px;
+}
+
+.sampleHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.sampleHead button {
+  border: 1px solid var(--exam-border);
+  border-radius: 4px;
+  background: var(--exam-bg-tertiary);
+  color: var(--exam-text-primary);
+  padding: 4px 7px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.sampleGrid pre {
+  min-height: 48px;
+  margin: 0;
+  border-radius: 4px;
+  background: #0b111c;
+  color: var(--exam-text-primary);
+  padding: 8px;
+  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+.reactExamShell .reactCodingWorkspace {
+  display: grid;
+  grid-template-rows: auto minmax(260px, 1fr) minmax(300px, var(--console-height)) auto;
+  gap: 10px;
+  min-height: 0;
+  height: 100%;
+}
+
+.reactExamShell .codingToolbar {
+  min-height: 38px;
+  padding: 0;
+}
+
+.reactExamShell .codingToolbar label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--exam-text-secondary);
+  font-weight: 900;
+}
+
+.reactExamShell .codingToolbar select {
+  min-height: 34px;
+  border: 1px solid var(--exam-border);
+  border-radius: 5px;
+  background: var(--exam-bg-tertiary);
+  color: var(--exam-text-primary);
+  padding: 0 32px 0 10px;
+  font-weight: 900;
+}
+
+.editorTools {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.editorTools button {
+  display: grid;
+  height: 32px;
+  width: 32px;
+  place-items: center;
+  border: 1px solid var(--exam-border);
+  border-radius: 5px;
+  background: var(--exam-bg-tertiary);
+  color: var(--exam-text-secondary);
+}
+
+.editorTools span {
+  min-width: 38px;
+  text-align: center;
+  color: var(--exam-text-secondary);
+  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.reactExamShell .reactCodeEditor {
+  min-height: 220px;
+  border: 1px solid var(--exam-border);
+  border-radius: 6px;
+  background: #0d1117;
+}
+
+.consolePanel {
+  position: relative;
+  display: grid;
+  grid-template-rows: 38px minmax(116px, 1fr) 42px 44px;
+  min-height: 300px;
+  overflow: hidden;
+  border: 1px solid var(--exam-border);
+  border-radius: 6px;
+  background: #070d16;
+}
+
+.consolePanel > label {
+  display: grid;
+  gap: 0;
+  min-height: 0;
+}
+
+.consoleResizeHandle {
+  position: absolute;
+  inset: -5px 0 auto 0;
+  z-index: 2;
+  height: 10px;
+  cursor: ns-resize;
+  border: 0;
+  background: transparent;
+}
+
+.consoleResizeHandle::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 4px;
+  width: 56px;
+  height: 3px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: #3b5576;
+}
+
+.consoleHeader,
+.stdinHeader {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--exam-border);
+  background: #101a2a;
+}
+
+.consoleHeader {
+  justify-content: space-between;
+  padding: 0 10px;
+}
+
+.consoleHeader strong {
+  color: var(--exam-text-primary);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.consoleHeader div {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.consoleInputBadge {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  border: 1px solid rgba(139, 163, 190, 0.22);
+  border-radius: 999px;
+  color: var(--exam-text-secondary);
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.consoleHeader button,
+.stdinHeader button {
+  display: grid;
+  height: 28px;
+  width: 28px;
+  place-items: center;
+  border: 1px solid var(--exam-border);
+  border-radius: 4px;
+  background: var(--exam-bg-tertiary);
+  color: var(--exam-text-secondary);
+}
+
+.consoleOutput {
+  display: block;
+  min-height: 0;
+  margin: 0;
+  overflow: auto;
+  border-left: 4px solid transparent;
+  background:
+    linear-gradient(180deg, rgba(0, 102, 204, 0.04), transparent 90px),
+    #050a12;
+  color: var(--exam-text-primary);
+  padding: 10px 12px;
+  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.consoleOutput.success {
+  border-left-color: var(--exam-success);
+}
+
+.consoleOutput.error {
+  border-left-color: var(--exam-error);
+}
+
+.consoleOutput span {
+  display: block;
+}
+
+.consoleOutput .stderr {
+  color: #ff6b6b;
+}
+
+.consoleOutput .system {
+  color: var(--exam-text-secondary);
+  font-style: italic;
+}
+
+.consoleOutput .prompt {
+  color: #7dd3fc;
+  font-weight: 800;
+}
+
+.consoleOutput .stdin {
+  color: var(--exam-warning);
+  font-weight: 900;
+}
+
+.consoleOutput .stdout {
+  color: var(--exam-text-primary);
+}
+
+.consolePromptLine {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  border-top: 1px solid var(--exam-border);
+  background: #08101b;
+  padding: 0 10px;
+  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+}
+
+.consolePromptLine span {
+  color: #7dd3fc;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.consolePromptLine input {
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--exam-text-primary);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
+.consolePromptLine input::placeholder {
+  color: var(--exam-text-muted);
+}
+
+.consolePromptLine button {
+  display: inline-grid;
+  min-height: 28px;
+  place-items: center;
+  border: 1px solid var(--exam-border);
+  border-radius: 4px;
+  background: var(--exam-bg-tertiary);
+  color: var(--exam-text-secondary);
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.consolePromptLine button[type="submit"] {
+  border-color: rgba(0, 102, 204, 0.55);
+  background: rgba(0, 102, 204, 0.18);
+  color: #cfe5ff;
+}
+
+.consolePromptLine input:focus-visible,
+.consolePromptLine button:focus-visible {
+  outline: 2px solid var(--exam-accent-blue);
+  outline-offset: 2px;
+}
+
+.stdinHeader {
+  gap: 8px;
+  padding: 0 10px;
+}
+
+.stdinHeader span {
+  color: var(--exam-text-primary);
+  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.stdinHeader small {
+  color: var(--exam-text-secondary);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.stdinHeader button {
+  margin-left: auto;
+}
+
+.reactExamShell .reactStdinInput {
+  min-height: 74px;
+  resize: none;
+  border: 0;
+  border-bottom: 1px solid var(--exam-border);
+  border-radius: 0;
+  background: #0d1420;
+  color: var(--exam-text-primary);
+  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.reactExamShell .reactStdinInput:focus {
+  border-color: var(--exam-accent-blue);
+  box-shadow: inset 0 0 0 1px var(--exam-accent-blue);
+}
+
+.runCodeDockButton {
+  width: 100%;
+  border-radius: 0;
+  background: var(--exam-run-blue) !important;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.runCodeDockButton:hover {
+  background: var(--exam-accent-blue) !important;
+}
+
+.lastEditedLine {
+  color: var(--exam-text-secondary);
+  font-size: 11px;
+  font-weight: 800;
+  text-align: right;
+}
+
+.reactExamShell .questionNavFooter {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 46px;
+  border: 1px solid var(--exam-border);
+  border-radius: 6px;
+  background: var(--exam-bg-secondary);
+  padding: 6px;
+}
+
+.reactExamStatusBar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  border-top: 1px solid var(--exam-border);
+  background: #0b1420;
+  color: var(--exam-text-secondary);
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.reactExamStatusBar span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.reactExamStatusBar span:nth-child(2) {
+  justify-self: center;
+}
+
+.reactExamStatusBar span:nth-child(3) {
+  justify-self: end;
+}
+
+.reactExamStatusBar i {
+  height: 8px;
+  width: 8px;
+  border-radius: 999px;
+  background: var(--exam-success);
+}
+
+.reactExamStatusBar .disconnected i {
+  background: var(--exam-error);
+}
+
+.reactExamStatusBar .warning {
+  color: var(--exam-warning);
+}
+
+.reactExamStatusBar .danger {
+  color: var(--exam-error);
+}
+
+.focusWarningBanner {
+  position: fixed;
+  left: 50%;
+  top: 68px;
+  z-index: 1000;
+  display: flex;
+  width: min(680px, calc(100vw - 32px));
+  transform: translateX(-50%);
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  border-radius: 8px;
+  background: rgba(245, 158, 11, 0.16);
+  color: var(--exam-text-primary);
+  padding: 12px 14px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.38);
+  backdrop-filter: blur(12px);
+  animation: toastDesktopIn 180ms ease both;
+}
+
+.focusWarningBanner.danger {
+  border-color: rgba(211, 47, 47, 0.5);
+  background: rgba(211, 47, 47, 0.18);
+}
+
+.focusWarningBanner strong,
+.focusWarningBanner span {
+  display: block;
+}
+
+.focusWarningBanner strong {
+  margin-bottom: 2px;
+  font-size: 13px;
+}
+
+.focusWarningBanner span {
+  color: var(--exam-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.examInstructionsGate ul {
+  margin: 0;
+  padding-left: 18px;
+  text-align: left;
+  color: var(--exam-text-secondary);
+  font-size: 14px;
+}
+
+.submitReviewList {
+  display: grid;
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.submitReviewList button {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: rgb(var(--color-text-primary));
+  padding: 0 10px;
+  text-align: left;
+}
+
+.submitReviewList button:last-child {
+  border-bottom: 0;
+}
+
+.submitReviewList strong {
+  color: rgb(var(--color-text-muted));
+  font-size: 11px;
+  text-transform: capitalize;
+}
+
+@media (max-width: 1100px) {
+  .reactExamShell {
+    min-width: 1024px;
+  }
+}
+
+/* Redesigned isolated student exam window */
+.examWindow {
+  --exam-bg: #f8fafc;
+  --exam-card: #ffffff;
+  --exam-panel: #f1f5f9;
+  --exam-border: #e2e8f0;
+  --exam-text: #1e293b;
+  --exam-muted: #64748b;
+  --exam-soft: #f8fafc;
+  position: relative;
+  min-height: 100vh;
+  overflow: hidden;
+  background: var(--exam-bg);
+  color: var(--exam-text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.dark .examWindow,
+.examWindowDark {
+  --exam-bg: #0f172a;
+  --exam-card: #1e293b;
+  --exam-panel: #1e293b;
+  --exam-border: #334155;
+  --exam-text: #f8fafc;
+  --exam-muted: #94a3b8;
+  --exam-soft: #0f172a;
+}
+
+.examHeaderBar {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 50;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  height: 56px;
+  padding: 0 16px;
+  background: #0f172a;
+  color: #ffffff;
+}
+
+.examHeaderLeft,
+.examHeaderRight {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.examHeaderLeft h1 {
+  max-width: 300px;
+  overflow: hidden;
+  margin: 0;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.examHeaderLeft span {
+  color: #cbd5e1;
+  font-size: 12px;
+}
+
+.examHeaderLeft span:not(.examHeaderDivider):last-child,
+.examHeaderLeft span:nth-last-child(2) {
+  color: #94a3b8;
+}
+
+.examHeaderDivider {
+  width: 1px;
+  height: 22px;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.examHeaderRight {
+  justify-content: flex-end;
+}
+
+.examHeaderRight > span {
+  color: #cbd5e1;
+  font-size: 12px;
+}
+
+.examFlagButton {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+}
+
+.examFlagButton:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.examFlagButton.active {
+  color: #fbbf24;
+}
+
+.examHeaderSubmit,
+.examPanelSubmit,
+.examDangerButton {
+  border: 0;
+  border-radius: 6px;
+  background: #dc2626;
+  color: #ffffff;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.examHeaderSubmit {
+  height: 32px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
+.examHeaderSubmit:hover,
+.examPanelSubmit:hover,
+.examDangerButton:hover {
+  background: #b91c1c;
+}
+
+.examTimerPill {
+  min-width: 118px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  padding: 8px 14px;
+  text-align: center;
+  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.examTimerPill.warning {
+  background: rgba(120, 53, 15, 0.55);
+  color: #fbbf24;
+  box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.34);
+}
+
+.examTimerPill.critical {
+  background: rgba(127, 29, 29, 0.55);
+  color: #f87171;
+  animation: examPulseSlow 1.5s ease-in-out infinite;
+}
+
+.examTimerPill.danger {
+  background: rgba(220, 38, 38, 0.6);
+  color: #ffffff;
+  animation: examPulseFast 0.8s ease-in-out infinite;
+}
+
+.examTimerPill.shake {
+  animation: examPulseFast 0.8s ease-in-out infinite, examTimerShake 180ms ease-in-out;
+}
+
+.examConnectivityBanner {
+  position: fixed;
+  top: 56px;
+  right: 280px;
+  left: 0;
+  z-index: 49;
+  background: rgba(245, 158, 11, 0.95);
+  color: #111827;
+  padding: 8px 16px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.examConnectivityBanner.restored {
+  background: rgba(22, 163, 74, 0.95);
+  color: #ffffff;
+}
+
+.examContentZone {
+  position: fixed;
+  inset: 56px 280px 0 0;
+  overflow-y: auto;
+  background: var(--exam-bg);
+  padding: 32px 24px;
+  transition: opacity 150ms ease;
+}
+
+.examContentZone.isTransitioning {
+  opacity: 0;
+}
+
+.examContentInner {
+  width: min(800px, 100%);
+  margin: 0 auto;
+}
+
+.examQuestionCard {
+  margin-bottom: 16px;
+  border: 1px solid var(--exam-border);
+  border-radius: 12px;
+  background: var(--exam-card);
+  padding: 28px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+}
+
+.examQuestionHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.examQuestionHeader div {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.examQuestionHeader span {
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.examQuestionHeader b {
+  border-radius: 999px;
+  background: rgba(79, 70, 229, 0.14);
+  color: #818cf8;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.examQuestionHeader em {
+  border: 1px solid var(--exam-border);
+  border-radius: 999px;
+  color: var(--exam-muted);
+  padding: 5px 10px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.examQuestionBody {
+  user-select: none;
+}
+
+.examQuestionBody p {
+  margin: 0;
+  color: var(--exam-text);
+  font-size: var(--question-font-size);
+  line-height: 1.7;
+}
+
+.dark .examQuestionBody p {
+  color: #f1f5f9;
+}
+
+.examQuestionBody code {
+  border-radius: 4px;
+  background: rgba(79, 70, 229, 0.16);
+  padding: 2px 5px;
+  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+  font-size: 0.92em;
+}
+
+.examQuestionImages {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.examQuestionImages button {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  cursor: zoom-in;
+}
+
+.examQuestionImages img {
+  max-width: 100%;
+  border: 1px solid var(--exam-border);
+  border-radius: 8px;
+}
+
+.examReferenceCode {
+  margin-top: 18px;
+  overflow: hidden;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  background: #0d1117;
+}
+
+.examReferenceCode > span {
+  display: block;
+  border-bottom: 1px solid #334155;
+  color: #f59e0b;
+  padding: 8px 10px;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.examAnswerDivider {
+  height: 1px;
+  margin: 22px 0;
+  background: var(--exam-border);
+}
+
+.examMcqOptions {
+  display: grid;
+  gap: 8px;
+}
+
+.examMcqOption {
+  display: flex;
+  min-height: 48px;
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--exam-border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--exam-text);
+  padding: 14px 16px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.examMcqOption:hover:not(:disabled) {
+  border-color: #4f46e5;
+  background: rgba(49, 46, 129, 0.24);
+}
+
+.examMcqOption.selected {
+  border-color: #4f46e5;
+  border-left-width: 3px;
+  background: rgba(49, 46, 129, 0.42);
+  box-shadow: 0 8px 20px rgba(79, 70, 229, 0.18);
+}
+
+.examMcqOption span {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  place-items: center;
+  border: 1px solid var(--exam-border);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.examMcqOption.selected span {
+  border-color: #4f46e5;
+  background: #4f46e5;
+  color: #ffffff;
+}
+
+.examMcqOption strong {
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.examTextAnswer {
+  display: grid;
+  gap: 8px;
+}
+
+.examTextAnswer textarea,
+.examStdinBlock textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--exam-border);
+  border-radius: 8px;
+  background: var(--exam-soft);
+  color: var(--exam-text);
+  padding: 12px;
+  font: inherit;
+  font-size: 15px;
+  outline: none;
+  user-select: text;
+}
+
+.examTextAnswer textarea:focus,
+.examStdinBlock textarea:focus {
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.18);
+}
+
+.examTextAnswer span {
+  justify-self: end;
+  color: var(--exam-muted);
+  font-size: 11px;
+}
+
+.examCodeAnswer {
+  display: grid;
+  gap: 18px;
+}
+
+.examCodeAnswer label,
+.examStdinBlock label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--exam-muted);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.examCodeEditor {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  background: #0d1117;
+}
+
+.examEditorResize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 10px;
+  border: 0;
+  background: transparent;
+  cursor: ns-resize;
+}
+
+.examEditorResize::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 3px;
+  width: 52px;
+  height: 3px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: #475569;
+}
+
+.examStdinBlock small {
+  display: block;
+  margin: -4px 0 8px;
+  color: var(--exam-muted);
+  font-size: 11px;
+}
+
+.examStdinBlock textarea {
+  min-height: 78px;
+  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+  font-size: 13px;
+}
+
+.examRunBlock {
+  display: grid;
+  gap: 10px;
+}
+
+.examRunButton,
+.examNextButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 8px;
+  color: #ffffff;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.examRunButton {
+  width: max-content;
+  height: 36px;
+  background: #16a34a;
+  padding: 0 14px;
+}
+
+.examRunButton:hover:not(:disabled) {
+  background: #15803d;
+}
+
+.examRunButton:disabled,
+.examNextButton:disabled,
+.examGhostButton:disabled,
+.examMcqOption:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.examTerminalWrap {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  background: #0d1117;
+}
+
+.examTerminal {
+  height: 200px;
+  overflow: hidden;
+  padding: 8px;
+}
+
+.examTerminalWrap > span {
+  position: absolute;
+  right: 10px;
+  bottom: 8px;
+  color: #64748b;
+  font-size: 10px;
+}
+
+.examNavigationRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.examGhostButton {
+  display: inline-flex;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--exam-border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--exam-text);
+  cursor: pointer;
+  padding: 0 14px;
+  font-weight: 700;
+}
+
+.examNextButton {
+  height: 40px;
+  background: #4f46e5;
+  padding: 0 16px;
+}
+
+.examNextButton:hover {
+  background: #4338ca;
+}
+
+.examNextButton.review {
+  background: #d97706;
+}
+
+.examAutosaveStatus {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 7px;
+  margin-top: 10px;
+  color: var(--exam-muted);
+  font-size: 11px;
+}
+
+.examAutosaveStatus i {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #16a34a;
+}
+
+.examAutosaveStatus.saving i {
+  border: 2px solid #94a3b8;
+  border-top-color: transparent;
+  background: transparent;
+  animation: examSpin 0.8s linear infinite;
+}
+
+.examAutosaveStatus.error i {
+  background: #dc2626;
+}
+
+.examAutosaveStatus.offline i {
+  background: #f59e0b;
+}
+
+.examRightPanel {
+  position: fixed;
+  top: 56px;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  width: 280px;
+  overflow-y: auto;
+  border-left: 1px solid var(--exam-border);
+  background: var(--exam-panel);
+  padding: 16px;
+}
+
+.examRightPanel.mobile {
+  position: static;
+  width: 100%;
+  height: auto;
+  border-left: 0;
+  background: transparent;
+  padding: 0 16px 16px;
+}
+
+.examStudentStrip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--exam-border);
+  padding-bottom: 14px;
+}
+
+.examStudentStrip > span {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  place-items: center;
+  border-radius: 999px;
+  background: #4f46e5;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.examStudentStrip strong,
+.examStudentStrip small {
+  display: block;
+}
+
+.examStudentStrip strong {
+  color: var(--exam-text);
+  font-size: 13px;
+}
+
+.examStudentStrip small {
+  color: var(--exam-muted);
+  font-size: 11px;
+}
+
+.examFontControls {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin: 12px 0;
+}
+
+.examFontControls button {
+  height: 30px;
+  border: 1px solid var(--exam-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--exam-muted);
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.examFontControls button.active {
+  border-color: #4f46e5;
+  background: rgba(79, 70, 229, 0.14);
+  color: var(--exam-text);
+}
+
+.examProgressSummary,
+.examQuestionNavigator,
+.examSideTimer {
+  margin-top: 16px;
+}
+
+.examProgressSummary h2,
+.examQuestionNavigator h2 {
+  margin: 0 0 10px;
+  color: var(--exam-muted);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.examStatRow {
+  display: flex;
+  height: 32px;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--exam-muted);
+  font-size: 12px;
+}
+
+.examStatRow span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.examStatRow.green strong,
+.examStatRow.green svg {
+  color: #22c55e;
+}
+
+.examStatRow.red strong,
+.examStatRow.red svg {
+  color: #ef4444;
+}
+
+.examStatRow.gray strong,
+.examStatRow.gray svg {
+  color: #94a3b8;
+}
+
+.examStatRow.amber strong,
+.examStatRow.amber svg {
+  color: #f59e0b;
+}
+
+.examProgressBar {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #334155;
+  margin-top: 8px;
+}
+
+.examProgressBar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #16a34a;
+  transition: width 300ms ease;
+}
+
+.examLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 7px;
+  margin-bottom: 10px;
+}
+
+.examLegend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--exam-muted);
+  font-size: 9px;
+}
+
+.examLegend i {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.examNavigatorGrid {
+  display: grid;
+  grid-template-columns: repeat(5, 36px);
+  gap: 4px;
+}
+
+.examNavigatorGrid button {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background-color 200ms ease, filter 150ms ease;
+}
+
+.examNavigatorGrid button:hover {
+  filter: brightness(1.1);
+}
+
+.examNavigatorGrid button.current {
+  outline: 2px solid #ffffff;
+  outline-offset: 1px;
+}
+
+.status-not-visited {
+  border: 1px solid #334155;
+  background: #1e293b;
+  color: #64748b;
+}
+
+.status-visited-unanswered {
+  border: 1px solid #dc2626;
+  background: #7f1d1d;
+  color: #fca5a5;
+}
+
+.status-answered {
+  border: 1px solid #16a34a;
+  background: #14532d;
+  color: #86efac;
+}
+
+.status-marked-review {
+  border: 1px solid #d97706;
+  background: #78350f;
+  color: #fcd34d;
+}
+
+.status-answered-marked {
+  border: 1px solid #3b82f6;
+  background: #1e3a5f;
+  color: #93c5fd;
+}
+
+.examSideTimer {
+  display: grid;
+  justify-items: center;
+  border-top: 1px solid var(--exam-border);
+  padding-top: 16px;
+}
+
+.examSideTimer strong {
+  color: var(--exam-text);
+  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.examSideTimer span {
+  color: var(--exam-muted);
+  font-size: 10px;
+}
+
+.examSideTimer.warning strong {
+  color: #f59e0b;
+}
+
+.examSideTimer.danger strong {
+  color: #f87171;
+}
+
+.examSideTimer.pulse {
+  animation: examPulseSlow 1.5s ease-in-out infinite;
+}
+
+.examPanelSubmit {
+  width: 100%;
+  height: 44px;
+  margin-top: 18px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.examMobileNavigatorButton {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 45;
+  display: none;
+  width: 56px;
+  height: 56px;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: #4f46e5;
+  color: #ffffff;
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.32);
+}
+
+.examMobileNavigatorButton span {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: #f59e0b;
+  color: #111827;
+  padding: 0 6px;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 22px;
+}
+
+.examMobileSheetHost {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+}
+
+.examMobileSheetBackdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(2, 6, 23, 0.62);
+  animation: examFadeIn 200ms ease both;
+}
+
+.examMobileSheet {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 70vh;
+  overflow-y: auto;
+  border-radius: 16px 16px 0 0;
+  background: var(--exam-panel);
+  padding-top: 18px;
+  animation: examSheetIn 280ms ease-out both;
+}
+
+.examSheetHandle {
+  width: 48px;
+  height: 4px;
+  margin: 0 auto 10px;
+  border-radius: 999px;
+  background: #64748b;
+}
+
+.examSheetClose {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(148, 163, 184, 0.14);
+  color: var(--exam-text);
+}
+
+.examModalBackdrop,
+.examViolationBackdrop,
+.examPauseOverlay,
+.examTerminateOverlay,
+.examFullscreenGate,
+.examTimeUpOverlay,
+.examLightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 16px;
+}
+
+.examModalBackdrop.submit {
+  background: rgba(0, 0, 0, 0.8);
+}
+
+.examSubmitModal,
+.examFiveMinuteModal,
+.examViolationCard,
+.examPauseOverlay section,
+.examTerminateOverlay section,
+.examFullscreenGate section,
+.examTimeUpOverlay section,
+.examFatalState {
+  width: min(100%, 480px);
+  overflow: hidden;
+  border: 1px solid #334155;
+  border-radius: 12px;
+  background: #1e293b;
+  color: #f8fafc;
+  box-shadow: 0 26px 70px rgba(0, 0, 0, 0.45);
+}
+
+.examSubmitModal > i,
+.examFiveMinuteModal > i,
+.examViolationCard > i,
+.examTerminateOverlay i {
+  display: block;
+  height: 4px;
+  background: #dc2626;
+}
+
+.examSubmitModal header,
+.examSubmitModal footer,
+.examFiveMinuteModal,
+.examViolationCard,
+.examPauseOverlay section,
+.examTerminateOverlay section,
+.examFullscreenGate section,
+.examTimeUpOverlay section,
+.examFatalState {
+  padding: 20px;
+}
+
+.examSubmitModal h2,
+.examFiveMinuteModal h2,
+.examViolationCard h2,
+.examPauseOverlay h2,
+.examTerminateOverlay h2,
+.examFullscreenGate h2,
+.examTimeUpOverlay h2,
+.examFatalState h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.examSubmitModal p,
+.examFiveMinuteModal p,
+.examViolationCard p,
+.examPauseOverlay p,
+.examTerminateOverlay p,
+.examFullscreenGate p,
+.examTimeUpOverlay p,
+.examFatalState p {
+  margin: 8px 0 0;
+  color: #cbd5e1;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.examSubmitStats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 0 20px 16px;
+}
+
+.examSubmitStat {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.examSubmitStat span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #cbd5e1;
+}
+
+.examSubmitStat.green strong { color: #22c55e; }
+.examSubmitStat.red strong,
+.examSubmitStat.red svg { color: #f87171; }
+.examSubmitStat.gray strong,
+.examSubmitStat.gray svg { color: #94a3b8; }
+.examSubmitStat.amber strong { color: #f59e0b; }
+.examSubmitStat.blue strong { color: #60a5fa; }
+
+.examSubmitWarning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 20px 14px;
+  border: 1px solid rgba(245, 158, 11, 0.34);
+  border-radius: 8px;
+  background: rgba(245, 158, 11, 0.12);
+  color: #fcd34d;
+  padding: 10px;
+  font-size: 13px;
+}
+
+.examTimeRemainingRow {
+  margin: 0 20px 16px;
+  color: #cbd5e1;
+  font-size: 13px;
+}
+
+.examSubmitModal footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  border-top: 1px solid #334155;
+}
+
+.examDangerButton {
+  display: inline-flex;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 14px;
+}
+
+.examFiveMinuteModal {
+  width: min(100%, 400px);
+  text-align: center;
+}
+
+.examFiveMinuteModal > i {
+  margin: -20px -20px 18px;
+  background: #f59e0b;
+}
+
+.examFiveMinuteModal svg {
+  color: #f59e0b;
+}
+
+.examFiveMinuteModal h2 {
+  color: #fbbf24;
+}
+
+.examFiveMinuteModal div {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+  font-size: 14px;
+}
+
+.examFiveMinuteModal .danger strong {
+  color: #f87171;
+}
+
+.examFiveMinuteModal button,
+.examViolationCard button,
+.examFullscreenGate button,
+.examTerminateOverlay button,
+.examFatalState button {
+  width: 100%;
+  height: 42px;
+  margin-top: 16px;
+  border: 0;
+  border-radius: 8px;
+  background: #f59e0b;
+  color: #111827;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.examFiveMinuteModal em {
+  display: block;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #334155;
+  margin-top: 10px;
+}
+
+.examFiveMinuteModal em span {
+  display: block;
+  height: 100%;
+  background: #f59e0b;
+}
+
+.examOneMinuteToast {
+  position: fixed;
+  top: 68px;
+  left: 50%;
+  z-index: 90;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: #dc2626;
+  color: #ffffff;
+  padding: 10px 16px;
+  font-weight: 800;
+  animation: examSlideDown 220ms ease both;
+}
+
+.examViolationBackdrop {
+  z-index: 95;
+  background: rgba(0, 0, 0, 0.92);
+  animation: examFadeIn 150ms ease both;
+}
+
+.examViolationCard {
+  width: min(100%, 420px);
+  text-align: center;
+  animation: examWarningBounce 350ms ease both;
+}
+
+.examViolationCard.amber > i { background: #f59e0b; }
+.examViolationCard.orange > i { background: #f97316; }
+.examViolationCard.red > i { background: #dc2626; }
+.examViolationCard.amber svg { color: #f59e0b; }
+.examViolationCard.orange svg { color: #fb923c; }
+.examViolationCard.red svg { color: #f87171; }
+.examViolationCard.amber h2 { color: #fbbf24; }
+.examViolationCard.orange h2 { color: #fb923c; }
+.examViolationCard.red h2 { color: #f87171; }
+.examViolationCard.orange button { background: #f97316; color: #ffffff; }
+.examViolationCard.red button { background: #dc2626; color: #ffffff; }
+
+.examWarningSteps {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  margin: 16px 0;
+}
+
+.examWarningSteps span {
+  position: relative;
+  width: 10px;
+  height: 10px;
+  border: 1px solid #64748b;
+  border-radius: 999px;
+}
+
+.examWarningSteps span:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 11px;
+  width: 14px;
+  height: 1px;
+  background: #64748b;
+}
+
+.examWarningSteps .done,
+.examWarningSteps .current {
+  border-color: #dc2626;
+  background: #dc2626;
+}
+
+.examWarningSteps .current {
+  box-shadow: 0 0 0 6px rgba(220, 38, 38, 0.2);
+}
+
+.examViolationCard small {
+  display: block;
+  margin-top: 10px;
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.examAdminMessage {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-left: 4px solid #4f46e5;
+  background: #111827;
+  color: #ffffff;
+  padding: 12px 18px;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.36);
+  animation: examAdminMessageIn 300ms ease-out both;
+}
+
+.examAdminMessage div {
+  flex: 1;
+  min-width: 0;
+}
+
+.examAdminMessage strong {
+  display: block;
+  font-size: 12px;
+}
+
+.examAdminMessage p {
+  margin: 2px 0 0;
+  font-size: 14px;
+}
+
+.examAdminMessage button {
+  border: 0;
+  background: transparent;
+  color: #c7d2fe;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.examPauseOverlay,
+.examTerminateOverlay,
+.examFullscreenGate,
+.examTimeUpOverlay {
+  z-index: 92;
+  background: rgba(15, 23, 42, 0.97);
+}
+
+.examPauseOverlay section,
+.examTerminateOverlay section,
+.examFullscreenGate section,
+.examTimeUpOverlay section,
+.examFatalState {
+  width: min(100%, 380px);
+  text-align: center;
+}
+
+.examPauseOverlay svg {
+  color: #4f46e5;
+}
+
+.examPauseOverlay span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  color: #cbd5e1;
+  font-size: 13px;
+}
+
+.examTerminateOverlay i {
+  margin: -20px -20px 18px;
+  background: #dc2626;
+}
+
+.examTerminateOverlay button,
+.examFatalState button {
+  background: #4f46e5;
+  color: #ffffff;
+}
+
+.examSecondChanceBanner {
+  position: fixed;
+  top: 64px;
+  left: 50%;
+  z-index: 91;
+  display: inline-flex;
+  transform: translateX(-50%);
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(34, 197, 94, 0.34);
+  border-radius: 999px;
+  background: #14532d;
+  color: #bbf7d0;
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 800;
+  animation: examSlideDown 260ms ease both;
+}
+
+.examLightbox {
+  z-index: 105;
+  background: rgba(0, 0, 0, 0.9);
+}
+
+.examLightbox img {
+  max-width: min(100%, 1100px);
+  max-height: 88vh;
+  border-radius: 8px;
+  object-fit: contain;
+}
+
+.examLightbox button {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.82);
+  color: #ffffff;
+}
+
+.examFullscreenGate {
+  z-index: 88;
+}
+
+.examFullscreenGate section {
+  border-color: #4f46e5;
+}
+
+.examFullscreenGate svg {
+  color: #818cf8;
+}
+
+.examTimeUpOverlay {
+  z-index: 110;
+}
+
+.examTimeUpOverlay svg {
+  color: #818cf8;
+}
+
+.examLoadingScreen {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  align-content: center;
+  gap: 16px;
+  background: #0f172a;
+  color: #f8fafc;
+}
+
+.examLoadingScreen p {
+  margin: 0;
+  color: #cbd5e1;
+}
+
+.examSpinner {
+  width: 34px;
+  height: 34px;
+  border: 3px solid rgba(255, 255, 255, 0.24);
+  border-top-color: #ffffff;
+  border-radius: 999px;
+  animation: examSpin 1s linear infinite;
+}
+
+.examSkeletonCard,
+.examQuestionSkeleton {
+  display: grid;
+  gap: 12px;
+}
+
+.examSkeletonCard {
+  width: min(460px, calc(100vw - 32px));
+  border: 1px solid #334155;
+  border-radius: 12px;
+  background: #1e293b;
+  padding: 18px;
+}
+
+.examSkeletonCard span,
+.examSkeletonCard strong,
+.examSkeletonCard em,
+.examSkeletonCard i,
+.examQuestionSkeleton span,
+.examQuestionSkeleton strong,
+.examQuestionSkeleton i {
+  display: block;
+  height: 14px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #334155, #475569, #334155);
+  background-size: 200% 100%;
+  animation: shimmer 1.3s linear infinite;
+}
+
+.examSkeletonCard strong,
+.examQuestionSkeleton strong {
+  width: 82%;
+}
+
+.examSkeletonCard em {
+  width: 65%;
+}
+
+.examSkeletonCard i,
+.examQuestionSkeleton i {
+  height: 40px;
+  border-radius: 8px;
+}
+
+.examFatalState {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 20;
+  transform: translate(-50%, -50%);
+}
+
+.spin {
+  animation: examSpin 0.8s linear infinite;
+}
+
+@keyframes examSpin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes examPulseSlow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+@keyframes examPulseFast {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.62; }
+}
+
+@keyframes examTimerShake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-1px); }
+  75% { transform: translateX(1px); }
+}
+
+@keyframes examFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes examSheetIn {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes examSlideDown {
+  from { opacity: 0; transform: translate(-50%, -14px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+@keyframes examAdminMessageIn {
+  from { transform: translateY(-60px); }
+  to { transform: translateY(0); }
+}
+
+@keyframes examWarningBounce {
+  0% { opacity: 0; transform: scale(0.85); }
+  55% { opacity: 1; transform: scale(1.08); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@media (max-width: 767px) {
+  .examHeaderBar {
+    height: 48px;
+    padding: 0 10px;
+  }
+
+  .examHeaderLeft h1 {
+    max-width: 180px;
+  }
+
+  .examHeaderDivider,
+  .examHeaderLeft span:not(.examHeaderDivider),
+  .examHeaderSubmit {
+    display: none;
+  }
+
+  .examTimerPill {
+    min-width: 92px;
+    padding: 7px 10px;
+    font-size: 14px;
+  }
+
+  .examHeaderRight {
+    gap: 6px;
+  }
+
+  .examContentZone {
+    inset: 48px 0 0 0;
+    padding: 16px;
+  }
+
+  .examConnectivityBanner {
+    top: 48px;
+    right: 0;
+  }
+
+  .examQuestionCard {
+    padding: 18px;
+  }
+
+  .examQuestionHeader {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .examNavigationRow {
+    flex-direction: column;
+  }
+
+  .examGhostButton,
+  .examNextButton {
+    width: 100%;
+  }
+
+  .examRightPanel:not(.mobile) {
+    display: none;
+  }
+
+  .examMobileNavigatorButton {
+    display: grid;
+  }
+
+  .examSubmitStats {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Professional exam window refinements */
+.examWindow {
+  --exam-bg: #eef3f8;
+  --exam-card: #ffffff;
+  --exam-panel: #f7f9fc;
+  --exam-border: #d9e2ee;
+  --exam-text: #162033;
+  --exam-muted: #64748b;
+  --exam-soft: #f8fafc;
+  --exam-accent: #4f46e5;
+  --exam-accent-strong: #4338ca;
+  --exam-selection: #eef2ff;
+  --exam-selection-strong: #e0e7ff;
+  background: var(--exam-bg);
+}
+
+.dark .examWindow,
+.examWindow.examWindowDark {
+  --exam-bg: #0b1220;
+  --exam-card: #111827;
+  --exam-panel: #101827;
+  --exam-border: #273449;
+  --exam-text: #f8fafc;
+  --exam-muted: #9aa7b8;
+  --exam-soft: #0f172a;
+  --exam-selection: rgba(79, 70, 229, 0.22);
+  --exam-selection-strong: rgba(79, 70, 229, 0.34);
+}
+
+.examHeaderBar {
+  height: 58px;
+  padding: 0 18px 0 22px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+  background: #0b1220;
+  box-shadow: 0 14px 34px rgba(2, 6, 23, 0.22);
+}
+
+.examHeaderLeft,
+.examHeaderRight {
+  gap: 12px;
+}
+
+.examHeaderLeft h1 {
+  max-width: 340px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.examHeaderLeft span {
+  color: #d1d8e5;
+}
+
+.examHeaderLeft span:not(.examHeaderDivider) {
+  white-space: nowrap;
+}
+
+.examHeaderDivider {
+  height: 26px;
+  background: rgba(226, 232, 240, 0.18);
+}
+
+.examHeaderRight > span {
+  color: #d5dce8;
+  font-weight: 700;
+}
+
+.examFlagButton {
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.examFlagButton:hover {
+  border-color: rgba(251, 191, 36, 0.45);
+  background: rgba(251, 191, 36, 0.1);
+}
+
+.examHeaderSubmit,
+.examPanelSubmit,
+.examDangerButton {
+  box-shadow: 0 8px 18px rgba(220, 38, 38, 0.2);
+  transition: background-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+.examHeaderSubmit:hover,
+.examPanelSubmit:hover,
+.examDangerButton:hover {
+  box-shadow: 0 10px 22px rgba(185, 28, 28, 0.28);
+}
+
+.examHeaderSubmit:active,
+.examPanelSubmit:active,
+.examDangerButton:active,
+.examNextButton:active,
+.examRunButton:active {
+  transform: translateY(1px);
+}
+
+.examTimerPill {
+  min-width: 126px;
+  border: 1px solid rgba(226, 232, 240, 0.14);
+  background: rgba(15, 23, 42, 0.75);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.examConnectivityBanner {
+  top: 58px;
+  right: 280px;
+}
+
+.examContentZone {
+  inset: 58px 280px 0 0;
+  padding: 34px 28px 44px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0) 180px),
+    var(--exam-bg);
+}
+
+.dark .examContentZone,
+.examWindow.examWindowDark .examContentZone {
+  background:
+    linear-gradient(180deg, rgba(30, 41, 59, 0.22), rgba(30, 41, 59, 0) 210px),
+    var(--exam-bg);
+}
+
+.examContentInner {
+  width: min(840px, 100%);
+}
+
+.examQuestionCard {
+  border-color: var(--exam-border);
+  border-radius: 10px;
+  padding: 30px;
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.09);
+}
+
+.dark .examQuestionCard,
+.examWindow.examWindowDark .examQuestionCard {
+  box-shadow: 0 20px 54px rgba(0, 0, 0, 0.28);
+}
+
+.examQuestionHeader {
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--exam-border);
+}
+
+.examQuestionHeader span {
+  color: var(--exam-muted);
+}
+
+.examQuestionHeader b {
+  background: var(--exam-selection);
+  color: var(--exam-accent-strong);
+}
+
+.dark .examQuestionHeader b,
+.examWindow.examWindowDark .examQuestionHeader b {
+  color: #a5b4fc;
+}
+
+.examQuestionHeader em {
+  background: var(--exam-soft);
+}
+
+.examQuestionBody p {
+  color: var(--exam-text);
+  font-weight: 500;
+}
+
+.examAnswerDivider {
+  margin: 24px 0;
+}
+
+.examMcqOption {
+  border-color: var(--exam-border);
+  background: var(--exam-card);
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.03);
+}
+
+.examMcqOption:hover:not(:disabled) {
+  border-color: var(--exam-accent);
+  background: var(--exam-selection);
+}
+
+.examMcqOption.selected {
+  border-color: var(--exam-accent);
+  background: var(--exam-selection-strong);
+  box-shadow: 0 10px 24px rgba(79, 70, 229, 0.14);
+}
+
+.examTextAnswer textarea,
+.examStdinBlock textarea {
+  background: var(--exam-soft);
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.examCodeEditor,
+.examReferenceCode,
+.examTerminalWrap {
+  border-radius: 9px;
+  box-shadow: 0 12px 30px rgba(2, 6, 23, 0.22);
+}
+
+.examNavigationRow {
+  margin-top: 18px;
+}
+
+.examGhostButton {
+  background: var(--exam-card);
+  transition: border-color 150ms ease, background-color 150ms ease, transform 150ms ease;
+}
+
+.examGhostButton:hover:not(:disabled) {
+  border-color: #b9c5d6;
+  background: #f8fafc;
+}
+
+.dark .examGhostButton:hover:not(:disabled),
+.examWindow.examWindowDark .examGhostButton:hover:not(:disabled) {
+  border-color: #46566f;
+  background: #172033;
+}
+
+.examNextButton {
+  background: var(--exam-accent);
+  box-shadow: 0 10px 22px rgba(79, 70, 229, 0.2);
+  transition: background-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+.examNextButton:hover {
+  background: var(--exam-accent-strong);
+  box-shadow: 0 12px 26px rgba(67, 56, 202, 0.26);
+}
+
+.examRightPanel {
+  top: 58px;
+  border-left-color: var(--exam-border);
+  background: var(--exam-panel);
+  box-shadow: -12px 0 28px rgba(15, 23, 42, 0.08);
+}
+
+.dark .examRightPanel,
+.examWindow.examWindowDark .examRightPanel {
+  box-shadow: -16px 0 40px rgba(0, 0, 0, 0.24);
+}
+
+.examStudentStrip {
+  padding-bottom: 16px;
+}
+
+.examStudentStrip > span {
+  box-shadow: 0 10px 22px rgba(79, 70, 229, 0.26);
+}
+
+.examStudentStrip strong {
+  font-size: 14px;
+}
+
+.examFontControls {
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--exam-border);
+}
+
+.examFontControls button {
+  background: var(--exam-card);
+}
+
+.examProgressSummary,
+.examQuestionNavigator,
+.examSideTimer {
+  margin-top: 18px;
+}
+
+.examStatRow {
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.examStatRow:last-of-type {
+  border-bottom: 0;
+}
+
+.examProgressBar {
+  background: rgba(100, 116, 139, 0.22);
+}
+
+.examNavigatorGrid {
+  grid-template-columns: repeat(5, 38px);
+}
+
+.examNavigatorGrid button {
+  width: 38px;
+  height: 38px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.examNavigatorGrid button.current {
+  outline: 2px solid #ffffff;
+  box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.18);
+}
+
+.examSideTimer {
+  border-top-color: var(--exam-border);
+}
+
+.examPanelSubmit {
+  height: 46px;
+}
+
+.examModalBackdrop.submit {
+  background: rgba(2, 6, 23, 0.82);
+  backdrop-filter: blur(6px);
+}
+
+.examSubmitModal,
+.examFiveMinuteModal,
+.examViolationCard,
+.examPauseOverlay section,
+.examTerminateOverlay section,
+.examFullscreenGate section,
+.examTimeUpOverlay section,
+.examFatalState {
+  border-color: rgba(148, 163, 184, 0.22);
+  border-radius: 14px;
+  background: #111827;
+  box-shadow: 0 30px 86px rgba(0, 0, 0, 0.52);
+}
+
+.examSubmitModal header {
+  padding-bottom: 16px;
+}
+
+.examSubmitStats {
+  gap: 10px;
+}
+
+.examSubmitStat {
+  min-height: 40px;
+  border-color: rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.5);
+}
+
+.examSubmitWarning,
+.examSubmitError {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 20px 14px;
+  border-radius: 9px;
+  padding: 11px 12px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.examSubmitError {
+  border: 1px solid rgba(248, 113, 113, 0.34);
+  background: rgba(127, 29, 29, 0.28);
+  color: #fecaca;
+}
+
+.examSubmitError svg {
+  flex: 0 0 auto;
+  color: #f87171;
+}
+
+.examFullscreenGate {
+  background: rgba(2, 6, 23, 0.9);
+  backdrop-filter: blur(8px);
+}
+
+.examFullscreenGate section {
+  width: min(100%, 420px);
+  border-color: rgba(129, 140, 248, 0.36);
+}
+
+.examFullscreenGate h2 {
+  margin-top: 12px;
+}
+
+.examFullscreenActions {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.examFullscreenActions button {
+  margin-top: 0;
+}
+
+.examFullscreenActions .examGateSubmit {
+  border: 1px solid rgba(248, 113, 113, 0.45);
+  background: rgba(127, 29, 29, 0.42);
+  color: #fecaca;
+}
+
+.examFullscreenActions .examGateSubmit:hover {
+  background: rgba(185, 28, 28, 0.72);
+  color: #ffffff;
+}
+
+.examMobileNavigatorButton {
+  box-shadow: 0 18px 38px rgba(79, 70, 229, 0.34);
+}
+
+@media (max-width: 767px) {
+  .examHeaderBar {
+    height: 50px;
+    padding: 0 10px 0 12px;
+  }
+
+  .examHeaderLeft h1 {
+    max-width: 172px;
+    font-size: 13px;
+  }
+
+  .examTimerPill {
+    min-width: 92px;
+    font-size: 13px;
+  }
+
+  .examContentZone {
+    inset: 50px 0 0 0;
+    padding: 16px 14px 88px;
+  }
+
+  .examConnectivityBanner {
+    top: 50px;
+    right: 0;
+  }
+
+  .examQuestionCard {
+    border-radius: 10px;
+    padding: 18px;
+  }
+
+  .examQuestionHeader {
+    padding-bottom: 12px;
+  }
+
+  .examMcqOption {
+    padding: 13px 14px;
+  }
+
+  .examRightPanel.mobile {
+    box-shadow: none;
+  }
+
+  .examNavigatorGrid {
+    grid-template-columns: repeat(5, 38px);
+  }
+
+  .examSubmitModal footer {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .examSubmitModal footer .examGhostButton,
+  .examSubmitModal footer .examDangerButton {
+    width: 100%;
+  }
+}
+
+/* CBT console redesign */
+.examWindow {
+  --exam-bg: #e8eef6;
+  --exam-card: #ffffff;
+  --exam-panel: #f6f8fb;
+  --exam-border: #cfd9e8;
+  --exam-text: #172033;
+  --exam-muted: #5b6b81;
+  --exam-soft: #f8fafc;
+  --exam-accent: #2457d6;
+  --exam-accent-strong: #1d4ed8;
+  --exam-selection: #eef4ff;
+  --exam-selection-strong: #dbeafe;
+  background: var(--exam-bg);
+}
+
+.dark .examWindow,
+.examWindow.examWindowDark {
+  --exam-bg: #111827;
+  --exam-card: #f8fafc;
+  --exam-panel: #eef2f7;
+  --exam-border: #cbd5e1;
+  --exam-text: #172033;
+  --exam-muted: #64748b;
+  --exam-soft: #f8fafc;
+  --exam-selection: #eef4ff;
+  --exam-selection-strong: #dbeafe;
+}
+
+.examHeaderBar {
+  height: 60px;
+  padding: 0 20px;
+  background: #0a1630;
+  border-bottom: 3px solid #2457d6;
+  box-shadow: 0 10px 24px rgba(2, 8, 23, 0.28);
+}
+
+.examHeaderLeft h1 {
+  max-width: 360px;
+  letter-spacing: 0;
+}
+
+.examHeaderLeft span {
+  color: #dbe4f2;
+}
+
+.examHeaderLeft span:nth-last-child(1),
+.examHeaderLeft span:nth-last-child(2) {
+  color: #aebbd0;
+}
+
+.examTimerPill {
+  min-width: 134px;
+  padding: 9px 16px;
+  border-color: rgba(255, 255, 255, 0.2);
+  background: #111f3b;
+  color: #ffffff;
+}
+
+.examHeaderRight > span {
+  min-width: 72px;
+  text-align: right;
+}
+
+.examHeaderSubmit {
+  height: 34px;
+  border-radius: 5px;
+  background: #c62828;
+}
+
+.examContentZone {
+  inset: 60px 280px 0 0;
+  padding: 22px 24px 28px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0) 150px),
+    var(--exam-bg);
+}
+
+.examContentInner {
+  width: min(920px, 100%);
+}
+
+.examQuestionCard {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--exam-border);
+  border-radius: 8px;
+  background: var(--exam-card);
+  padding: 0;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08);
+}
+
+.examQuestionCard::before {
+  content: "";
+  display: block;
+  height: 4px;
+  background: #2457d6;
+}
+
+.examQuestionHeader {
+  align-items: center;
+  margin: 0;
+  padding: 16px 22px;
+  border-bottom: 1px solid var(--exam-border);
+  background: #f8fafc;
+}
+
+.examQuestionHeader div {
+  gap: 10px;
+}
+
+.examQuestionHeader span {
+  color: #334155;
+  font-size: 12px;
+}
+
+.examQuestionHeader b {
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.examQuestionHeader em {
+  border-color: #d7deea;
+  background: #ffffff;
+  color: #475569;
+}
+
+.examQuestionBody {
+  padding: 24px 26px 0;
+}
+
+.examQuestionBody p {
+  color: #172033;
+  font-size: var(--question-font-size);
+  font-weight: 500;
+  line-height: 1.78;
+}
+
+.examAnswerDivider {
+  margin: 24px 26px 0;
+}
+
+.examMcqOptions,
+.examTextAnswer,
+.examCodeAnswer {
+  padding: 22px 26px 28px;
+}
+
+.examMcqOptions {
+  gap: 10px;
+}
+
+.examMcqOption {
+  min-height: 52px;
+  border-color: #d7deea;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #172033;
+  box-shadow: none;
+}
+
+.examMcqOption:hover:not(:disabled) {
+  background: #f4f7ff;
+  border-color: #7aa2f7;
+}
+
+.examMcqOption.selected {
+  border-color: #2457d6;
+  border-left-width: 4px;
+  background: #edf4ff;
+  box-shadow: inset 0 0 0 1px rgba(36, 87, 214, 0.12);
+}
+
+.examMcqOption span {
+  width: 22px;
+  height: 22px;
+  flex-basis: 22px;
+  border-color: #9fb0c7;
+  background: #ffffff;
+  color: #334155;
+}
+
+.examMcqOption.selected span {
+  border-color: #2457d6;
+  background: #2457d6;
+}
+
+.examMcqOption strong {
+  color: #172033;
+}
+
+.examTextAnswer textarea,
+.examStdinBlock textarea {
+  border-color: #cfd9e8;
+  background: #ffffff;
+  color: #172033;
+}
+
+.examCommandBar {
+  position: sticky;
+  bottom: 0;
+  z-index: 18;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  border: 1px solid #cfd9e8;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.96);
+  padding: 12px;
+  box-shadow: 0 -6px 18px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(8px);
+}
+
+.examCommandGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.examCommandGroup.primary {
+  justify-content: flex-end;
+}
+
+.examCommandButton {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 0 14px;
+  color: #172033;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+  transition: background-color 150ms ease, border-color 150ms ease, transform 150ms ease, box-shadow 150ms ease;
+}
+
+.examCommandButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.examCommandButton:not(:disabled):active {
+  transform: translateY(1px);
+}
+
+.examCommandButton.neutral {
+  border-color: #cbd5e1;
+  background: #ffffff;
+}
+
+.examCommandButton.neutral:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #9fb0c7;
+}
+
+.examCommandButton.review {
+  border-color: #f2c36b;
+  background: #fff8e8;
+  color: #8a5200;
+}
+
+.examCommandButton.review:hover:not(:disabled) {
+  background: #ffefc2;
+}
+
+.examCommandButton.save {
+  border-color: #1d4ed8;
+  background: #2457d6;
+  color: #ffffff;
+  box-shadow: 0 8px 16px rgba(36, 87, 214, 0.22);
+}
+
+.examCommandButton.save:hover {
+  background: #1d4ed8;
+}
+
+.examCommandButton.final {
+  border-color: #c62828;
+  background: #c62828;
+  box-shadow: 0 8px 16px rgba(198, 40, 40, 0.24);
+}
+
+.examCommandButton.final:hover {
+  background: #a91f1f;
+}
+
+.examAutosaveStatus {
+  margin-top: 10px;
+}
+
+.examRightPanel {
+  top: 60px;
+  width: 280px;
+  background: #f6f8fb;
+  border-left: 1px solid #cfd9e8;
+  padding: 14px 14px 16px;
+  box-shadow: -8px 0 18px rgba(15, 23, 42, 0.08);
+}
+
+.examStudentStrip {
+  min-height: 56px;
+  padding-bottom: 13px;
+  border-bottom-color: #d7deea;
+}
+
+.examStudentStrip > span {
+  background: #2457d6;
+}
+
+.examStudentStrip strong {
+  color: #172033;
+}
+
+.examStudentStrip small {
+  color: #64748b;
+}
+
+.examFontControls {
+  margin: 12px 0 14px;
+  border-bottom-color: #d7deea;
+}
+
+.examFontControls button {
+  background: #ffffff;
+  color: #475569;
+}
+
+.examFontControls button.active {
+  border-color: #2457d6;
+  background: #edf4ff;
+  color: #1d4ed8;
+}
+
+.examProgressSummary h2,
+.examQuestionNavigator h2 {
+  color: #475569;
+  letter-spacing: 0.04em;
+}
+
+.examStatRow {
+  color: #475569;
+}
+
+.examProgressBar {
+  height: 7px;
+  background: #dbe3ee;
+}
+
+.examProgressBar span {
+  background: #159947;
+}
+
+.examLegend {
+  gap: 6px 8px;
+}
+
+.examLegend span {
+  color: #64748b;
+}
+
+.examNavigatorGrid {
+  grid-template-columns: repeat(5, 40px);
+  gap: 5px;
+}
+
+.examNavigatorGrid button {
+  width: 40px;
+  height: 36px;
+  border-radius: 5px;
+  box-shadow: none;
+}
+
+.examNavigatorGrid button.current {
+  outline: 2px solid #0a1630;
+  outline-offset: 1px;
+  box-shadow: 0 0 0 3px rgba(36, 87, 214, 0.18);
+}
+
+.status-not-visited {
+  border-color: #cbd5e1;
+  background: #ffffff;
+  color: #64748b;
+}
+
+.status-visited-unanswered {
+  border-color: #dc2626;
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.status-answered {
+  border-color: #16a34a;
+  background: #dcfce7;
+  color: #166534;
+}
+
+.status-marked-review {
+  border-color: #d97706;
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.status-answered-marked {
+  border-color: #2563eb;
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.examSideTimer {
+  margin-top: 18px;
+  border-top-color: #d7deea;
+}
+
+.examSideTimer strong {
+  color: #172033;
+}
+
+.examSideTimer span {
+  color: #64748b;
+}
+
+.examPanelSubmit {
+  height: 44px;
+  border-radius: 6px;
+  background: #c62828;
+}
+
+.examMobileNavigatorButton {
+  background: #2457d6;
+}
+
+.examSubmitModal,
+.examFiveMinuteModal,
+.examViolationCard,
+.examPauseOverlay section,
+.examTerminateOverlay section,
+.examFullscreenGate section,
+.examTimeUpOverlay section,
+.examFatalState {
+  border-radius: 10px;
+}
+
+.examSubmitModal {
+  width: min(100%, 620px);
+}
+
+.examFinalReview {
+  border-top: 1px solid rgba(148, 163, 184, 0.18);
+  padding: 0 20px 14px;
+}
+
+.examFinalReviewFilters {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.examFinalReviewFilters button {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 7px;
+  background: rgba(15, 23, 42, 0.42);
+  color: #cbd5e1;
+  cursor: pointer;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.examFinalReviewFilters button.active {
+  border-color: rgba(129, 140, 248, 0.6);
+  background: rgba(79, 70, 229, 0.28);
+  color: #ffffff;
+}
+
+.examFinalReviewFilters strong {
+  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+  font-size: 13px;
+}
+
+.examFinalReviewList {
+  display: grid;
+  max-height: 230px;
+  overflow-y: auto;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 8px;
+}
+
+.examFinalReviewList button {
+  display: grid;
+  grid-template-columns: 14px 52px 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  border: 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+  background: rgba(15, 23, 42, 0.26);
+  color: #e2e8f0;
+  cursor: pointer;
+  padding: 0 12px;
+  text-align: left;
+}
+
+.examFinalReviewList button:hover {
+  background: rgba(30, 41, 59, 0.74);
+}
+
+.examFinalReviewList button:last-child {
+  border-bottom: 0;
+}
+
+.examFinalReviewList strong {
+  color: #ffffff;
+  font-size: 13px;
+}
+
+.examFinalReviewList em {
+  color: #cbd5e1;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.examFinalReviewList small,
+.examFinalReviewList b {
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.examFinalReviewList p {
+  margin: 0;
+  padding: 14px;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.examReviewStatusDot {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.examFullscreenGate section {
+  background: #0f172a;
+}
+
+@media (max-width: 980px) {
+  .examCommandBar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .examCommandGroup,
+  .examCommandGroup.primary {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .examCommandButton {
+    flex: 1;
+  }
+}
+
+@media (max-width: 767px) {
+  .examHeaderBar {
+    height: 50px;
+    border-bottom-width: 2px;
+  }
+
+  .examContentZone {
+    inset: 50px 0 0 0;
+    padding: 12px 12px 92px;
+  }
+
+  .examQuestionHeader,
+  .examQuestionBody {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .examAnswerDivider {
+    margin-right: 16px;
+    margin-left: 16px;
+  }
+
+  .examMcqOptions,
+  .examTextAnswer,
+  .examCodeAnswer {
+    padding: 18px 16px 22px;
+  }
+
+  .examCommandBar {
+    position: static;
+    margin-top: 10px;
+    padding: 10px;
+  }
+
+  .examCommandGroup {
+    flex-direction: column;
+  }
+
+  .examCommandButton {
+    width: 100%;
+  }
+
+  .examRightPanel.mobile {
+    background: #f6f8fb;
+    padding: 0 14px 16px;
+  }
+
+  .examNavigatorGrid {
+    grid-template-columns: repeat(5, 40px);
+  }
+
+  .examFinalReviewFilters {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .examFinalReviewList button {
+    grid-template-columns: 12px 42px 1fr auto;
+  }
+
+  .examFinalReviewList small {
+    display: none;
+  }
+}
+
+/* Exam workspace final layout pass */
+.examContentZone {
+  overflow: hidden;
+  padding: 14px 16px 16px;
+}
+
+.examContentInner {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  gap: 10px;
+  height: 100%;
+  width: min(1180px, 100%);
+  margin: 0 auto;
+}
+
+.examQuestionCard {
+  min-height: 0;
+  margin: 0;
+  overflow: auto;
+}
+
+.examQuestionCardCode {
+  display: grid;
+  grid-template-columns: minmax(320px, 38%) minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.examPromptPane {
+  min-height: 0;
+  overflow: auto;
+  border-right: 1px solid #cfd9e8;
+  background: #ffffff;
+  padding: 20px 22px;
+}
+
+.examAnswerPane {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  background: #f6f8fb;
+  padding: 14px;
+}
+
+.examQuestionCardCode .examQuestionHeader {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin: -20px -22px 16px;
+  background: rgba(248, 250, 252, 0.96);
+  backdrop-filter: blur(10px);
+}
+
+.examQuestionCardCode .examQuestionBody {
+  padding: 0;
+}
+
+.examQuestionCardCode .examQuestionBody p {
+  font-size: max(var(--question-font-size), 16px);
+  line-height: 1.72;
+}
+
+.examQuestionCardCode .examReferenceCode {
+  max-height: min(34vh, 300px);
+}
+
+.examQuestionCardCode .examAnswerDivider {
+  display: none;
+}
+
+.examQuestionCardCode .examCodeAnswer {
+  gap: 12px;
+}
+
+.examQuestionCardCode .examCodeEditor {
+  min-height: min(42vh, 430px);
+}
+
+.examQuestionCardCode .examTerminal {
+  height: 150px;
+}
+
+.examCommandBar {
+  position: static;
+  margin-top: 0;
+}
+
+.examAutosaveStatus {
+  margin-top: 0;
+}
+
+.examSubmitModal {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto auto;
+  max-height: calc(100vh - 40px);
+}
+
+.examFinalReview {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.examFinalReviewList {
+  max-height: min(28vh, 260px);
+}
+
+.examSubmitModal footer {
+  position: sticky;
+  bottom: 0;
+  background: #111827;
+}
+
+@media (max-width: 1024px) {
+  .examContentZone {
+    right: 0;
+  }
+
+  .examQuestionCardCode {
+    grid-template-columns: 1fr;
+    overflow: auto;
+  }
+
+  .examPromptPane {
+    max-height: none;
+    border-right: 0;
+    border-bottom: 1px solid #cfd9e8;
+  }
+
+  .examAnswerPane {
+    overflow: visible;
+  }
+}
+
+@media (max-width: 767px) {
+  .examContentZone {
+    overflow-y: auto;
+    padding: 10px 10px 90px;
+  }
+
+  .examContentInner {
+    display: block;
+    height: auto;
+  }
+
+  .examQuestionCardCode {
+    display: block;
+  }
+
+  .examPromptPane,
+  .examAnswerPane {
+    padding: 14px;
+  }
+
+  .examQuestionCardCode .examQuestionHeader {
+    margin: -14px -14px 14px;
+  }
+
+  .examCommandBar {
+    margin-top: 10px;
+  }
+
+  .examSubmitModal {
+    max-height: calc(100vh - 24px);
   }
 }

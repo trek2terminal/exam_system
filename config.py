@@ -73,6 +73,11 @@ class Config:
         "heartbeat": {"limit": 30, "window": 60},
         "violation": {"limit": 30, "window": 60},
         "submit": {"limit": 10, "window": 60},
+        "student_batch_join": {"limit": 12, "window": 60},
+        "exam_join": {"limit": 12, "window": 60},
+        "exam_start": {"limit": 12, "window": 60},
+        "exam_precheck": {"limit": 20, "window": 60},
+        "exam_submit": {"limit": 8, "window": 60},
         "code_execution": {"limit": 5, "window": 60},
         "admin_action": {"limit": 40, "window": 60},
     }

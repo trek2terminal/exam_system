@@ -39,7 +39,35 @@ class AutoSaveService:
         )
 
     @staticmethod
-    def save_answer(session_code: str, question_id: int, answer_text: str, visit_status=None):
+    def apply_time_tracking(answer, time_spent_seconds=None, time_spent_delta_seconds=None, mark_visit=False):
+        now = datetime.utcnow()
+        if time_spent_seconds is not None:
+            try:
+                answer.total_time_spent_seconds = max(
+                    int(answer.total_time_spent_seconds or 0),
+                    max(int(time_spent_seconds), 0),
+                )
+            except (TypeError, ValueError):
+                pass
+        if time_spent_delta_seconds is not None:
+            try:
+                delta = max(int(time_spent_delta_seconds), 0)
+            except (TypeError, ValueError):
+                delta = 0
+            answer.total_time_spent_seconds = int(answer.total_time_spent_seconds or 0) + min(delta, 3600)
+        if mark_visit:
+            answer.visit_count = int(answer.visit_count or 0) + 1
+            answer.last_visited_at = now
+
+    @staticmethod
+    def save_answer(
+        session_code: str,
+        question_id: int,
+        answer_text: str,
+        visit_status=None,
+        time_spent_seconds=None,
+        time_spent_delta_seconds=None,
+    ):
         """Save or update student answer with autosave"""
         session = StudentSession.query.filter_by(session_code=session_code).first()
         if not session:
@@ -72,6 +100,11 @@ class AutoSaveService:
                 return False, "This question's time limit has expired."
             answer.answer_text = answer_text
             answer.visit_status = AutoSaveService.normalize_visit_status(visit_status, answer_text)
+            AutoSaveService.apply_time_tracking(
+                answer,
+                time_spent_seconds=time_spent_seconds,
+                time_spent_delta_seconds=time_spent_delta_seconds,
+            )
             answer.saved_at = datetime.utcnow()
         else:
             answer = Answer(
@@ -81,6 +114,12 @@ class AutoSaveService:
                 visit_status=AutoSaveService.normalize_visit_status(visit_status, answer_text),
             )
             AutoSaveService.ensure_question_timer(answer, question)
+            AutoSaveService.apply_time_tracking(
+                answer,
+                time_spent_seconds=time_spent_seconds,
+                time_spent_delta_seconds=time_spent_delta_seconds,
+                mark_visit=True,
+            )
             db.session.add(answer)
 
         db.session.commit()
@@ -88,7 +127,13 @@ class AutoSaveService:
 
 
     @staticmethod
-    def save_visit_status(session_code: str, question_id: int, visit_status: str):
+    def save_visit_status(
+        session_code: str,
+        question_id: int,
+        visit_status: str,
+        time_spent_seconds=None,
+        time_spent_delta_seconds=None,
+    ):
         session = StudentSession.query.filter_by(session_code=session_code).first()
         if not session:
             return False, "Invalid session"
@@ -107,11 +152,42 @@ class AutoSaveService:
 
         AutoSaveService.ensure_question_timer(answer, question)
         answer.visit_status = AutoSaveService.normalize_visit_status(visit_status, answer.answer_text)
+        AutoSaveService.apply_time_tracking(
+            answer,
+            time_spent_seconds=time_spent_seconds,
+            time_spent_delta_seconds=time_spent_delta_seconds,
+            mark_visit=True,
+        )
         answer.saved_at = datetime.utcnow()
         session.last_heartbeat = datetime.utcnow()
         session.updated_at = datetime.utcnow()
         db.session.commit()
         return True, "Question status saved"
+
+    @staticmethod
+    def record_question_time(session_code: str, question_id: int, time_spent_seconds=None, time_spent_delta_seconds=None):
+        session = StudentSession.query.filter_by(session_code=session_code).first()
+        if not session or session.status not in {"active", "paused"}:
+            return False
+
+        question = Question.query.filter_by(id=question_id, exam_set_id=session.exam_set_id).first()
+        if not question:
+            return False
+
+        answer = Answer.query.filter_by(session_id=session.id, question_id=question_id).first()
+        if not answer:
+            answer = Answer(session_id=session.id, question_id=question_id, answer_text="")
+            db.session.add(answer)
+
+        AutoSaveService.ensure_question_timer(answer, question)
+        AutoSaveService.apply_time_tracking(
+            answer,
+            time_spent_seconds=time_spent_seconds,
+            time_spent_delta_seconds=time_spent_delta_seconds,
+        )
+        answer.saved_at = datetime.utcnow()
+        db.session.commit()
+        return True
 
     @staticmethod
     def mark_question_expired(session_code: str, question_id: int):

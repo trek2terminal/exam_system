@@ -54,6 +54,9 @@ class StudentSession(db.Model):
 
     autosubmit_reason = db.Column(db.Text, nullable=True)
     last_heartbeat = db.Column(db.DateTime, nullable=True)
+    current_question_index = db.Column(db.Integer, nullable=True)
+    current_question_id = db.Column(db.Integer, db.ForeignKey("questions.id"), nullable=True)
+    current_question = db.relationship("Question", foreign_keys=[current_question_id])
 
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
@@ -97,6 +100,9 @@ class Answer(db.Model):
     question_started_at = db.Column(db.DateTime, nullable=True)
     question_expires_at = db.Column(db.DateTime, nullable=True)
     question_time_expired = db.Column(db.Boolean, default=False, nullable=False)
+    total_time_spent_seconds = db.Column(db.Integer, default=0, nullable=False)
+    last_visited_at = db.Column(db.DateTime, nullable=True)
+    visit_count = db.Column(db.Integer, default=0, nullable=False)
     saved_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     def __repr__(self):
