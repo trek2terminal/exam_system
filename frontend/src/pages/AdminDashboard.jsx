@@ -27,8 +27,8 @@ import {
   XAxis,
   YAxis
 } from "recharts";
-import { Badge, Button, Card, StatCard } from "../components/ui";
-import { api } from "../services/api";
+import { Badge, Button, Card, PageLoading, RefreshStatus, StatCard } from "../components/ui";
+import { cachedGet } from "../services/api";
 import { notify } from "../components/ui/Toast";
 import { cn } from "../components/ui/utils";
 import { timeAgo } from "../utils/dateFormat";
@@ -114,12 +114,16 @@ function activityTone(action = "") {
 export default function AdminDashboard() {
   const [dashboard, setDashboard] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [livePaused, setLivePaused] = useState(false);
+  const [loadedAt, setLoadedAt] = useState(null);
   const chartTheme = useChartTheme();
 
-  const loadDashboard = useCallback(async () => {
+  const loadDashboard = useCallback(async (soft = false, options = {}) => {
+    if (!soft) setLoading(true);
     try {
-      const { data } = await api.get("/admin/dashboard");
+      const { data } = await cachedGet("/admin/dashboard", { cacheTtl: options.force ? 0 : soft ? 5000 : 1000 });
       setDashboard(data);
+      setLoadedAt(Date.now());
     } catch {
       notify.error("Failed to load dashboard");
     } finally {
@@ -130,7 +134,7 @@ export default function AdminDashboard() {
   useEffect(() => {
     loadDashboard();
   }, [loadDashboard]);
-  useLiveRefresh(loadDashboard, { intervalMs: 20000 });
+  const liveRefresh = useLiveRefresh(loadDashboard, { enabled: !livePaused, intervalMs: 20000 });
 
   const stats = useMemo(() => dashboard?.stats || {}, [dashboard?.stats]);
   const participationTrend = useMemo(() => normalizeTrend(dashboard?.participation_trend), [dashboard?.participation_trend]);
@@ -162,7 +166,7 @@ export default function AdminDashboard() {
     }
   ];
 
-  if (loading) return <Card className="p-8 text-center text-text-muted">Loading dashboard...</Card>;
+  if (loading) return <PageLoading title="Loading admin dashboard..." />;
   if (!dashboard) return <Card className="p-8 text-center text-danger">Failed to load dashboard data</Card>;
 
   return (
@@ -172,7 +176,15 @@ export default function AdminDashboard() {
           <h1 className="text-3xl font-bold text-text-primary">Admin Workspace</h1>
           <p className="mt-1 text-text-secondary">Live role counts, exam activity, alerts, and report shortcuts.</p>
         </div>
-        <div className="flex flex-wrap gap-2 sm:gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <RefreshStatus
+            refreshing={liveRefresh.refreshing}
+            lastUpdated={loadedAt || liveRefresh.lastUpdated}
+            isStale={liveRefresh.isStale}
+            livePaused={livePaused}
+            onToggleLive={() => setLivePaused(current => !current)}
+            onRefresh={() => loadDashboard(true, { force: true })}
+          />
           <Button variant="primary" size="sm" as="a" href="/react/admin/users" className="min-h-10 px-4">
             <Plus size={16} /> Create Teacher
           </Button>

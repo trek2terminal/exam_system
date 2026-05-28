@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { BookOpenCheck, ClipboardList, FileText, RefreshCw, Trash2, UserRoundCog } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { Badge, Button, Card, EmptyState } from "../components/ui";
+import { Badge, Button, Card, EmptyState, PageLoading } from "../components/ui";
 import { notify } from "../components/ui/Toast";
-import { api } from "../services/api";
+import { api, cachedGet } from "../services/api";
 import { formatDate, timeAgo } from "../utils/dateFormat";
 
 const typeMeta = {
@@ -35,7 +35,7 @@ export default function MyDrafts({ role }) {
   const loadDrafts = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await api.get("/drafts");
+      const { data } = await cachedGet("/drafts", { cacheTtl: 5000 });
       setDrafts(data.drafts || []);
     } catch (error) {
       notify.error(error.message || "Could not load drafts");
@@ -89,7 +89,7 @@ export default function MyDrafts({ role }) {
       </div>
 
       {loading ? (
-        <Card className="p-8 text-center text-text-muted">Loading drafts...</Card>
+        <PageLoading title="Loading drafts..." />
       ) : visibleDrafts.length === 0 ? (
         <EmptyState
           icon={FileText}

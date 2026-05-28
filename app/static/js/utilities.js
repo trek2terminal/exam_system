@@ -92,7 +92,7 @@ class DataTable {
             return this.currentSort.direction === 'asc' ? comparison : -comparison;
         });
 
-        tbody.innerHTML = '';
+        tbody.replaceChildren();
         rows.forEach(row => tbody.appendChild(row));
     }
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api } from "../services/api";
+import { cachedGet } from "../services/api";
 
 export const defaultPlatformSettings = {
   platformName: "Exam Platform",
@@ -90,7 +90,7 @@ export function usePlatformSettings(initialSettings) {
     async function loadSettings() {
       setLoading(true);
       try {
-        const { data } = await api.get("/settings/public");
+        const { data } = await cachedGet("/settings/public", { cacheTtl: 60000 });
         if (!active) return;
         setRemoteSettings(data.settings || {});
         setError(null);

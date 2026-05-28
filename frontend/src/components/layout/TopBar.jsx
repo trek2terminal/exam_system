@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Bell, ChevronDown, LogOut, Menu, Moon, Search, Settings, Sun, User } from "lucide-react";
+import { Bell, ChevronDown, Contrast, LogOut, Menu, Moon, Search, Settings, Sun, User } from "lucide-react";
 import { Avatar, Badge, Button, cn } from "../ui";
-import { breadcrumbFor, logoutHref, normalizeReactHref, roleLabel, userName, userSubtitle } from "./navigation";
+import { breadcrumbFor, logoutHref, normalizeReactHref, roleLabel, roleNavigation, userName, userSubtitle } from "./navigation";
 import { formatDate } from "../../utils/dateFormat";
 import { api } from "../../services/api";
 
@@ -12,7 +12,7 @@ function humanizeLabel(value) {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-export function TopBar({ auth, notifications, theme, onToggleTheme, onMarkAllRead, onOpenDrawer }) {
+export function TopBar({ auth, notifications, theme, highContrast, onToggleTheme, onToggleContrast, onMarkAllRead, onOpenDrawer }) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -52,13 +52,25 @@ export function TopBar({ auth, notifications, theme, onToggleTheme, onMarkAllRea
 
   useEffect(() => {
     if (!searchOpen || !auth?.role) return undefined;
+    const query = searchTerm.trim();
+    if (query.length < 2) {
+      setSearchResults((roleNavigation[auth.role] || []).slice(0, 8).map(item => ({
+        type: "destination",
+        title: item.label,
+        subtitle: `Open ${roleLabel(auth.role).toLowerCase()} workspace`,
+        href: `/react${item.to}`
+      })));
+      setSearchError("");
+      setSearchLoading(false);
+      return undefined;
+    }
     let active = true;
     const timer = window.setTimeout(async () => {
       setSearchLoading(true);
       setSearchError("");
       try {
         const { data } = await api.get("/search", {
-          params: { q: searchTerm.trim(), limit: 8 }
+          params: { q: query, limit: 8 }
         });
         if (!active) return;
         setSearchResults(data.items || []);
@@ -70,7 +82,7 @@ export function TopBar({ auth, notifications, theme, onToggleTheme, onMarkAllRea
       } finally {
         if (active) setSearchLoading(false);
       }
-    }, 180);
+    }, 320);
     return () => {
       active = false;
       window.clearTimeout(timer);
@@ -222,6 +234,18 @@ export function TopBar({ auth, notifications, theme, onToggleTheme, onMarkAllRea
             onClick={onToggleTheme}
           >
             {theme === "dark" ? <Moon size={24} strokeWidth={2.35} /> : <Sun size={24} strokeWidth={2.35} />}
+          </Button>
+
+          <Button
+            className={cn(
+              "h-11 w-11 rounded-lg px-0 transition duration-150 hover:bg-black/[0.08] dark:hover:bg-white/10",
+              highContrast && "bg-background-elevated text-brand-primary dark:bg-white/10"
+            )}
+            variant="ghost"
+            aria-label={highContrast ? "Disable high contrast" : "Enable high contrast"}
+            onClick={onToggleContrast}
+          >
+            <Contrast size={23} strokeWidth={2.35} />
           </Button>
 
           <div className="relative">

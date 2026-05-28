@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FilePlus2, Pencil, Search, Trash2, Upload } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
-import { Badge, Button, Card, ConfirmationDialog, EmptyState, Input, MarksInput, Modal, Select, Textarea } from "../components/ui";
+import { Badge, Button, Card, ConfirmationDialog, EmptyState, Input, MarksInput, Modal, PageLoading, RefreshStatus, Select, Textarea } from "../components/ui";
 import { notify } from "../components/ui/Toast";
-import { api } from "../services/api";
+import { api, cachedGet } from "../services/api";
 import { useLiveRefresh } from "../hooks/useLiveRefresh";
 import { useDraftAutoSave } from "../hooks/useDraftAutoSave";
 
@@ -73,6 +73,8 @@ export default function TeacherQuestionBank() {
   const [searchParams] = useSearchParams();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [livePaused, setLivePaused] = useState(false);
+  const [loadedAt, setLoadedAt] = useState(null);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -88,11 +90,12 @@ export default function TeacherQuestionBank() {
   const [formDirty, setFormDirty] = useState(false);
   const [editDirty, setEditDirty] = useState(false);
 
-  const loadBank = useCallback(async (soft = false) => {
+  const loadBank = useCallback(async (soft = false, options = {}) => {
     if (!soft) setLoading(true);
     try {
-      const { data } = await api.get("/teacher/question-bank");
+      const { data } = await cachedGet("/teacher/question-bank", { cacheTtl: options.force ? 0 : soft ? 8000 : 1000 });
       setItems((data.items || []).map(normalizeItem));
+      setLoadedAt(Date.now());
     } catch (error) {
       notify.error(error.message || "Could not load the question bank.");
       setItems([]);
@@ -104,7 +107,7 @@ export default function TeacherQuestionBank() {
   useEffect(() => {
     loadBank();
   }, [loadBank]);
-  useLiveRefresh(loadBank, { intervalMs: 25000 });
+  const liveRefresh = useLiveRefresh(loadBank, { enabled: !livePaused, intervalMs: 25000 });
 
   const restoreCreateDraft = useCallback(draftData => {
     setFormData({ ...emptyForm, ...(draftData.formData || draftData) });
@@ -265,6 +268,14 @@ export default function TeacherQuestionBank() {
           <h1 className="text-3xl font-bold text-text-primary">Question Bank</h1>
           <p className="mt-1 text-text-secondary">Create reusable questions and import them into exams quickly.</p>
         </div>
+        <RefreshStatus
+          refreshing={liveRefresh.refreshing}
+          lastUpdated={loadedAt || liveRefresh.lastUpdated}
+          isStale={liveRefresh.isStale}
+          livePaused={livePaused}
+          onToggleLive={() => setLivePaused(current => !current)}
+          onRefresh={() => loadBank(true, { force: true })}
+        />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
@@ -310,7 +321,7 @@ export default function TeacherQuestionBank() {
           </Card>
 
           {loading ? (
-            <Card className="p-8 text-center text-text-muted">Loading question bank...</Card>
+            <PageLoading title="Loading question bank..." />
           ) : filteredItems.length === 0 ? (
             <EmptyState
               icon={Search}

@@ -15,8 +15,8 @@ import {
   Trophy,
   User
 } from "lucide-react";
-import { Badge, Button, Card, EmptyState, Input, Modal, Textarea } from "../components/ui";
-import { api } from "../services/api";
+import { Badge, Button, Card, EmptyState, Input, Modal, PageLoading, RefreshStatus, Textarea } from "../components/ui";
+import { api, cachedGet } from "../services/api";
 import { notify } from "../components/ui/Toast";
 import { normalizeReactHref } from "../components/layout/navigation";
 import { timeAgo } from "../utils/dateFormat";
@@ -67,6 +67,8 @@ export default function NotificationsPage({ notifications, auth, onMarkAllRead }
   const [counts, setCounts] = useState(notifications?.counts || {});
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(false);
+  const [livePaused, setLivePaused] = useState(false);
+  const [loadedAt, setLoadedAt] = useState(null);
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [requestLoading, setRequestLoading] = useState(false);
   const [requestSaving, setRequestSaving] = useState(false);
@@ -74,13 +76,14 @@ export default function NotificationsPage({ notifications, auth, onMarkAllRead }
   const [adminNote, setAdminNote] = useState("");
   const requestParam = searchParams.get("request");
 
-  const loadNotifications = useCallback(async (soft = false) => {
+  const loadNotifications = useCallback(async (soft = false, options = {}) => {
     if (!soft) setLoading(true);
     try {
-      const { data } = await api.get("/notifications", { params: { filter, per_page: 50 } });
+      const { data } = await cachedGet("/notifications", { params: { filter, per_page: 50 }, cacheTtl: options.force ? 0 : soft ? 5000 : 1000 });
       setItems(data.items || []);
       setUnreadCount(data.unread_count || 0);
       setCounts(data.counts || {});
+      setLoadedAt(Date.now());
     } catch (error) {
       notify.warning(error.message || "Could not refresh notifications.");
     } finally {
@@ -91,7 +94,7 @@ export default function NotificationsPage({ notifications, auth, onMarkAllRead }
   useEffect(() => {
     loadNotifications();
   }, [loadNotifications]);
-  useLiveRefresh(loadNotifications, { intervalMs: 20000 });
+  const liveRefresh = useLiveRefresh(loadNotifications, { enabled: !livePaused, intervalMs: 20000 });
 
   const displayedItems = useMemo(() => {
     const search = searchTerm.trim().toLowerCase();
@@ -199,9 +202,19 @@ export default function NotificationsPage({ notifications, auth, onMarkAllRead }
           <h1 className="text-3xl font-bold text-text-primary">Notifications</h1>
           <p className="mt-1 text-text-secondary">Unread alerts and system notices from your exam workspace.</p>
         </div>
-        <Button variant="secondary" disabled={unreadCount === 0} onClick={markAll}>
-          <MailCheck size={18} /> Mark all as read
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <RefreshStatus
+            refreshing={liveRefresh.refreshing}
+            lastUpdated={loadedAt || liveRefresh.lastUpdated}
+            isStale={liveRefresh.isStale}
+            livePaused={livePaused}
+            onToggleLive={() => setLivePaused(current => !current)}
+            onRefresh={() => loadNotifications(true, { force: true })}
+          />
+          <Button variant="secondary" disabled={unreadCount === 0} onClick={markAll}>
+            <MailCheck size={18} /> Mark all as read
+          </Button>
+        </div>
       </div>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -229,7 +242,7 @@ export default function NotificationsPage({ notifications, auth, onMarkAllRead }
       </Card>
 
       {loading ? (
-        <Card className="p-8 text-center text-text-muted">Loading notifications...</Card>
+        <PageLoading title="Loading notifications..." variant="table" />
       ) : displayedItems.length === 0 ? (
         <EmptyState icon={Bell} heading="No notifications" description="You are all caught up." />
       ) : (

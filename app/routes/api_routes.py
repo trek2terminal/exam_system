@@ -10,6 +10,7 @@ from difflib import SequenceMatcher
 
 from flask import Blueprint, current_app, jsonify, request, send_file, session, url_for
 from sqlalchemy import and_, or_
+from sqlalchemy.orm import selectinload
 from werkzeug.utils import secure_filename
 
 from app.models.audit_model import AuditLog, ViolationLog
@@ -470,28 +471,60 @@ def _clean_audit_fragment(value):
     return text_value[:140] or None
 
 
-def _audit_subject(item):
+def _audit_resource_cache(items):
+    user_ids = set()
+    exam_ids = set()
+    session_ids = set()
+    for item in items:
+        if item.user_id:
+            user_ids.add(item.user_id)
+        resource_type = (item.resource_type or "").lower()
+        if item.resource_id and resource_type == "user":
+            user_ids.add(item.resource_id)
+        elif item.resource_id and resource_type in {"exam", "exam_set"}:
+            exam_ids.add(item.resource_id)
+        elif item.resource_id and resource_type in {"student_session", "session"}:
+            session_ids.add(item.resource_id)
+
+    sessions = {
+        item.id: item
+        for item in StudentSession.query.options(selectinload(StudentSession.exam_set))
+        .filter(StudentSession.id.in_(session_ids))
+        .all()
+    } if session_ids else {}
+    return {
+        "users": {item.id: item for item in User.query.filter(User.id.in_(user_ids)).all()} if user_ids else {},
+        "exams": {item.id: item for item in ExamSet.query.filter(ExamSet.id.in_(exam_ids)).all()} if exam_ids else {},
+        "sessions": sessions,
+    }
+
+
+def _audit_subject(item, cache=None):
+    cache_provided = cache is not None
+    cache = cache or {}
     if item.resource_type == "user" and item.resource_id:
-        user = User.query.get(item.resource_id)
+        user = cache.get("users", {}).get(item.resource_id) if cache_provided else User.query.get(item.resource_id)
         if user:
             return user.name or user.username or user.email
     if item.resource_type in {"exam", "exam_set"} and item.resource_id:
-        exam = ExamSet.query.get(item.resource_id)
+        exam = cache.get("exams", {}).get(item.resource_id) if cache_provided else ExamSet.query.get(item.resource_id)
         if exam:
             return exam.exam_name
     if item.resource_type in {"student_session", "session"} and item.resource_id:
-        student_session = StudentSession.query.get(item.resource_id)
+        student_session = cache.get("sessions", {}).get(item.resource_id) if cache_provided else StudentSession.query.get(item.resource_id)
         if student_session:
             return student_session.student_name or student_session.roll_no or student_session.session_code
     return _clean_audit_fragment(item.changes)
 
 
-def _audit_exam_title(item):
+def _audit_exam_title(item, cache=None):
+    cache_provided = cache is not None
+    cache = cache or {}
     if item.resource_type in {"exam", "exam_set"} and item.resource_id:
-        exam = ExamSet.query.get(item.resource_id)
+        exam = cache.get("exams", {}).get(item.resource_id) if cache_provided else ExamSet.query.get(item.resource_id)
         return exam.exam_name if exam else None
     if item.resource_type in {"student_session", "session"} and item.resource_id:
-        student_session = StudentSession.query.get(item.resource_id)
+        student_session = cache.get("sessions", {}).get(item.resource_id) if cache_provided else StudentSession.query.get(item.resource_id)
         if student_session and student_session.exam_set:
             return student_session.exam_set.exam_name
     return _clean_audit_fragment(item.changes)
@@ -577,10 +610,10 @@ def _audit_category_condition(category):
     return None
 
 
-def _audit_formatted_message(item):
+def _audit_formatted_message(item, cache=None):
     action = item.action or ""
-    subject = _audit_subject(item)
-    exam_title = _audit_exam_title(item)
+    subject = _audit_subject(item, cache)
+    exam_title = _audit_exam_title(item, cache)
 
     if action in {"update_platform_logo", "upload_platform_logo"}:
         return "Platform logo was updated"
@@ -611,11 +644,16 @@ def _audit_formatted_message(item):
     return _humanize_audit_action(action)
 
 
-def _audit_payload(item):
-    actor_name = item.user.name if item.user else "System"
-    formatted_message = _audit_formatted_message(item)
+def _audit_payload(item, cache=None):
+    cache_provided = cache is not None
+    cache = cache or {}
+    actor = cache.get("users", {}).get(item.user_id) if item.user_id else None
+    if actor is None and not cache_provided and item.user:
+        actor = item.user
+    actor_name = actor.name if actor else "System"
+    formatted_message = _audit_formatted_message(item, cache)
     category = _audit_category_from_values(item.action, item.resource_type)
-    subject = _audit_subject(item)
+    subject = _audit_subject(item, cache)
     return {
         "id": item.id,
         "action": item.action,
@@ -630,7 +668,7 @@ def _audit_payload(item):
         "status": item.status,
         "user": actor_name,
         "actor_name": actor_name,
-        "actor_role": item.user.role if item.user else "system",
+        "actor_role": actor.role if actor else "system",
         "timestamp": _iso_datetime(item.created_at),
         "ip_address": item.ip_address,
         "reason": item.reason,
@@ -638,6 +676,11 @@ def _audit_payload(item):
         "error_message": item.error_message,
         "user_agent": item.user_agent,
     }
+
+
+def _audit_payloads(items):
+    cache = _audit_resource_cache(items)
+    return [_audit_payload(item, cache) for item in items]
 
 
 def _parse_audit_date(value, end_of_day=False):
@@ -818,20 +861,21 @@ def _teacher_audit_query(teacher):
 
 def _audit_csv_response(query, actor, filename_prefix="AuditLog"):
     logs = query.order_by(AuditLog.created_at.desc()).limit(5000).all()
+    cache = _audit_resource_cache(logs)
     headers = ["Date", "Time", "Actor", "Actor Role", "Category", "Severity", "Action", "Target", "IP Address", "Status", "Reason"]
     rows = []
     for item in logs:
         created_at = item.created_at
-        payload = _audit_payload(item)
+        payload = _audit_payload(item, cache)
         rows.append(
             [
                 created_at.strftime("%Y-%m-%d") if created_at else "",
                 created_at.strftime("%H:%M:%S") if created_at else "",
-                item.user.name if item.user else "System",
-                item.user.role if item.user else "system",
+                payload["actor_name"],
+                payload["actor_role"],
                 payload["category"],
                 payload["severity"],
-                _audit_formatted_message(item),
+                payload["formatted_message"],
                 f"{item.resource_type}:{item.resource_id}" if item.resource_id else item.resource_type,
                 item.ip_address,
                 item.status,
@@ -1235,16 +1279,71 @@ def _filter_search_items(items, query, limit):
     return scored[:limit]
 
 
-def _admin_exam_payload(exam):
+def _exam_summary_count_maps(exam_ids):
     submitted_statuses = ["submitted", "evaluated", "terminated", "auto_submitted"]
-    session_query = StudentSession.query.filter_by(exam_set_id=exam.id)
-    submitted_count = session_query.filter(StudentSession.status.in_(submitted_statuses)).count()
-    pending_review_count = (
-        session_query.filter(StudentSession.status.in_(submitted_statuses))
+    if not exam_ids:
+        return {
+            "questions": {},
+            "enrollments": {},
+            "sessions": {},
+            "submitted": {},
+            "pending_review": {},
+        }
+
+    def count_by_exam(column, model):
+        return dict(
+            db.session.query(column, db.func.count(model.id))
+            .filter(column.in_(exam_ids))
+            .group_by(column)
+            .all()
+        )
+
+    submitted_counts = dict(
+        db.session.query(StudentSession.exam_set_id, db.func.count(StudentSession.id))
+        .filter(StudentSession.exam_set_id.in_(exam_ids), StudentSession.status.in_(submitted_statuses))
+        .group_by(StudentSession.exam_set_id)
+        .all()
+    )
+    pending_counts = dict(
+        db.session.query(StudentSession.exam_set_id, db.func.count(StudentSession.id))
+        .filter(StudentSession.exam_set_id.in_(exam_ids), StudentSession.status.in_(submitted_statuses))
         .outerjoin(Result, Result.session_id == StudentSession.id)
         .filter(Result.id.is_(None))
-        .count()
+        .group_by(StudentSession.exam_set_id)
+        .all()
     )
+    return {
+        "questions": count_by_exam(Question.exam_set_id, Question),
+        "enrollments": count_by_exam(ExamEnrollment.exam_set_id, ExamEnrollment),
+        "sessions": count_by_exam(StudentSession.exam_set_id, StudentSession),
+        "submitted": submitted_counts,
+        "pending_review": pending_counts,
+    }
+
+
+def _exam_count(counts, key, exam_id):
+    return int((counts or {}).get(key, {}).get(exam_id, 0) or 0)
+
+
+def _admin_exam_payload(exam, counts=None):
+    if counts:
+        question_count = _exam_count(counts, "questions", exam.id)
+        enrolled_count = _exam_count(counts, "enrollments", exam.id)
+        submitted_count = _exam_count(counts, "submitted", exam.id)
+        pending_review_count = _exam_count(counts, "pending_review", exam.id)
+    else:
+        submitted_statuses = ["submitted", "evaluated", "terminated", "auto_submitted"]
+        session_query = StudentSession.query.filter_by(exam_set_id=exam.id)
+        submitted_count = session_query.filter(StudentSession.status.in_(submitted_statuses)).count()
+        pending_review_count = (
+            session_query.filter(StudentSession.status.in_(submitted_statuses))
+            .outerjoin(Result, Result.session_id == StudentSession.id)
+            .filter(Result.id.is_(None))
+            .count()
+        )
+        question_count = Question.query.filter_by(exam_set_id=exam.id).count()
+        enrolled_count = ExamEnrollment.query.filter_by(exam_set_id=exam.id).count()
+
     return {
         "id": exam.id,
         "exam_name": exam.exam_name,
@@ -1253,8 +1352,8 @@ def _admin_exam_payload(exam):
         "status": exam.status,
         "duration_minutes": exam.duration_minutes,
         "total_marks": exam.total_marks,
-        "question_count": Question.query.filter_by(exam_set_id=exam.id).count(),
-        "enrolled_count": ExamEnrollment.query.filter_by(exam_set_id=exam.id).count(),
+        "question_count": question_count,
+        "enrolled_count": enrolled_count,
         "submitted_count": submitted_count,
         "pending_review_count": pending_review_count,
         "teacher_id": exam.created_by,
@@ -2206,7 +2305,36 @@ def _student_exam_action_payload(exam, student_session, attempts_remaining, wind
     }
 
 
-def _student_session_progress_payload(student_session):
+def _student_progress_cache(student_sessions):
+    sessions_by_id = {student_session.id: student_session for student_session in student_sessions if student_session}
+    if not sessions_by_id:
+        return {}
+
+    question_ids_by_session = {}
+    all_question_ids = set()
+    for student_session in sessions_by_id.values():
+        question_ids = ExamService.ensure_question_order(student_session)
+        question_ids_by_session[student_session.id] = question_ids
+        all_question_ids.update(question_ids)
+
+    questions_by_id = {
+        question.id: question
+        for question in Question.query.filter(Question.id.in_(all_question_ids)).all()
+    } if all_question_ids else {}
+    answers_by_session = {session_id: [] for session_id in sessions_by_id}
+    for answer in Answer.query.filter(Answer.session_id.in_(list(sessions_by_id))).all():
+        answers_by_session.setdefault(answer.session_id, []).append(answer)
+
+    return {
+        session_id: {
+            "questions": [questions_by_id[question_id] for question_id in question_ids if question_id in questions_by_id],
+            "answers": answers_by_session.get(session_id, []),
+        }
+        for session_id, question_ids in question_ids_by_session.items()
+    }
+
+
+def _student_session_progress_payload(student_session, questions=None, answers=None):
     if not student_session:
         return {
             "answered_count": 0,
@@ -2219,14 +2347,11 @@ def _student_session_progress_payload(student_session):
             "time_spent_minutes": 0,
         }
 
-    questions = ExamService.get_session_questions(student_session)
+    questions = questions if questions is not None else ExamService.get_session_questions(student_session)
     total_questions = len(questions)
     question_ids = {question.id for question in questions}
-    answers = [
-        answer
-        for answer in Answer.query.filter_by(session_id=student_session.id).all()
-        if not question_ids or answer.question_id in question_ids
-    ]
+    answers = answers if answers is not None else Answer.query.filter_by(session_id=student_session.id).all()
+    answers = [answer for answer in answers if not question_ids or answer.question_id in question_ids]
     answered_count = sum(1 for answer in answers if _answered_answer(answer))
     status_counts = {state: 0 for state in EXAM_NAVIGATOR_STATUSES}
     total_time_spent_seconds = 0
@@ -2384,10 +2509,15 @@ def _teacher_schedule_item(exam, exam_payload, now=None):
     }
 
 
-def _student_attempt_history_payload(student_session):
+def _student_attempt_history_payload(student_session, progress_data=None):
     exam = student_session.exam_set
     result = student_session.result if student_session.result and student_session.result.published else None
-    progress = _student_session_progress_payload(student_session)
+    progress_data = progress_data or {}
+    progress = _student_session_progress_payload(
+        student_session,
+        questions=progress_data.get("questions"),
+        answers=progress_data.get("answers"),
+    )
     return {
         "id": student_session.id,
         "session_code": student_session.session_code,
@@ -3952,10 +4082,40 @@ def student_dashboard_api():
     now = datetime.utcnow()
     enrollments = (
         ExamEnrollment.query.filter(db.func.upper(ExamEnrollment.roll_no) == roll_no)
+        .options(selectinload(ExamEnrollment.exam_set).selectinload(ExamSet.questions))
         .join(ExamSet)
         .order_by(ExamSet.created_at.desc())
         .all()
     )
+    exam_ids = [enrollment.exam_set_id for enrollment in enrollments]
+    student_sessions_for_exams = (
+        StudentSession.query.options(selectinload(StudentSession.result))
+        .filter(
+            StudentSession.exam_set_id.in_(exam_ids),
+            db.func.upper(StudentSession.roll_no) == roll_no,
+        )
+        .order_by(StudentSession.created_at.desc())
+        .all()
+    ) if exam_ids else []
+    latest_session_by_exam = {}
+    attempt_count_by_exam = {}
+    for student_session in student_sessions_for_exams:
+        attempt_count_by_exam[student_session.exam_set_id] = attempt_count_by_exam.get(student_session.exam_set_id, 0) + 1
+        latest_session_by_exam.setdefault(student_session.exam_set_id, student_session)
+    attempt_sessions = (
+        StudentSession.query.options(
+            selectinload(StudentSession.exam_set).selectinload(ExamSet.creator),
+            selectinload(StudentSession.result),
+        )
+        .filter(db.func.upper(StudentSession.roll_no) == roll_no)
+        .order_by(StudentSession.created_at.desc())
+        .limit(80)
+        .all()
+    )
+    progress_cache = _student_progress_cache([
+        *latest_session_by_exam.values(),
+        *attempt_sessions,
+    ])
     settings = SettingsService.get_settings()
     cards = []
     stats = {
@@ -3969,15 +4129,10 @@ def student_dashboard_api():
     }
     for enrollment in enrollments:
         exam = enrollment.exam_set
-        latest_session = (
-            StudentSession.query.filter(
-                StudentSession.exam_set_id == exam.id,
-                db.func.upper(StudentSession.roll_no) == roll_no,
-            )
-            .order_by(StudentSession.created_at.desc())
-            .first()
-        )
-        attempts_remaining = ExamService.attempts_remaining(exam.id, roll_no)
+        latest_session = latest_session_by_exam.get(exam.id)
+        attempt_count = attempt_count_by_exam.get(exam.id, 0)
+        attempt_limit = int(exam.attempt_limit or 1)
+        attempts_remaining = None if attempt_limit <= 0 else max(attempt_limit - attempt_count, 0)
         window = _student_exam_window_payload(exam, latest_session, now=now)
         action = _student_exam_action_payload(exam, latest_session, attempts_remaining, window)
         published_result = (
@@ -3985,7 +4140,11 @@ def student_dashboard_api():
             if latest_session and latest_session.result and latest_session.result.published
             else None
         )
-        latest_progress = _student_session_progress_payload(latest_session) if latest_session else None
+        latest_progress = (
+            _student_session_progress_payload(latest_session, **progress_cache.get(latest_session.id, {}))
+            if latest_session
+            else None
+        )
         exam_state = _student_exam_state_label(exam, latest_session, window, published_result)
 
         stats["assigned"] += 1
@@ -4019,7 +4178,7 @@ def student_dashboard_api():
                 "total_marks": exam.total_marks,
                 "question_count": len(exam.questions),
                 "attempt_limit": exam.attempt_limit,
-                "attempt_count": ExamService.attempt_count(exam.id, roll_no),
+                "attempt_count": attempt_count,
                 "attempts_remaining": attempts_remaining,
                 "window": window,
                 "action": action,
@@ -4066,14 +4225,8 @@ def student_dashboard_api():
         ),
         default=None,
     )
-    attempt_sessions = (
-        StudentSession.query.filter(db.func.upper(StudentSession.roll_no) == roll_no)
-        .order_by(StudentSession.created_at.desc())
-        .limit(80)
-        .all()
-    )
     attempt_history = [
-        _student_attempt_history_payload(student_session)
+        _student_attempt_history_payload(student_session, progress_cache.get(student_session.id))
         for student_session in attempt_sessions
         if student_session.start_time
         or student_session.submitted_at
@@ -4318,7 +4471,8 @@ def teacher_dashboard_api():
 
     now = datetime.utcnow()
     exams = ExamSet.query.filter_by(created_by=teacher.id).order_by(ExamSet.created_at.desc()).all()
-    submitted_statuses = ["submitted", "evaluated", "terminated", "auto_submitted"]
+    exam_ids = [exam.id for exam in exams]
+    counts = _exam_summary_count_maps(exam_ids)
     exam_items = []
     schedule_items = []
     for exam in exams:
@@ -4330,22 +4484,11 @@ def teacher_dashboard_api():
             "status": exam.status,
             "total_marks": exam.total_marks,
             "duration_minutes": exam.duration_minutes,
-            "question_count": len(exam.questions),
-            "enrolled_count": ExamEnrollment.query.filter_by(exam_set_id=exam.id).count(),
-            "session_count": len(exam.sessions),
-            "submitted_count": StudentSession.query.filter(
-                StudentSession.exam_set_id == exam.id,
-                StudentSession.status.in_(submitted_statuses),
-            ).count(),
-            "pending_review_count": (
-                StudentSession.query.filter(
-                    StudentSession.exam_set_id == exam.id,
-                    StudentSession.status.in_(submitted_statuses),
-                )
-                .outerjoin(Result, Result.session_id == StudentSession.id)
-                .filter(Result.id.is_(None))
-                .count()
-            ),
+            "question_count": _exam_count(counts, "questions", exam.id),
+            "enrolled_count": _exam_count(counts, "enrollments", exam.id),
+            "session_count": _exam_count(counts, "sessions", exam.id),
+            "submitted_count": _exam_count(counts, "submitted", exam.id),
+            "pending_review_count": _exam_count(counts, "pending_review", exam.id),
             "start_time": _iso_datetime(exam.start_time),
             "end_time": _iso_datetime(exam.end_time),
             "review_url": f"/react/teacher/exam/{exam.id}/review",
@@ -4592,18 +4735,18 @@ def teacher_activity_api():
     base_query = _teacher_audit_query(teacher)
     query = _apply_audit_filters(base_query, request.args)
     pagination = query.order_by(AuditLog.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
+    important_items = (
+        base_query.filter(_audit_important_condition())
+        .order_by(AuditLog.created_at.desc())
+        .limit(8)
+        .all()
+    )
     return jsonify(
         {
             "ok": True,
-            "items": [_audit_payload(item) for item in pagination.items],
+            "items": _audit_payloads(pagination.items),
             "summary": _audit_summary_payload(query),
-            "important_events": [
-                _audit_payload(item)
-                for item in base_query.filter(_audit_important_condition())
-                .order_by(AuditLog.created_at.desc())
-                .limit(8)
-                .all()
-            ],
+            "important_events": _audit_payloads(important_items),
             "filters": _audit_filter_options_payload(base_query),
             "pagination": {
                 "page": pagination.page,
@@ -5090,7 +5233,7 @@ def teacher_exam_review_api(exam_id):
     session_payloads = [_session_review_summary(student_session) for student_session in sessions]
     evaluated_count = sum(1 for item in session_payloads if item.get("result"))
     published_count = sum(
-        1 for item in session_payloads if item.get("result", {}).get("published")
+        1 for item in session_payloads if (item.get("result") or {}).get("published")
     )
     locked_count = sum(1 for item in session_payloads if item.get("locked_for_review"))
     pending_count = sum(1 for item in session_payloads if item.get("review_status") == "pending")
@@ -5403,7 +5546,7 @@ def admin_dashboard_api():
                 "closed": ExamSet.query.filter_by(status="closed").count(),
                 "archived": ExamSet.query.filter_by(status="archived").count(),
             },
-            "recent_activity": [_audit_payload(item) for item in recent_activity],
+            "recent_activity": _audit_payloads(recent_activity),
             "suspicious_students": suspicious_students[:10],
         }
     )
@@ -5976,12 +6119,17 @@ def admin_exams_api():
         pattern = f"%{search.lower()}%"
         query = query.filter(or_(db.func.lower(ExamSet.exam_name).like(pattern), db.func.lower(ExamSet.subject).like(pattern)))
 
-    pagination = query.order_by(ExamSet.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
+    pagination = (
+        query.options(selectinload(ExamSet.creator))
+        .order_by(ExamSet.created_at.desc())
+        .paginate(page=page, per_page=per_page, error_out=False)
+    )
+    counts = _exam_summary_count_maps([exam.id for exam in pagination.items])
     all_query = ExamSet.query
     return jsonify(
         {
             "ok": True,
-            "exams": [_admin_exam_payload(exam) for exam in pagination.items],
+            "exams": [_admin_exam_payload(exam, counts) for exam in pagination.items],
             "stats": {
                 "total": all_query.count(),
                 "draft": all_query.filter_by(status="draft").count(),
@@ -6133,25 +6281,26 @@ def admin_audit_log_api():
     base_query = AuditLog.query
     query = _apply_audit_filters(base_query, request.args)
     pagination = query.order_by(AuditLog.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
+    item_payloads = _audit_payloads(pagination.items)
+    important_items = (
+        base_query.filter(_audit_important_condition())
+        .order_by(AuditLog.created_at.desc())
+        .limit(8)
+        .all()
+    )
     return jsonify(
         {
             "ok": True,
             "items": [
                 {
-                    **_audit_payload(item),
-                    "admin_user": item.user.name if item.user else "System",
+                    **payload,
+                    "admin_user": payload["actor_name"],
                     "target_user": item.resource_id if item.resource_type == "user" else None,
                 }
-                for item in pagination.items
+                for item, payload in zip(pagination.items, item_payloads)
             ],
             "summary": _audit_summary_payload(query),
-            "important_events": [
-                _audit_payload(item)
-                for item in base_query.filter(_audit_important_condition())
-                .order_by(AuditLog.created_at.desc())
-                .limit(8)
-                .all()
-            ],
+            "important_events": _audit_payloads(important_items),
             "filters": _audit_filter_options_payload(base_query),
             "pagination": {
                 "page": pagination.page,

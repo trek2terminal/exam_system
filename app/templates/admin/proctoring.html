@@ -155,69 +155,96 @@ function formatSeconds(seconds) {
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
+function statusClass(status) {
+    return ['active', 'waiting', 'paused', 'terminated', 'submitted'].includes(status) ? status : 'secondary';
+}
+
+function createInput(attributes) {
+    const input = document.createElement('input');
+    Object.entries(attributes).forEach(([key, value]) => {
+        if (value === true) {
+            input.setAttribute(key, key);
+        } else if (value !== false && value !== null && value !== undefined) {
+            input.setAttribute(key, String(value));
+        }
+    });
+    return input;
+}
+
+function createSessionForm(sessionId, action, label, variant, fields = [], formClass = '') {
+    const form = document.createElement('form');
+    form.method = 'post';
+    form.action = `/admin/sessions/${encodeURIComponent(String(sessionId))}/${action}`;
+    if (formClass) form.className = formClass;
+    fields.forEach(field => form.appendChild(createInput(field)));
+    form.appendChild(createInput({
+        type: 'password',
+        name: 'admin_password',
+        placeholder: 'Admin password *',
+        required: true
+    }));
+    const button = document.createElement('button');
+    button.className = `btn ${variant} small`;
+    button.type = 'submit';
+    button.textContent = label;
+    form.appendChild(button);
+    return form;
+}
+
 function buildActionForms(sessionId, status) {
+    const fragment = document.createDocumentFragment();
+    const secondChance = () => createSessionForm(sessionId, 'second-chance', 'Second Chance', 'primary');
+
     if (status === 'paused') {
-        return `
-            <form method="post" action="/admin/sessions/${sessionId}/resume">
-                <input type="password" name="admin_password" placeholder="Admin password *" required>
-                <button class="btn primary small" type="submit">Resume</button>
-            </form>
-            <form method="post" action="/admin/sessions/${sessionId}/terminate">
-                <input type="hidden" name="reason" value="Terminated from live proctoring">
-                <input type="password" name="admin_password" placeholder="Admin password *" required>
-                <button class="btn danger small" type="submit">Terminate</button>
-            </form>
-            <form class="mini-form" method="post" action="/admin/sessions/${sessionId}/reduce-time">
-                <input type="number" name="minutes" min="1" max="60" value="5" aria-label="Minutes *" required>
-                <input type="password" name="admin_password" placeholder="Admin password *" required>
-                <button class="btn secondary small" type="submit">Reduce</button>
-            </form>
-        `;
+        fragment.append(
+            createSessionForm(sessionId, 'resume', 'Resume', 'primary'),
+            createSessionForm(sessionId, 'terminate', 'Terminate', 'danger', [
+                { type: 'hidden', name: 'reason', value: 'Terminated from live proctoring' }
+            ]),
+            createSessionForm(sessionId, 'reduce-time', 'Reduce', 'secondary', [
+                { type: 'number', name: 'minutes', min: 1, max: 60, value: 5, 'aria-label': 'Minutes *', required: true }
+            ], 'mini-form')
+        );
+        return fragment;
     }
 
-    if (status !== 'active' && status !== 'waiting') return '';
+    if (status !== 'active' && status !== 'waiting') return fragment;
+    if (status !== 'active') {
+        fragment.appendChild(secondChance());
+        return fragment;
+    }
 
-    const secondChance = `
-        <form method="post" action="/admin/sessions/${sessionId}/second-chance">
-            <input type="password" name="admin_password" placeholder="Admin password *" required>
-            <button class="btn primary small" type="submit">Second Chance</button>
-        </form>
-    `;
-
-    if (status !== 'active') return secondChance;
-
-    return `
-        <form method="post" action="/admin/sessions/${sessionId}/terminate">
-            <input type="hidden" name="reason" value="Terminated from live proctoring">
-            <input type="password" name="admin_password" placeholder="Admin password *" required>
-            <button class="btn danger small" type="submit">Terminate</button>
-        </form>
-        <form class="mini-form" method="post" action="/admin/sessions/${sessionId}/reduce-time">
-            <input type="number" name="minutes" min="1" max="60" value="5" aria-label="Minutes *" required>
-            <input type="password" name="admin_password" placeholder="Admin password *" required>
-            <button class="btn secondary small" type="submit">Reduce</button>
-        </form>
-        <form method="post" action="/admin/sessions/${sessionId}/pause">
-            <input type="hidden" name="reason" value="Paused from live proctoring">
-            <input type="password" name="admin_password" placeholder="Admin password *" required>
-            <button class="btn secondary small" type="submit">Pause</button>
-        </form>
-        <form class="mini-form" method="post" action="/admin/sessions/${sessionId}/message">
-            <input type="text" name="message" maxlength="500" placeholder="Message student *" required>
-            <input type="password" name="admin_password" placeholder="Admin password *" required>
-            <button class="btn secondary small" type="submit">Send</button>
-        </form>
-        ${secondChance}
-    `;
+    fragment.append(
+        createSessionForm(sessionId, 'terminate', 'Terminate', 'danger', [
+            { type: 'hidden', name: 'reason', value: 'Terminated from live proctoring' }
+        ]),
+        createSessionForm(sessionId, 'reduce-time', 'Reduce', 'secondary', [
+            { type: 'number', name: 'minutes', min: 1, max: 60, value: 5, 'aria-label': 'Minutes *', required: true }
+        ], 'mini-form'),
+        createSessionForm(sessionId, 'pause', 'Pause', 'secondary', [
+            { type: 'hidden', name: 'reason', value: 'Paused from live proctoring' }
+        ]),
+        createSessionForm(sessionId, 'message', 'Send', 'secondary', [
+            { type: 'text', name: 'message', maxlength: 500, placeholder: 'Message student *', required: true }
+        ], 'mini-form'),
+        secondChance()
+    );
+    return fragment;
 }
 
 function renderSessions(sessions) {
     const grid = document.getElementById('proctorGrid');
     const template = document.getElementById('sessionCardTemplate');
-    grid.innerHTML = '';
+    grid.replaceChildren();
 
     if (!sessions.length) {
-        grid.innerHTML = '<div class="card"><p class="muted">No active or waiting sessions right now.</p></div>';
+        const emptyCard = document.createElement('div');
+        emptyCard.className = 'card';
+        const emptyText = document.createElement('p');
+        emptyText.className = 'muted';
+        emptyText.textContent = 'No active or waiting sessions right now.';
+        emptyCard.appendChild(emptyText);
+        grid.appendChild(emptyCard);
         return;
     }
 
@@ -227,13 +254,13 @@ function renderSessions(sessions) {
         card.classList.toggle('flagged', session.focus_violations > 0);
         card.classList.toggle('danger', session.focus_violations >= 3);
 
-        node.querySelector('[data-student]').textContent = `${session.student_name} (${session.roll_no})`;
-        node.querySelector('[data-exam]').textContent = `${session.exam_name} | Set ${session.set_code}`;
-        node.querySelector('[data-status]').textContent = session.status;
-        node.querySelector('[data-status]').classList.add(session.status);
+        node.querySelector('[data-student]').textContent = `${session.student_name || '-'} (${session.roll_no || '-'})`;
+        node.querySelector('[data-exam]').textContent = `${session.exam_name || '-'} | Set ${session.set_code || '-'}`;
+        node.querySelector('[data-status]').textContent = session.status || '-';
+        node.querySelector('[data-status]').classList.add(statusClass(session.status));
         node.querySelector('[data-time]').textContent = formatSeconds(session.remaining_seconds);
-        node.querySelector('[data-answers]').textContent = `${session.answered_count}/${session.total_questions}`;
-        node.querySelector('[data-violations]').textContent = session.focus_violations;
+        node.querySelector('[data-answers]').textContent = `${session.answered_count || 0}/${session.total_questions || 0}`;
+        node.querySelector('[data-violations]').textContent = session.focus_violations || 0;
         node.querySelector('[data-heartbeat]').textContent = session.last_heartbeat_age === null ? '-' : `${session.last_heartbeat_age}s`;
         node.querySelector('[data-latest]').textContent = session.latest_violation
             ? `Latest: ${session.latest_violation.replaceAll('_', ' ')}`
@@ -242,31 +269,45 @@ function renderSessions(sessions) {
                 : session.status === 'paused'
                     ? 'Timer is frozen by admin.'
                     : 'No violations recorded.';
-        node.querySelector('[data-actions]').innerHTML = buildActionForms(session.id, session.status);
+        node.querySelector('[data-actions]').replaceChildren(buildActionForms(session.id, session.status));
         grid.appendChild(node);
     });
 }
 
 function renderViolations(violations) {
     const container = document.getElementById('recentViolations');
-    container.innerHTML = '';
+    container.replaceChildren();
 
     if (!violations.length) {
-        container.innerHTML = '<p class="muted">No violation events yet.</p>';
+        const emptyText = document.createElement('p');
+        emptyText.className = 'muted';
+        emptyText.textContent = 'No violation events yet.';
+        container.appendChild(emptyText);
         return;
     }
 
     violations.forEach(event => {
         const item = document.createElement('div');
         item.className = 'activity-item';
-        item.innerHTML = `
-            <div class="activity-icon"><i class="fas fa-triangle-exclamation"></i></div>
-            <div class="activity-content">
-                <div class="activity-title">${event.student_name} | ${event.type.replaceAll('_', ' ')}</div>
-                <div class="activity-time">${event.exam_name} | ${new Date(event.occurred_at).toLocaleString()}</div>
-                <div class="muted">${event.detail || ''}</div>
-            </div>
-        `;
+        const iconWrap = document.createElement('div');
+        iconWrap.className = 'activity-icon';
+        const icon = document.createElement('i');
+        icon.className = 'fas fa-triangle-exclamation';
+        icon.setAttribute('aria-hidden', 'true');
+        iconWrap.appendChild(icon);
+        const content = document.createElement('div');
+        content.className = 'activity-content';
+        const title = document.createElement('div');
+        title.className = 'activity-title';
+        title.textContent = `${event.student_name || '-'} | ${String(event.type || '').replaceAll('_', ' ')}`;
+        const time = document.createElement('div');
+        time.className = 'activity-time';
+        time.textContent = `${event.exam_name || '-'} | ${new Date(event.occurred_at).toLocaleString()}`;
+        const detail = document.createElement('div');
+        detail.className = 'muted';
+        detail.textContent = event.detail || '';
+        content.append(title, time, detail);
+        item.append(iconWrap, content);
         container.appendChild(item);
     });
 }

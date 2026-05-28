@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import { Card } from "./Card";
 import { cn } from "./utils";
@@ -15,16 +15,23 @@ const iconTones = {
 
 export function StatCard({ icon: Icon, label, value = 0, trend, variant = "default", className }) {
   const [displayValue, setDisplayValue] = useState(0);
+  const previousValueRef = useRef(0);
   const numericValue = Number(value || 0);
 
   useEffect(() => {
+    const startValue = previousValueRef.current;
+    previousValueRef.current = numericValue;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) {
+      setDisplayValue(numericValue);
+      return undefined;
+    }
     let frameId;
     const start = (window.performance && window.performance.now && window.performance.now()) || Date.now();
     const duration = 600;
     const tick = now => {
       const current = now || ((window.performance && window.performance.now && window.performance.now()) || Date.now());
       const progress = Math.min((current - start) / duration, 1);
-      setDisplayValue(Math.round(numericValue * progress));
+      setDisplayValue(Math.round(startValue + (numericValue - startValue) * progress));
       if (progress < 1) frameId = (window.requestAnimationFrame || (fn => window.setTimeout(fn, 16)))(tick);
     };
     frameId = (window.requestAnimationFrame || (fn => window.setTimeout(fn, 16)))(tick);

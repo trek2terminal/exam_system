@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { BookOpenCheck, CheckCircle2, Eye, FileText, PencilLine, Search, Trash2, XCircle } from "lucide-react";
-import { Badge, Button, Card, ConfirmationDialog, DateInput, EmptyState, Input, Select, SkeletonCard, StatCard, Table } from "../components/ui";
-import { api } from "../services/api";
+import { Badge, Button, Card, ConfirmationDialog, DateInput, EmptyState, Input, RefreshStatus, Select, SkeletonCard, StatCard, Table } from "../components/ui";
+import { api, cachedGet } from "../services/api";
 import { notify } from "../components/ui/Toast";
 import { formatDateShort } from "../utils/dateFormat";
 import { useLiveRefresh } from "../hooks/useLiveRefresh";
@@ -27,6 +27,8 @@ export default function AdminExams() {
   const [stats, setStats] = useState({});
   const [exams, setExams] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [livePaused, setLivePaused] = useState(false);
+  const [loadedAt, setLoadedAt] = useState(null);
   const [statusFilter, setStatusFilter] = useState("all");
   const [teacherFilter, setTeacherFilter] = useState("all");
   const [fromDate, setFromDate] = useState("");
@@ -37,13 +39,14 @@ export default function AdminExams() {
   const [actionLoading, setActionLoading] = useState(false);
   const [deleteAdminPassword, setDeleteAdminPassword] = useState("");
 
-  const loadExams = useCallback(async (soft = false) => {
+  const loadExams = useCallback(async (soft = false, options = {}) => {
     if (!soft) setLoading(true);
     try {
-      const { data } = await api.get("/admin/exams", { params: { per_page: 100 } });
+      const { data } = await cachedGet("/admin/exams", { params: { per_page: 100 }, cacheTtl: options.force ? 0 : soft ? 8000 : 1000 });
       setStats(data.stats || {});
       setExams(data.exams || []);
       setTeachers(data.teachers || []);
+      setLoadedAt(Date.now());
     } catch (error) {
       notify.error(error.message || "Could not load exams.");
     } finally {
@@ -54,7 +57,7 @@ export default function AdminExams() {
   useEffect(() => {
     loadExams();
   }, [loadExams]);
-  useLiveRefresh(loadExams, { intervalMs: 25000 });
+  const liveRefresh = useLiveRefresh(loadExams, { enabled: !livePaused, intervalMs: 25000 });
 
   const filteredExams = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -144,6 +147,14 @@ export default function AdminExams() {
           <h1 className="text-3xl font-bold text-text-primary">Exams Overview</h1>
           <p className="mt-1 text-text-secondary">View and manage all exams created across the platform.</p>
         </div>
+        <RefreshStatus
+          refreshing={liveRefresh.refreshing}
+          lastUpdated={loadedAt || liveRefresh.lastUpdated}
+          isStale={liveRefresh.isStale}
+          livePaused={livePaused}
+          onToggleLive={() => setLivePaused(current => !current)}
+          onRefresh={() => loadExams(true, { force: true })}
+        />
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">

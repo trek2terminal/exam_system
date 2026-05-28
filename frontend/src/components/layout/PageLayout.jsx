@@ -6,7 +6,7 @@ import { TopBar } from "./TopBar";
 import { MobileDrawer } from "./MobileDrawer";
 import { roleNavigation } from "./navigation";
 
-export function PageLayout({ children, auth, platformName, platformLogoUrl, notifications, theme, onToggleTheme, onMarkAllRead }) {
+export function PageLayout({ children, auth, platformName, platformLogoUrl, notifications, theme, highContrast, onToggleTheme, onToggleContrast, onMarkAllRead }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const location = useLocation();
   const studentTabs = (roleNavigation.student || []).filter(item => ["Dashboard", "My Exams", "Results"].includes(item.label));
@@ -20,7 +20,9 @@ export function PageLayout({ children, auth, platformName, platformLogoUrl, noti
           auth={auth}
           notifications={notifications}
           theme={theme}
+          highContrast={highContrast}
           onToggleTheme={onToggleTheme}
+          onToggleContrast={onToggleContrast}
           onMarkAllRead={onMarkAllRead}
           onOpenDrawer={() => setDrawerOpen(true)}
         />

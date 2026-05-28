@@ -50,8 +50,27 @@ export default function StudentWaitingPage() {
 
   useEffect(() => {
     loadStatus();
-    const interval = window.setInterval(loadStatus, 10000);
-    return () => window.clearInterval(interval);
+    let cancelled = false;
+    let timeoutId;
+    const schedule = () => {
+      timeoutId = window.setTimeout(async () => {
+        if (cancelled) return;
+        if (document.visibilityState !== "hidden") {
+          await loadStatus();
+        }
+        if (!cancelled) schedule();
+      }, 10000);
+    };
+    schedule();
+    const onVisible = () => {
+      if (document.visibilityState !== "hidden") loadStatus();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [loadStatus]);
 
   if (loading) {

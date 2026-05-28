@@ -133,6 +133,7 @@ export function Table({
         <div className="flex items-center gap-2">
           <select
             className="h-9 rounded-md border border-border bg-background-card px-2 text-sm text-text-primary shadow-sm"
+            aria-label="Rows per page"
             value={rowsPerPage}
             onChange={event => {
               setRowsPerPage(Number(event.target.value));

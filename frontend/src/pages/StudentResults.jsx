@@ -15,6 +15,7 @@ import {
   XCircle
 } from "lucide-react";
 import Editor from "@monaco-editor/react";
+import "../monacoSetup.js";
 import { Badge, Button, Card, Skeleton } from "../components/ui";
 import { api } from "../services/api";
 import { formatDateShort } from "../utils/dateFormat";

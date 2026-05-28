@@ -186,6 +186,58 @@
       {% endif %}
     </div>
 
+    <template id="questionRowTemplate">
+      <div class="question-card">
+        <div class="grid-2">
+          <div>
+            <label>Question Number *</label>
+            <input type="number" name="question_number" data-question-number required>
+          </div>
+          <div>
+            <label>Type *</label>
+            <select name="question_type" required>
+              <option value="mcq">MCQ</option>
+              <option value="short" selected>Short</option>
+              <option value="long">Long</option>
+              <option value="coding">Coding</option>
+            </select>
+          </div>
+          <div>
+            <label>Marks *</label>
+            <input type="number" name="marks" min="0.01" step="0.01" value="1" class="marks-field" required oninput="updateTotalMarks()">
+          </div>
+          <div>
+            <label>Correct Answer / Key</label>
+            <input type="text" name="correct_answer">
+          </div>
+        </div>
+
+        <label>Question Text *</label>
+        <textarea name="question_text" rows="4" required></textarea>
+
+        <label>Options for MCQ (use | between options)</label>
+        <input type="text" name="options" placeholder="Option A|Option B|Option C|Option D">
+
+        <label>Model Answer / Review Reference</label>
+        <textarea name="model_answer" rows="3" placeholder="Hidden during the exam. Shown while reviewing answers."></textarea>
+
+        <input type="hidden" name="existing_image_paths" value="[]">
+        <label>Question Images</label>
+        <input type="file" data-question-images accept=".png,.jpg,.jpeg,.gif,.webp" multiple>
+
+        <label>Read-only Code Snippet</label>
+        <textarea name="code_snippet" rows="4" placeholder="Optional code shown inside the question body"></textarea>
+
+        <label>Snippet Language</label>
+        <input type="text" name="code_language" placeholder="python">
+
+        <label>Per-question Time Limit (seconds)</label>
+        <input type="number" name="time_limit_seconds" min="0" value="0" placeholder="0 means no limit">
+
+        <button type="button" class="btn danger small" onclick="removeQuestionRow(this)">Remove</button>
+      </div>
+    </template>
+
     <hr>
     <button type="submit" class="btn primary">Save Exam Set</button>
   </form>
@@ -203,58 +255,10 @@
     const container = document.getElementById("questionContainer");
     const currentCount = container.querySelectorAll(".question-card").length;
     const nextNumber = currentCount + 1;
-
-    const card = document.createElement("div");
-    card.className = "question-card";
-    card.innerHTML = `
-      <div class="grid-2">
-        <div>
-          <label>Question Number *</label>
-          <input type="number" name="question_number" value="${nextNumber}" required>
-        </div>
-        <div>
-          <label>Type *</label>
-          <select name="question_type" required>
-            <option value="mcq">MCQ</option>
-            <option value="short" selected>Short</option>
-            <option value="long">Long</option>
-            <option value="coding">Coding</option>
-          </select>
-        </div>
-        <div>
-          <label>Marks *</label>
-          <input type="number" name="marks" min="0.01" step="0.01" value="1" class="marks-field" required oninput="updateTotalMarks()">
-        </div>
-        <div>
-          <label>Correct Answer / Key</label>
-          <input type="text" name="correct_answer">
-        </div>
-      </div>
-
-      <label>Question Text *</label>
-      <textarea name="question_text" rows="4" required></textarea>
-
-      <label>Options for MCQ (use | between options)</label>
-      <input type="text" name="options" placeholder="Option A|Option B|Option C|Option D">
-
-      <label>Model Answer / Review Reference</label>
-      <textarea name="model_answer" rows="3" placeholder="Hidden during the exam. Shown while reviewing answers."></textarea>
-
-      <input type="hidden" name="existing_image_paths" value="[]">
-      <label>Question Images</label>
-      <input type="file" name="question_images_${currentCount}" accept=".png,.jpg,.jpeg,.gif,.webp" multiple>
-
-      <label>Read-only Code Snippet</label>
-      <textarea name="code_snippet" rows="4" placeholder="Optional code shown inside the question body"></textarea>
-
-      <label>Snippet Language</label>
-      <input type="text" name="code_language" placeholder="python">
-
-      <label>Per-question Time Limit (seconds)</label>
-      <input type="number" name="time_limit_seconds" min="0" value="0" placeholder="0 means no limit">
-
-      <button type="button" class="btn danger small" onclick="removeQuestionRow(this)">Remove</button>
-    `;
+    const template = document.getElementById("questionRowTemplate");
+    const card = template.content.firstElementChild.cloneNode(true);
+    card.querySelector("[data-question-number]").value = nextNumber;
+    card.querySelector("[data-question-images]").name = `question_images_${currentCount}`;
     container.appendChild(card);
     updateTotalMarks();
   }

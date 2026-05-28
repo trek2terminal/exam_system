@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Editor from "@monaco-editor/react";
+import "./monacoSetup.js";
 import { Terminal } from "xterm";
 import "xterm/css/xterm.css";
 import {
@@ -634,7 +635,7 @@ export default function ExamInterface() {
     } finally {
       if (mountedRef.current && !auto) setSubmitting(false);
     }
-  }, [answersRef, currentIndexRef, examState?.exam?.id, questionsRef, saveAnswerNow, sessionCode, sessionTokenRef, submittingRef]);
+  }, [answerPayload, answersRef, currentIndexRef, examState?.exam?.id, questionsRef, saveAnswerNow, sessionCode, sessionTokenRef, submittingRef]);
 
   const reportViolation = useCallback(async (violationType, options = {}) => {
     if (!sessionTokenRef.current || submittingRef.current) return;
@@ -1402,6 +1403,7 @@ function QuestionCard({
         <label className="examTextAnswer">
           <textarea
             data-answer-textarea="true"
+            aria-label={isLong ? "Long answer" : "Short answer"}
             value={answer.answer_text || ""}
             disabled={!canWork}
             rows={isLong ? 10 : 5}
@@ -1476,7 +1478,8 @@ function ReferenceCode({ code }) {
           scrollBeyondLastLine: false,
           cursorStyle: "line-thin",
           automaticLayout: true,
-          folding: false
+          folding: false,
+          ariaLabel: "Reference code"
         }}
       />
     </div>
@@ -1524,7 +1527,8 @@ function CodeAnswer({ question, answer, stdinValue, runOutput, canWork, running,
               formatOnPaste: false,
               scrollBeyondLastLine: false,
               automaticLayout: true,
-              readOnly: !canWork
+              readOnly: !canWork,
+              ariaLabel: "Code answer editor"
             }}
           />
           <button type="button" className="examEditorResize" onPointerDown={startResize} aria-label="Resize code editor" />
@@ -1532,10 +1536,12 @@ function CodeAnswer({ question, answer, stdinValue, runOutput, canWork, running,
       </section>
 
       <section className="examStdinBlock">
-        <label>Standard Input (stdin)</label>
-        <small>If your code uses input(), type values here, one per line</small>
+        <label htmlFor={`stdin-${question.id}`}>Standard Input (stdin)</label>
+        <small id={`stdin-help-${question.id}`}>If your code uses input(), type values here, one per line</small>
         <textarea
+          id={`stdin-${question.id}`}
           data-stdin-input="true"
+          aria-describedby={`stdin-help-${question.id}`}
           value={stdinValue}
           disabled={!canWork}
           rows={3}

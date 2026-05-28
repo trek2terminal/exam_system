@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { BookOpenCheck, Save, Trash2, Plus, Upload } from "lucide-react";
-import { Avatar, Badge, Button, Input, MarksInput, Select, Textarea, StepWizard, ConfirmationDialog, Modal, Toggle } from "../components/ui";
+import { Avatar, Badge, Button, Input, MarksInput, PageLoading, Select, Textarea, StepWizard, ConfirmationDialog, Modal, Toggle } from "../components/ui";
 import { api } from "../services/api";
 import { notify } from "../components/ui/Toast";
 import QuestionImportWizard from "./QuestionImportWizard";
@@ -304,7 +304,7 @@ export default function ExamEditor() {
     notify.success("Question imported from bank. Save the exam to keep it in this paper.");
   };
 
-  if (loading) return <div className="p-8 text-center">Loading exam...</div>;
+  if (loading) return <PageLoading title="Loading exam editor..." />;
 
   const isNewExam = !examId;
 
@@ -821,7 +821,7 @@ function QuestionBankImportModal({ open, onClose, onImport, existingQuestions = 
         </div>
 
         {loading ? (
-          <div className="rounded-lg border border-border bg-background-base p-8 text-center text-text-muted">Loading question bank...</div>
+          <PageLoading title="Loading question bank..." />
         ) : filteredItems.length === 0 ? (
           <div className="rounded-lg border border-border bg-background-base p-8 text-center text-text-muted">
             No saved questions found.

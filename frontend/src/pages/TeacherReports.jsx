@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Activity, AlertTriangle, Clock3, Download, FileSpreadsheet, FileText, Search, ShieldAlert } from "lucide-react";
-import { Badge, Button, Card, DateInput, EmptyState, Input, Select, Table } from "../components/ui";
-import { api } from "../services/api";
+import { Badge, Button, Card, DateInput, EmptyState, Input, PageLoading, RefreshStatus, Select, Table } from "../components/ui";
+import { cachedGet } from "../services/api";
 import { notify } from "../components/ui/Toast";
 import { formatDate, timeAgo } from "../utils/dateFormat";
 import { useLiveRefresh } from "../hooks/useLiveRefresh";
+import { useDebouncedValue } from "../hooks/useDebouncedValue";
 
 function humanize(value) {
   if (!value) return "-";
@@ -43,6 +44,9 @@ export default function TeacherReports() {
   const [selectedExamId, setSelectedExamId] = useState("");
   const [sessionId, setSessionId] = useState("");
   const [loading, setLoading] = useState(true);
+  const [livePaused, setLivePaused] = useState(false);
+  const [loadedAt, setLoadedAt] = useState(null);
+  const hasLoadedRef = useRef(false);
   const [activityFilters, setActivityFilters] = useState({
     q: "",
     category: "all",
@@ -52,14 +56,15 @@ export default function TeacherReports() {
     to: ""
   });
 
-  const activityParams = useMemo(() => buildActivityParams(activityFilters), [activityFilters]);
+  const debouncedActivityFilters = useDebouncedValue(activityFilters, 500);
+  const activityParams = useMemo(() => buildActivityParams(debouncedActivityFilters), [debouncedActivityFilters]);
 
-  const loadReports = useCallback(async (soft = false) => {
+  const loadReports = useCallback(async (soft = false, options = {}) => {
     if (!soft) setLoading(true);
     try {
       const [dashboardResponse, activityResponse] = await Promise.all([
-        api.get("/teacher/dashboard"),
-        api.get("/teacher/activity", { params: activityParams })
+        cachedGet("/teacher/dashboard", { cacheTtl: options.force ? 0 : 5000 }),
+        cachedGet("/teacher/activity", { params: activityParams, cacheTtl: options.force ? 0 : 5000 })
       ]);
       const loaded = dashboardResponse.data.exams || [];
       setExams(loaded);
@@ -68,6 +73,7 @@ export default function TeacherReports() {
       setActivitySummary(activityResponse.data.summary || {});
       setImportantEvents(activityResponse.data.important_events || []);
       setFilterOptions(activityResponse.data.filters || {});
+      setLoadedAt(Date.now());
     } catch {
       notify.error("Could not load teacher reports");
     } finally {
@@ -76,9 +82,11 @@ export default function TeacherReports() {
   }, [activityParams]);
 
   useEffect(() => {
-    loadReports();
+    loadReports(hasLoadedRef.current).finally(() => {
+      hasLoadedRef.current = true;
+    });
   }, [loadReports]);
-  useLiveRefresh(loadReports, { intervalMs: 25000 });
+  const liveRefresh = useLiveRefresh(loadReports, { enabled: !livePaused, intervalMs: 25000 });
 
   const examOptions = useMemo(() => exams.map(exam => ({
     value: String(exam.id),
@@ -102,7 +110,7 @@ export default function TeacherReports() {
   };
 
   if (loading) {
-    return <Card className="p-8 text-center text-text-muted">Loading reports...</Card>;
+    return <PageLoading title="Loading teacher reports..." variant="reports" />;
   }
 
   return (
@@ -113,9 +121,19 @@ export default function TeacherReports() {
           <h1 className="text-3xl font-bold text-text-primary">Reports & Activity</h1>
           <p className="mt-1 text-text-secondary">Export result files, answer-sheet PDFs, and review your exam activity trail.</p>
         </div>
-        <Button as="a" href={exportHref(activityFilters)} variant="secondary">
-          <Download size={18} /> Export Activity
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <RefreshStatus
+            refreshing={liveRefresh.refreshing}
+            lastUpdated={loadedAt || liveRefresh.lastUpdated}
+            isStale={liveRefresh.isStale}
+            livePaused={livePaused}
+            onToggleLive={() => setLivePaused(current => !current)}
+            onRefresh={() => loadReports(true, { force: true })}
+          />
+          <Button as="a" href={exportHref(activityFilters)} variant="secondary">
+            <Download size={18} /> Export Activity
+          </Button>
+        </div>
       </div>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -196,9 +214,9 @@ export default function TeacherReports() {
           </div>
           <div className="mb-4 grid gap-3 lg:grid-cols-[minmax(220px,1fr)_repeat(3,minmax(150px,180px))]">
             <Input value={activityFilters.q} onChange={event => updateActivityFilter("q", event.target.value)} placeholder="Search activity, target, IP" aria-label="Search teacher activity" />
-            <Select value={activityFilters.category} onChange={value => updateActivityFilter("category", value)} options={categoryOptions} placeholder="Category" />
-            <Select value={activityFilters.status} onChange={value => updateActivityFilter("status", value)} options={statusOptions} placeholder="Status" />
-            <Select value={activityFilters.resource_type} onChange={value => updateActivityFilter("resource_type", value)} options={resourceOptions} placeholder="Target" />
+            <Select value={activityFilters.category} onChange={value => updateActivityFilter("category", value)} options={categoryOptions} placeholder="Category" ariaLabel="Teacher activity category" />
+            <Select value={activityFilters.status} onChange={value => updateActivityFilter("status", value)} options={statusOptions} placeholder="Status" ariaLabel="Teacher activity status" />
+            <Select value={activityFilters.resource_type} onChange={value => updateActivityFilter("resource_type", value)} options={resourceOptions} placeholder="Target" ariaLabel="Teacher activity target" />
           </div>
           <div className="mb-4 grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
             <DateInput label="Activity from" value={activityFilters.from} onChange={event => updateActivityFilter("from", event.target.value)} />

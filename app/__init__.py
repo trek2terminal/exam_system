@@ -166,8 +166,8 @@ def create_app(config_class=None):
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; "
                 "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; "
-                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; "
-                "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com data:; "
+                "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; "
+                "font-src 'self' https://cdnjs.cloudflare.com data:; "
                 "img-src 'self' data:; "
                 "connect-src 'self' ws: wss:; "
                 "worker-src 'self' blob: data:; "

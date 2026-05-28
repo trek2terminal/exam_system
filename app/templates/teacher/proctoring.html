@@ -31,32 +31,63 @@ function formatSeconds(seconds) {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
+function badgeClass(status) {
+  return ['active', 'waiting', 'paused', 'terminated', 'submitted'].includes(status) ? status : 'secondary';
+}
+
+function createMetric(label, value) {
+  const item = document.createElement('div');
+  const labelNode = document.createElement('span');
+  labelNode.textContent = label;
+  const valueNode = document.createElement('strong');
+  valueNode.textContent = String(value);
+  item.append(labelNode, valueNode);
+  return item;
+}
+
 function renderTeacherSessions(sessions) {
   const grid = document.getElementById('teacherProctorGrid');
-  grid.innerHTML = '';
+  grid.replaceChildren();
   if (!sessions.length) {
-    grid.innerHTML = '<div class="card"><p class="muted">No active or waiting students right now.</p></div>';
+    const emptyCard = document.createElement('div');
+    emptyCard.className = 'card';
+    const emptyText = document.createElement('p');
+    emptyText.className = 'muted';
+    emptyText.textContent = 'No active or waiting students right now.';
+    emptyCard.appendChild(emptyText);
+    grid.appendChild(emptyCard);
     return;
   }
   sessions.forEach(session => {
     const card = document.createElement('article');
     card.className = `proctor-card ${session.focus_violations >= 3 ? 'danger' : session.focus_violations ? 'flagged' : ''}`;
-    card.innerHTML = `
-      <div class="row-between">
-        <div>
-          <h3>${session.student_name} (${session.roll_no})</h3>
-          <p class="muted">${session.exam_name} | Set ${session.set_code}</p>
-        </div>
-        <span class="badge ${session.status}">${session.status}</span>
-      </div>
-      <div class="proctor-metrics">
-        <div><span>Time</span><strong>${formatSeconds(session.remaining_seconds)}</strong></div>
-        <div><span>Answers</span><strong>${session.answered_count}/${session.total_questions}</strong></div>
-        <div><span>Violations</span><strong>${session.focus_violations}</strong></div>
-        <div><span>Latest</span><strong>${session.latest_violation || '-'}</strong></div>
-      </div>
-      <p class="muted">Teacher view is read-only. Admin handles termination, second chance, and timer adjustments.</p>
-    `;
+    const header = document.createElement('div');
+    header.className = 'row-between';
+    const headingWrap = document.createElement('div');
+    const title = document.createElement('h3');
+    title.textContent = `${session.student_name || '-'} (${session.roll_no || '-'})`;
+    const subtitle = document.createElement('p');
+    subtitle.className = 'muted';
+    subtitle.textContent = `${session.exam_name || '-'} | Set ${session.set_code || '-'}`;
+    headingWrap.append(title, subtitle);
+    const status = document.createElement('span');
+    status.className = `badge ${badgeClass(session.status)}`;
+    status.textContent = session.status || '-';
+    header.append(headingWrap, status);
+
+    const metrics = document.createElement('div');
+    metrics.className = 'proctor-metrics';
+    metrics.append(
+      createMetric('Time', formatSeconds(session.remaining_seconds)),
+      createMetric('Answers', `${session.answered_count || 0}/${session.total_questions || 0}`),
+      createMetric('Violations', session.focus_violations || 0),
+      createMetric('Latest', session.latest_violation || '-')
+    );
+
+    const note = document.createElement('p');
+    note.className = 'muted';
+    note.textContent = 'Teacher view is read-only. Admin handles termination, second chance, and timer adjustments.';
+    card.append(header, metrics, note);
     grid.appendChild(card);
   });
 }

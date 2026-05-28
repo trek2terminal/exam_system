@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Copy, Plus, RefreshCw, Search, Trash2, UserPlus, X } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
-import { Avatar, Badge, Button, Card, ConfirmationDialog, EmptyState } from "../components/ui";
-import { api } from "../services/api";
+import { Avatar, Badge, Button, Card, ConfirmationDialog, EmptyState, PageLoading, RefreshStatus } from "../components/ui";
+import { api, cachedGet } from "../services/api";
 import { notify } from "../components/ui/Toast";
 import { useLiveRefresh } from "../hooks/useLiveRefresh";
 import { useDraftAutoSave } from "../hooks/useDraftAutoSave";
@@ -11,6 +11,8 @@ export default function AdminGroups() {
   const [searchParams] = useSearchParams();
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [livePaused, setLivePaused] = useState(false);
+  const [loadedAt, setLoadedAt] = useState(null);
   const [search, setSearch] = useState("");
   const [newGroup, setNewGroup] = useState({ name: "", description: "" });
   const [memberDrafts, setMemberDrafts] = useState({});
@@ -19,11 +21,12 @@ export default function AdminGroups() {
   const [searchingGroupId, setSearchingGroupId] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
-  const loadGroups = useCallback(async (soft = false) => {
+  const loadGroups = useCallback(async (soft = false, options = {}) => {
     if (!soft) setLoading(true);
     try {
-      const { data } = await api.get("/admin/groups");
+      const { data } = await cachedGet("/admin/groups", { cacheTtl: options.force ? 0 : soft ? 8000 : 1000 });
       setGroups(data.groups || []);
+      setLoadedAt(Date.now());
     } catch {
       notify.error("Could not load groups");
     } finally {
@@ -34,7 +37,7 @@ export default function AdminGroups() {
   useEffect(() => {
     loadGroups();
   }, [loadGroups]);
-  useLiveRefresh(loadGroups, { intervalMs: 25000 });
+  const liveRefresh = useLiveRefresh(loadGroups, { enabled: !livePaused, intervalMs: 25000 });
 
   const restoreGroupDraft = useCallback(draftData => {
     setNewGroup({
@@ -180,6 +183,14 @@ export default function AdminGroups() {
           <h1 className="mt-2 text-3xl font-bold text-white">Groups</h1>
           <p className="mt-2 text-sm text-gray-400">Organise students into polished batches, share join codes, and manage membership from one focused workspace.</p>
         </div>
+        <RefreshStatus
+          refreshing={liveRefresh.refreshing}
+          lastUpdated={loadedAt || liveRefresh.lastUpdated}
+          isStale={liveRefresh.isStale}
+          livePaused={livePaused}
+          onToggleLive={() => setLivePaused(current => !current)}
+          onRefresh={() => loadGroups(true, { force: true })}
+        />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[400px_minmax(0,1fr)]">
@@ -227,7 +238,7 @@ export default function AdminGroups() {
           </Card>
 
           {loading ? (
-            <Card className={`${panelClass} p-8 text-center text-gray-400`}>Loading groups...</Card>
+            <PageLoading title="Loading groups..." />
           ) : filteredGroups.length === 0 ? (
             <EmptyState icon={Search} heading="No groups found" description="Create a group to start assigning students in batches." />
           ) : (

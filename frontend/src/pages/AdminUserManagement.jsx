@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Download, Edit2, Eye, RotateCcw, Upload, Plus, ShieldCheck, Trash2, UserX } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
-import { Avatar, Badge, Button, Card, ConfirmationDialog, Input, Modal, Select, Table, Textarea, Tooltip } from "../components/ui";
-import { api } from "../services/api";
+import { Avatar, Badge, Button, Card, ConfirmationDialog, Input, Modal, PageLoading, RefreshStatus, Select, Table, Textarea, Tooltip } from "../components/ui";
+import { api, cachedGet } from "../services/api";
 import { notify } from "../components/ui/Toast";
 import { formatDate, formatDateShort } from "../utils/dateFormat";
 import { useLiveRefresh } from "../hooks/useLiveRefresh";
@@ -43,6 +43,8 @@ export default function AdminUserManagement() {
   const [searchParams] = useSearchParams();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [livePaused, setLivePaused] = useState(false);
+  const [loadedAt, setLoadedAt] = useState(null);
   const [activeTab, setActiveTab] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -72,11 +74,12 @@ export default function AdminUserManagement() {
     return () => window.clearTimeout(timeoutId);
   }, [searchTerm]);
 
-  const loadUsers = useCallback(async (soft = false) => {
+  const loadUsers = useCallback(async (soft = false, options = {}) => {
     if (!soft) setLoading(true);
     try {
-      const { data } = await api.get("/admin/users");
+      const { data } = await cachedGet("/admin/users", { cacheTtl: options.force ? 0 : soft ? 8000 : 1000 });
       setUsers(data.users || []);
+      setLoadedAt(Date.now());
     } catch (error) {
       notify.error(error.message || "Could not load users.");
       setUsers([]);
@@ -88,7 +91,7 @@ export default function AdminUserManagement() {
   useEffect(() => {
     loadUsers();
   }, [loadUsers]);
-  useLiveRefresh(loadUsers, { intervalMs: 25000 });
+  const liveRefresh = useLiveRefresh(loadUsers, { enabled: !livePaused, intervalMs: 25000 });
 
   useEffect(() => {
     const draftId = searchParams.get("draft");
@@ -331,7 +334,7 @@ export default function AdminUserManagement() {
     { key: "created_at", header: "Joined", sortable: true, headerClassName: "w-[140px] min-w-[140px]", cellClassName: "w-[140px] min-w-[140px]", render: row => formatDateShort(row.created_at) }
   ];
 
-  if (loading) return <Card className="p-8 text-center text-text-muted">Loading users...</Card>;
+  if (loading) return <PageLoading title="Loading users..." variant="table" />;
 
   return (
     <div className="space-y-6">
@@ -341,7 +344,15 @@ export default function AdminUserManagement() {
           <h1 className="text-3xl font-bold text-text-primary">Manage Users</h1>
           <p className="mt-1 text-text-secondary">Manage student and teacher accounts across the platform.</p>
         </div>
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <RefreshStatus
+            refreshing={liveRefresh.refreshing}
+            lastUpdated={loadedAt || liveRefresh.lastUpdated}
+            isStale={liveRefresh.isStale}
+            livePaused={livePaused}
+            onToggleLive={() => setLivePaused(current => !current)}
+            onRefresh={() => loadUsers(true, { force: true })}
+          />
           <Button variant="primary" size="sm" onClick={() => setShowCreateModal(true)}>
             <Plus size={16} /> Create Teacher
           </Button>

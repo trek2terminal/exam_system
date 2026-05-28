@@ -3,13 +3,22 @@
 function showToast(message, type = 'info', duration = 4000) {
     const container = document.getElementById('toastContainer');
     if (!container) return;
+    const safeType = ['success', 'error', 'warning', 'info'].includes(type) ? type : 'info';
 
     const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
-    toast.innerHTML = `
-        <span class="toast-icon">${getToastIcon(type)}</span>
-        <span>${message}</span>
-    `;
+    toast.className = `toast ${safeType}`;
+
+    const iconWrap = document.createElement('span');
+    iconWrap.className = 'toast-icon';
+    const icon = document.createElement('i');
+    icon.className = getToastIcon(safeType);
+    icon.setAttribute('aria-hidden', 'true');
+    iconWrap.appendChild(icon);
+
+    const messageText = document.createElement('span');
+    messageText.textContent = String(message || '');
+
+    toast.append(iconWrap, messageText);
 
     container.appendChild(toast);
 
@@ -21,10 +30,10 @@ function showToast(message, type = 'info', duration = 4000) {
 
 function getToastIcon(type) {
     const icons = {
-        success: '<i class="fas fa-check-circle"></i>',
-        error: '<i class="fas fa-circle-xmark"></i>',
-        warning: '<i class="fas fa-triangle-exclamation"></i>',
-        info: '<i class="fas fa-circle-info"></i>',
+        success: 'fas fa-check-circle',
+        error: 'fas fa-circle-xmark',
+        warning: 'fas fa-triangle-exclamation',
+        info: 'fas fa-circle-info',
     };
     return icons[type] || icons.info;
 }
@@ -63,7 +72,13 @@ function updateAutoSaveStatus(status, message = '') {
     const [icon, text] = content[status] || content.idle;
 
     if (states.includes(status)) indicator.classList.add(status);
-    indicator.innerHTML = `<i class="fas ${icon}"></i><span>${text}</span>`;
+    indicator.replaceChildren();
+    const iconNode = document.createElement('i');
+    iconNode.className = `fas ${icon}`;
+    iconNode.setAttribute('aria-hidden', 'true');
+    const textNode = document.createElement('span');
+    textNode.textContent = text;
+    indicator.append(iconNode, textNode);
 }
 
 function initWordCounter(textarea, maxLength) {
@@ -133,19 +148,33 @@ function openModal(content) {
     if (!overlay) {
         overlay = document.createElement('div');
         overlay.className = 'modal-overlay';
-        overlay.innerHTML = `
-            <div class="modal">
-                <div class="modal-header">
-                    <h3>Confirm</h3>
-                    <button class="modal-close" onclick="closeModal()" aria-label="Close">&times;</button>
-                </div>
-                <div class="modal-body"></div>
-            </div>
-        `;
+        const modal = document.createElement('div');
+        modal.className = 'modal';
+        const header = document.createElement('div');
+        header.className = 'modal-header';
+        const title = document.createElement('h3');
+        title.textContent = 'Confirm';
+        const close = document.createElement('button');
+        close.className = 'modal-close';
+        close.type = 'button';
+        close.setAttribute('aria-label', 'Close');
+        close.textContent = '\u00d7';
+        close.addEventListener('click', closeModal);
+        header.append(title, close);
+        const body = document.createElement('div');
+        body.className = 'modal-body';
+        modal.append(header, body);
+        overlay.appendChild(modal);
         document.body.appendChild(overlay);
     }
 
-    overlay.querySelector('.modal-body').innerHTML = content;
+    const body = overlay.querySelector('.modal-body');
+    body.replaceChildren();
+    if (content instanceof Node) {
+        body.appendChild(content);
+    } else {
+        body.textContent = String(content || '');
+    }
     overlay.classList.add('active');
 }
 
@@ -204,7 +233,7 @@ function clearFieldError(field) {
 }
 
 function showSkeleton(container, count = 3) {
-    container.innerHTML = '';
+    container.replaceChildren();
 
     for (let i = 0; i < count; i++) {
         const skeleton = document.createElement('div');
@@ -214,7 +243,12 @@ function showSkeleton(container, count = 3) {
 }
 
 function hideSkeleton(container, content) {
-    container.innerHTML = content;
+    container.replaceChildren();
+    if (content instanceof Node) {
+        container.appendChild(content);
+    } else {
+        container.textContent = String(content || '');
+    }
 }
 
 document.addEventListener('DOMContentLoaded', () => {

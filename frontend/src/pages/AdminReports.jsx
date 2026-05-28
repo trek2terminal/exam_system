@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, Clock3, Download, FileBarChart, FileText, Search, ShieldAlert } from "lucide-react";
-import { Badge, Button, Card, DateInput, EmptyState, Input, Select, Table } from "../components/ui";
-import { api } from "../services/api";
+import { Badge, Button, Card, DateInput, EmptyState, Input, PageLoading, RefreshStatus, Select, Table } from "../components/ui";
+import { cachedGet } from "../services/api";
 import { notify } from "../components/ui/Toast";
 import { formatDate, timeAgo } from "../utils/dateFormat";
 import { useLiveRefresh } from "../hooks/useLiveRefresh";
+import { useDebouncedValue } from "../hooks/useDebouncedValue";
 
 function humanize(value) {
   if (!value) return "-";
@@ -52,33 +53,44 @@ export default function AdminReports() {
     from: "",
     to: ""
   });
+  const [livePaused, setLivePaused] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadedAt, setLoadedAt] = useState(null);
+  const hasLoadedRef = useRef(false);
 
-  const auditParams = useMemo(() => buildAuditParams(auditFilters), [auditFilters]);
+  const debouncedAuditFilters = useDebouncedValue(auditFilters, 500);
+  const auditParams = useMemo(() => buildAuditParams(debouncedAuditFilters), [debouncedAuditFilters]);
 
-  const loadReports = useCallback(async () => {
+  const loadReports = useCallback(async (soft = false, options = {}) => {
+    if (!soft) setLoading(true);
     try {
       const [{ data }, examsResponse, auditResponse] = await Promise.all([
-        api.get("/admin/dashboard"),
-        api.get("/admin/exams", { params: { per_page: 100 } }),
-        api.get("/admin/audit-log", { params: auditParams })
+        cachedGet("/admin/dashboard", { cacheTtl: options.force ? 0 : 5000 }),
+        cachedGet("/admin/exams", { params: { per_page: 100 }, cacheTtl: options.force ? 0 : 8000 }),
+        cachedGet("/admin/audit-log", { params: auditParams, cacheTtl: options.force ? 0 : 5000 })
       ]);
-      const options = (examsResponse.data.exams || []).map(exam => ({ value: String(exam.id), label: exam.exam_name }));
+      const examSelectOptions = (examsResponse.data.exams || []).map(exam => ({ value: String(exam.id), label: exam.exam_name }));
       setDashboard(data);
-      setExamOptions(options);
-      setSelectedExamId(current => current || options[0]?.value || "");
+      setExamOptions(examSelectOptions);
+      setSelectedExamId(current => current || examSelectOptions[0]?.value || "");
       setAuditRows(auditResponse.data.items || []);
       setAuditSummary(auditResponse.data.summary || {});
       setAuditImportant(auditResponse.data.important_events || []);
       setAuditFilterOptions(auditResponse.data.filters || {});
+      setLoadedAt(Date.now());
     } catch {
       notify.warning("Some report selectors could not be loaded.");
+    } finally {
+      setLoading(false);
     }
   }, [auditParams]);
 
   useEffect(() => {
-    loadReports();
+    loadReports(hasLoadedRef.current).finally(() => {
+      hasLoadedRef.current = true;
+    });
   }, [loadReports]);
-  useLiveRefresh(loadReports, { intervalMs: 25000 });
+  const liveRefresh = useLiveRefresh(loadReports, { enabled: !livePaused, intervalMs: 25000 });
 
   const violationExportHref = useMemo(() => {
     const params = new window.URLSearchParams();
@@ -114,19 +126,31 @@ export default function AdminReports() {
           <h1 className="text-3xl font-bold text-text-primary">Reports & Activity</h1>
           <p className="mt-1 text-text-secondary">Audit trail, important events, violation exports, and exam report PDFs.</p>
         </div>
-        <Button as="a" href={auditExportHref("/api/admin/audit-log/export.csv", auditFilters)} variant="secondary">
-          <Download size={18} /> Export Filtered Audit
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <RefreshStatus
+            refreshing={liveRefresh.refreshing}
+            lastUpdated={loadedAt || liveRefresh.lastUpdated}
+            isStale={liveRefresh.isStale}
+            livePaused={livePaused}
+            onToggleLive={() => setLivePaused(current => !current)}
+            onRefresh={() => loadReports(true, { force: true })}
+          />
+          <Button as="a" href={auditExportHref("/api/admin/audit-log/export.csv", auditFilters)} variant="secondary">
+            <Download size={18} /> Export Filtered Audit
+          </Button>
+        </div>
       </div>
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {loading && <PageLoading title="Loading admin reports..." variant="reports" />}
+
+      {!loading && <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <ActivityMetric icon={Clock3} label="Today" value={auditSummary.today || 0} tone="info" />
         <ActivityMetric icon={AlertTriangle} label="Important" value={auditSummary.important || 0} tone={auditSummary.important ? "warning" : "success"} />
         <ActivityMetric icon={ShieldAlert} label="Security" value={auditSummary.security || 0} tone={auditSummary.security ? "warning" : "success"} />
         <ActivityMetric icon={Download} label="Exports" value={auditSummary.exports || 0} tone="info" />
-      </section>
+      </section>}
 
-      <div className="grid gap-6 xl:grid-cols-2">
+      {!loading && <div className="grid gap-6 xl:grid-cols-2">
         <Card className="p-5">
           <div className="mb-5 flex items-start gap-3">
             <span className="grid h-11 w-11 place-items-center rounded-lg bg-danger/10 text-danger">
@@ -167,9 +191,9 @@ export default function AdminReports() {
             <EmptyState icon={FileText} heading="No exam selector data" description="No exams are available for report exports yet." compact />
           )}
         </Card>
-      </div>
+      </div>}
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,0.8fr)]">
+      {!loading && <div className="grid gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,0.8fr)]">
         <Card className="p-5">
           <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
@@ -180,9 +204,9 @@ export default function AdminReports() {
           </div>
           <div className="mb-4 grid gap-3 lg:grid-cols-[minmax(220px,1fr)_repeat(3,minmax(150px,180px))]">
             <Input value={auditFilters.q} onChange={event => updateAuditFilter("q", event.target.value)} placeholder="Search activity, actor, target, IP" aria-label="Search audit activity" />
-            <Select value={auditFilters.category} onChange={value => updateAuditFilter("category", value)} options={categoryOptions} placeholder="Category" />
-            <Select value={auditFilters.status} onChange={value => updateAuditFilter("status", value)} options={statusOptions} placeholder="Status" />
-            <Select value={auditFilters.resource_type} onChange={value => updateAuditFilter("resource_type", value)} options={resourceOptions} placeholder="Target" />
+            <Select value={auditFilters.category} onChange={value => updateAuditFilter("category", value)} options={categoryOptions} placeholder="Category" ariaLabel="Audit category" />
+            <Select value={auditFilters.status} onChange={value => updateAuditFilter("status", value)} options={statusOptions} placeholder="Status" ariaLabel="Audit status" />
+            <Select value={auditFilters.resource_type} onChange={value => updateAuditFilter("resource_type", value)} options={resourceOptions} placeholder="Target" ariaLabel="Audit target" />
           </div>
           <div className="mb-4 grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
             <DateInput label="Activity from" value={auditFilters.from} onChange={event => updateAuditFilter("from", event.target.value)} />
@@ -257,7 +281,7 @@ export default function AdminReports() {
             </Button>
           </Card>
         </div>
-      </div>
+      </div>}
     </div>
   );
 }

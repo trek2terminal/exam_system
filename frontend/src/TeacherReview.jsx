@@ -18,7 +18,7 @@ import {
   ShieldAlert,
   Users
 } from "lucide-react";
-import { Badge, Button, Card, EmptyState, Input, MarksInput, Modal, Textarea } from "./components/ui";
+import { Badge, Button, Card, EmptyState, Input, MarksInput, Modal, PageLoading, Textarea } from "./components/ui";
 import { api } from "./services/api";
 import { notify } from "./components/ui/Toast";
 import { formatDate } from "./utils/dateFormat";
@@ -153,7 +153,7 @@ function TeacherExamReview() {
       });
   }, [searchTerm, sessions, sortMode, statusFilter]);
 
-  if (loading) return <div className="loadingScreen">Loading review workspace...</div>;
+  if (loading) return <PageLoading title="Loading review workspace..." variant="reports" />;
   if (error) return <ErrorPanel message={error} backHref="/react/teacher" />;
 
   return (
@@ -457,7 +457,7 @@ function TeacherSessionReview() {
     }
   };
 
-  if (loading) return <div className="loadingScreen">Loading student answers...</div>;
+  if (loading) return <PageLoading title="Loading student answers..." variant="reports" />;
   if (error && !data) return <ErrorPanel message={error} backHref="/react/teacher" />;
 
   const locked = Boolean(data.locked_for_review);

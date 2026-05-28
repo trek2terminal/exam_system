@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { PageLayout } from "./components/layout/PageLayout";
 import { SessionEndedOverlay } from "./components/SessionEndedOverlay";
-import { Badge, Button, Card, EmptyState, Input, StatCard } from "./components/ui";
+import { Badge, Button, Card, EmptyState, Input, PageLoading, StatCard } from "./components/ui";
 import { cn } from "./components/ui/utils";
 import { useAppStore } from "./store/appStore";
 import { api } from "./services/api";
@@ -234,10 +234,10 @@ function scheduleLabel(state) {
   return labels[state] || String(state || "Scheduled").replace(/_/g, " ");
 }
 
-function Shell({ children, platformName, platformLogoUrl, auth, notifications, theme, onToggleTheme, onMarkAllRead }) {
+function Shell({ children, platformName, platformLogoUrl, auth, notifications, theme, highContrast, onToggleTheme, onToggleContrast, onMarkAllRead }) {
   // layout handled by PageLayout
   return (
-    <PageLayout auth={auth} platformName={platformName} platformLogoUrl={platformLogoUrl} notifications={notifications} theme={theme} onToggleTheme={onToggleTheme} onMarkAllRead={onMarkAllRead}>
+    <PageLayout auth={auth} platformName={platformName} platformLogoUrl={platformLogoUrl} notifications={notifications} theme={theme} highContrast={highContrast} onToggleTheme={onToggleTheme} onToggleContrast={onToggleContrast} onMarkAllRead={onMarkAllRead}>
       {children}
     </PageLayout>
   );
@@ -245,7 +245,7 @@ function Shell({ children, platformName, platformLogoUrl, auth, notifications, t
 
 function PageSuspense({ children, label = "Loading workspace..." }) {
   return (
-    <Suspense fallback={<div className="loadingScreen">{label}</div>}>
+    <Suspense fallback={<PageLoading title={label} />}>
       {children}
     </Suspense>
   );
@@ -1242,7 +1242,7 @@ function ProtectedExamRoute({ currentRole, settings }) {
     return <Navigate to={rolePaths[currentRole] || "/"} replace />;
   }
   return (
-    <Suspense fallback={<div className="loadingScreen">Loading exam workspace...</div>}>
+    <Suspense fallback={<PageLoading title="Loading exam workspace..." />}>
       <ExamInterface />
     </Suspense>
   );
@@ -1256,7 +1256,7 @@ function ProtectedTeacherReviewRoute({ currentRole, settings, mode }) {
     return <Navigate to={rolePaths[currentRole] || "/"} replace />;
   }
   return (
-    <Suspense fallback={<div className="loadingScreen">Loading review workspace...</div>}>
+    <Suspense fallback={<PageLoading title="Loading review workspace..." variant="reports" />}>
       <TeacherReview mode={mode} />
     </Suspense>
   );
@@ -1270,7 +1270,7 @@ function ProtectedProctoringRoute({ currentRole, settings, mode }) {
     return <Navigate to={rolePaths[currentRole] || "/"} replace />;
   }
   return (
-    <Suspense fallback={<div className="loadingScreen">Loading proctoring workspace...</div>}>
+    <Suspense fallback={<PageLoading title="Loading proctoring workspace..." />}>
       <Proctoring mode={mode} />
     </Suspense>
   );
@@ -1289,6 +1289,13 @@ export default function App() {
       return "dark";
     } catch {
       return "dark";
+    }
+  });
+  const [highContrast, setHighContrast] = useState(() => {
+    try {
+      return window.localStorage.getItem("examHighContrast") === "true";
+    } catch {
+      return false;
     }
   });
 
@@ -1316,6 +1323,22 @@ export default function App() {
     }
   }, [theme]);
 
+  useEffect(() => {
+    try {
+      document.documentElement.classList.toggle("high-contrast", highContrast);
+      window.localStorage.setItem("examHighContrast", String(highContrast));
+    } catch {
+      // ignore
+    }
+  }, [highContrast]);
+
+  useEffect(() => {
+    const roleClasses = ["role-admin", "role-teacher", "role-student"];
+    document.documentElement.classList.remove(...roleClasses);
+    if (role) document.documentElement.classList.add(`role-${role}`);
+    return () => document.documentElement.classList.remove(...roleClasses);
+  }, [role]);
+
   async function markAllRead() {
     try {
       await api.post("/notifications/mark-read");
@@ -1330,7 +1353,7 @@ export default function App() {
   }
 
   if (loading) {
-    return <div className="loadingScreen">Preparing your workspace...</div>;
+    return <PageLoading title="Preparing your workspace..." />;
   }
 
   const routes = (
@@ -1758,7 +1781,9 @@ export default function App() {
         auth={bootstrap?.auth}
         notifications={bootstrap?.notifications}
         theme={theme}
+        highContrast={highContrast}
         onToggleTheme={() => setTheme(current => (current === "dark" ? "light" : "dark"))}
+        onToggleContrast={() => setHighContrast(current => !current)}
         onMarkAllRead={markAllRead}
       >
         {routes}

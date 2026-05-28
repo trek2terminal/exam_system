@@ -13,6 +13,7 @@ export function Select({
   helperText,
   disabled = false,
   required = false,
+  ariaLabel,
   className
 }) {
   const [open, setOpen] = useState(false);
@@ -145,6 +146,7 @@ export function Select({
         aria-expanded={open}
         aria-controls={listboxId}
         aria-activedescendant={open && activeOption ? `${listboxId}-${activeOption.value}` : undefined}
+        aria-label={!label ? (ariaLabel || placeholder) : undefined}
         ref={triggerRef}
         onClick={() => setOpen(current => !current)}
         onKeyDown={onKeyDown}

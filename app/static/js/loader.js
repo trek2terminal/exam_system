@@ -20,8 +20,7 @@ class LoadingOverlay {
         const content = document.createElement('div');
         content.className = 'loading-overlay-content';
 
-        const loaderHTML = this._getLoaderHTML(loaderType);
-        content.innerHTML = loaderHTML;
+        content.appendChild(this._createLoader(loaderType));
 
         const heading = document.createElement('h2');
         heading.textContent = this.message;
@@ -45,42 +44,16 @@ class LoadingOverlay {
         }
     }
 
-    _getLoaderHTML(type) {
-        const loaders = {
-            'ring': `
-                <div class="loader-ring">
-                    <div></div>
-                    <div></div>
-                    <div></div>
-                </div>
-            `,
-            'dots': `
-                <div class="loader-dots">
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                </div>
-            `,
-            'wave': `
-                <div class="loader-wave">
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                </div>
-            `,
-            'grid': `
-                <div class="loader-grid">
-                    ${Array(9).fill(0).map(() => '<span></span>').join('')}
-                </div>
-            `,
-            'bar': `
-                <div class="loader-bar"></div>
-            `
-        };
-
-        return loaders[type] || loaders['ring'];
+    _createLoader(type) {
+        const safeType = ['ring', 'dots', 'wave', 'grid', 'bar'].includes(type) ? type : 'ring';
+        const loader = document.createElement('div');
+        loader.className = `loader-${safeType}`;
+        const childTag = safeType === 'ring' ? 'div' : 'span';
+        const counts = { ring: 3, dots: 3, wave: 5, grid: 9, bar: 0 };
+        for (let index = 0; index < counts[safeType]; index += 1) {
+            loader.appendChild(document.createElement(childTag));
+        }
+        return loader;
     }
 }
 
@@ -98,25 +71,38 @@ class ConfirmDialog {
         dialog.className = 'confirm-dialog-overlay';
         dialog.id = 'confirmDialog';
 
-        dialog.innerHTML = `
-            <div class="confirm-dialog modal-enter">
-                <div class="confirm-header">
-                    <h2>${this.title}</h2>
-                    <button class="confirm-close">&times;</button>
-                </div>
-                <div class="confirm-body">
-                    <p>${this.message}</p>
-                </div>
-                <div class="confirm-footer">
-                    <button class="btn btn-secondary confirm-cancel">Cancel</button>
-                    <button class="btn btn-primary confirm-ok">Confirm</button>
-                </div>
-            </div>
-        `;
+        const panel = document.createElement('div');
+        panel.className = 'confirm-dialog modal-enter';
+        const header = document.createElement('div');
+        header.className = 'confirm-header';
+        const title = document.createElement('h2');
+        title.textContent = String(this.title || '');
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'confirm-close';
+        closeBtn.type = 'button';
+        closeBtn.setAttribute('aria-label', 'Close');
+        closeBtn.textContent = '\u00d7';
+        header.append(title, closeBtn);
 
-        const closeBtn = dialog.querySelector('.confirm-close');
-        const cancelBtn = dialog.querySelector('.confirm-cancel');
-        const okBtn = dialog.querySelector('.confirm-ok');
+        const body = document.createElement('div');
+        body.className = 'confirm-body';
+        const message = document.createElement('p');
+        message.textContent = String(this.message || '');
+        body.appendChild(message);
+
+        const footer = document.createElement('div');
+        footer.className = 'confirm-footer';
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'btn btn-secondary confirm-cancel';
+        cancelBtn.type = 'button';
+        cancelBtn.textContent = 'Cancel';
+        const okBtn = document.createElement('button');
+        okBtn.className = 'btn btn-primary confirm-ok';
+        okBtn.type = 'button';
+        okBtn.textContent = 'Confirm';
+        footer.append(cancelBtn, okBtn);
+        panel.append(header, body, footer);
+        dialog.appendChild(panel);
 
         const cleanup = () => {
             dialog.remove();
@@ -153,18 +139,24 @@ class ConfirmDialog {
 class Toast {
     static show(message, type = 'info', duration = 3000) {
         const container = document.getElementById('toastContainer') || this._createContainer();
+        const safeType = this._getType(type);
 
         const toast = document.createElement('div');
-        toast.className = `toast toast-${type} animate-slide-in-right`;
-        toast.innerHTML = `
-            <i class="fas fa-${this._getIcon(type)}"></i>
-            <span>${message}</span>
-            <button class="toast-close">&times;</button>
-        `;
+        toast.className = `toast toast-${safeType} animate-slide-in-right`;
+        const icon = document.createElement('i');
+        icon.className = `fas fa-${this._getIcon(safeType)}`;
+        icon.setAttribute('aria-hidden', 'true');
+        const messageText = document.createElement('span');
+        messageText.textContent = String(message || '');
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'toast-close';
+        closeBtn.type = 'button';
+        closeBtn.setAttribute('aria-label', 'Close notification');
+        closeBtn.textContent = '\u00d7';
+        toast.append(icon, messageText, closeBtn);
 
         container.appendChild(toast);
 
-        const closeBtn = toast.querySelector('.toast-close');
         const remove = () => toast.remove();
 
         closeBtn.addEventListener('click', remove);
@@ -187,6 +179,10 @@ class Toast {
             'info': 'info-circle'
         };
         return icons[type] || 'info-circle';
+    }
+
+    static _getType(type) {
+        return ['success', 'error', 'warning', 'info'].includes(type) ? type : 'info';
     }
 }
 

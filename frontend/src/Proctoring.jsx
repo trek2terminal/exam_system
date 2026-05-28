@@ -22,7 +22,7 @@ import {
   WifiOff,
   XCircle
 } from "lucide-react";
-import { api } from "./services/api";
+import { api, cachedGet } from "./services/api";
 import { createRealtimeSocket } from "./services/realtime";
 import { Button } from "./components/ui/Button";
 import { Card } from "./components/ui/Card";
@@ -32,6 +32,8 @@ import { Input } from "./components/ui/Input";
 import { Textarea } from "./components/ui/Textarea";
 import { Select } from "./components/ui/Select";
 import { Avatar } from "./components/ui/Avatar";
+import { PageLoading } from "./components/ui/PageLoading";
+import { RefreshStatus } from "./components/ui/RefreshStatus";
 import { cn } from "./components/ui/utils";
 import { formatDate } from "./utils/dateFormat";
 import { integerInput } from "./utils/inputSanitizers";
@@ -100,6 +102,8 @@ export default function Proctoring({ mode }) {
   const [soundEnabled, setSoundEnabled] = useState(() => window.localStorage.getItem("proctorSoundEnabled") === "true");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [livePaused, setLivePaused] = useState(false);
+  const [loadedAt, setLoadedAt] = useState(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [realtimeStatus, setRealtimeStatus] = useState("connecting");
@@ -134,13 +138,14 @@ export default function Proctoring({ mode }) {
     }
   }, [soundEnabled]);
 
-  const loadStatus = useCallback(async soft => {
+  const loadStatus = useCallback(async (soft, options = {}) => {
     setError("");
     if (soft) setRefreshing(true);
     else setLoading(true);
     try {
-      const response = await api.get(endpoint);
+      const response = await cachedGet(endpoint, { cacheTtl: options.force ? 0 : soft ? 2500 : 0 });
       setData(response.data);
+      setLoadedAt(Date.now());
       const sessions = response.data.sessions || [];
       setSelectedId(current => (sessions.some(item => item.id === current) ? current : sessions[0]?.id || null));
     } catch (err) {
@@ -153,9 +158,33 @@ export default function Proctoring({ mode }) {
 
   useEffect(() => {
     loadStatus(false);
-    const intervalId = window.setInterval(() => loadStatus(true), 5000);
-    return () => window.clearInterval(intervalId);
   }, [loadStatus]);
+
+  useEffect(() => {
+    if (livePaused) return undefined;
+    let timeoutId;
+    let cancelled = false;
+    const pollDelay = realtimeStatus === "connected" ? 30000 : realtimeStatus === "limited" ? 15000 : 5000;
+    const schedule = () => {
+      timeoutId = window.setTimeout(async () => {
+        if (cancelled) return;
+        if (document.visibilityState !== "hidden") {
+          await loadStatus(true);
+        }
+        if (!cancelled) schedule();
+      }, pollDelay);
+    };
+    schedule();
+    const onVisible = () => {
+      if (document.visibilityState !== "hidden") loadStatus(true);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [livePaused, loadStatus, realtimeStatus]);
 
   useEffect(() => {
     sessionsRef.current = data?.sessions || [];
@@ -336,7 +365,7 @@ export default function Proctoring({ mode }) {
   const waitingSessions = sortedSessions.filter(item => item.status === "waiting");
   const counts = data?.counts || {};
 
-  if (loading) return <div className="loadingScreen">Loading proctoring workspace...</div>;
+  if (loading) return <PageLoading title="Loading proctoring workspace..." />;
 
   return (
     <section className="proctorWorkspace">
@@ -350,6 +379,14 @@ export default function Proctoring({ mode }) {
             <Radio size={16} />
             Updated {formatDate(data?.updated_at)}
           </span>
+          <RefreshStatus
+            refreshing={refreshing}
+            lastUpdated={loadedAt || (data?.updated_at ? new Date(data.updated_at).getTime() : null)}
+            isStale={Boolean(loadedAt && Date.now() - loadedAt > 45000)}
+            livePaused={livePaused}
+            onToggleLive={() => setLivePaused(current => !current)}
+            onRefresh={() => loadStatus(true, { force: true })}
+          />
           <Badge className={`realtimePill ${realtimeStatus}`} variant={realtimeStatus === "connected" ? "success" : realtimeStatus === "reconnecting" ? "warning" : "secondary"}>
             {realtimeStatus}
           </Badge>
