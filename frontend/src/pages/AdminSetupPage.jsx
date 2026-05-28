@@ -72,11 +72,9 @@ export default function AdminSetupPage() {
 
   return (
     <main className="adminLoginScene">
-      <div className="adminLoginShape adminLoginShapeOne" />
-      <div className="adminLoginShape adminLoginShapeTwo" />
-      <div className="adminLoginShape adminLoginShapeThree" />
+      <div className="authSignalMesh opacity-40" />
 
-      <section className="adminLoginCard" aria-labelledby="admin-setup-title">
+      <section className="authFormPanelPro adminLoginCard" aria-labelledby="admin-setup-title">
         <div className="adminShieldGlow" aria-hidden="true">
           <ShieldCheck size={40} />
         </div>
@@ -93,7 +91,7 @@ export default function AdminSetupPage() {
           <form className="grid gap-4" onSubmit={handleSubmit}>
             <label className={`adminLoginField ${shakeKey ? "adminLoginShake" : ""}`} key={`name-${shakeKey}`}>
               <span>Full Name</span>
-              <span className="adminInputWrap">
+              <span className="authInputPro adminInputWrap">
                 <UserRound size={18} />
                 <input
                   value={name}
@@ -107,7 +105,7 @@ export default function AdminSetupPage() {
 
             <label className={`adminLoginField ${shakeKey ? "adminLoginShake" : ""}`} key={`user-${shakeKey}`}>
               <span>Username</span>
-              <span className="adminInputWrap">
+              <span className="authInputPro adminInputWrap">
                 <UserRound size={18} />
                 <input
                   value={username}
@@ -121,7 +119,7 @@ export default function AdminSetupPage() {
 
             <label className={`adminLoginField ${shakeKey ? "adminLoginShake" : ""}`} key={`pass-${shakeKey}`}>
               <span>Password</span>
-              <span className="adminInputWrap">
+              <span className="authInputPro adminInputWrap">
                 <LockKeyhole size={18} />
                 <input
                   value={password}
@@ -139,7 +137,7 @@ export default function AdminSetupPage() {
 
             <label className={`adminLoginField ${shakeKey ? "adminLoginShake" : ""}`} key={`confirm-${shakeKey}`}>
               <span>Confirm Password</span>
-              <span className="adminInputWrap">
+              <span className="authInputPro adminInputWrap">
                 <LockKeyhole size={18} />
                 <input
                   value={confirmPassword}
@@ -165,7 +163,7 @@ export default function AdminSetupPage() {
               </div>
             </div>
 
-            <button className="adminLoginButton" type="submit" disabled={loading || !valid}>
+            <button className="authActionButton adminLoginButton" type="submit" disabled={loading || !valid}>
               {loading ? <span className="adminButtonSpinner" aria-label="Creating admin account" /> : "Create Admin"}
             </button>
 

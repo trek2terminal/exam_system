@@ -39,7 +39,7 @@ export function Card({
     <Component
       type={Component === "button" ? type || "button" : undefined}
       className={cn(
-        "rounded-card border border-border/80 text-text-primary transition duration-200 ease-out",
+        "premiumCard rounded-card border border-border/80 text-text-primary transition duration-200 ease-out",
         variants[variant] || variants.default,
         interactive && interactiveClasses,
         className

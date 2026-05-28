@@ -40,7 +40,7 @@ export const Button = forwardRef(function Button(
       aria-disabled={!isButton && (disabled || loading) ? "true" : undefined}
       disabled={isButton ? disabled || loading : undefined}
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-md border font-semibold transition duration-150 ease-out",
+        "professionalButton inline-flex items-center justify-center gap-2 rounded-md border font-semibold transition duration-150 ease-out",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background-base",
         "shadow-sm hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-60 disabled:hover:translate-y-0",
         !isButton && (disabled || loading) && "pointer-events-none opacity-60",

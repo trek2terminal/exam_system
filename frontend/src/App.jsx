@@ -66,6 +66,8 @@ const rolePaths = {
   student: "/student"
 };
 
+const DEFAULT_THEME = "dark";
+
 function getGreeting() {
   const hour = new Date().getHours();
   if (hour < 12) return "Good Morning";
@@ -1292,9 +1294,9 @@ export default function App() {
     try {
       const stored = window.localStorage.getItem("examTheme");
       if (stored === "light" || stored === "dark") return stored;
-      return "dark";
+      return DEFAULT_THEME;
     } catch {
-      return "dark";
+      return DEFAULT_THEME;
     }
   });
   const [highContrast, setHighContrast] = useState(() => {

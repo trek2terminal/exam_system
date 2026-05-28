@@ -93,8 +93,6 @@ export default function StudentWaitingPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <section className="relative overflow-hidden rounded-card border border-warning/25 bg-gradient-to-br from-warning/10 via-background-surface to-background-base p-6 shadow-card md:p-8">
-        <div className="absolute -right-16 -top-16 h-44 w-44 rounded-full bg-warning/10 blur-3xl" />
-        <div className="absolute -bottom-20 left-10 h-52 w-52 rounded-full bg-brand-primary/10 blur-3xl" />
         <div className="relative z-10 grid gap-6 lg:grid-cols-[1fr_300px] lg:items-center">
           <div>
             <Badge variant={inactive ? "secondary" : "warning"}>{timeStateLabel}</Badge>

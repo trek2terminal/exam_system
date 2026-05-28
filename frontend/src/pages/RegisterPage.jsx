@@ -168,12 +168,8 @@ export default function RegisterPage({ settings }) {
   return (
     <div className="loginCyberScene min-h-screen bg-[#0d0f1a] text-white">
       <div className="flex min-h-screen flex-col md:flex-row">
-        <aside className="loginCyberPanel relative hidden flex-1 overflow-hidden p-10 text-white md:flex md:flex-col md:justify-between xl:p-16">
-          <div className="pointer-events-none absolute inset-0">
-            <div className="absolute -left-28 top-20 h-80 w-80 rounded-full bg-indigo-500/20 blur-[120px]" />
-            <div className="absolute bottom-10 right-0 h-96 w-96 rounded-full bg-cyan-400/15 blur-[130px]" />
-            <div className="absolute right-1/3 top-1/3 h-64 w-64 rounded-full bg-purple-500/20 blur-[120px]" />
-          </div>
+        <aside className="authPanelPro loginCyberPanel relative hidden flex-1 overflow-hidden p-10 text-white md:flex md:flex-col md:justify-between xl:p-16">
+          <div className="authSignalMesh" />
 
           <div className="relative z-10 max-w-xl">
             <div className="mb-8 inline-flex items-center gap-4">
@@ -235,7 +231,7 @@ export default function RegisterPage({ settings }) {
         </aside>
 
         <main className="flex flex-1 items-center justify-center bg-[#0d0f1a] px-4 py-6 sm:px-6 lg:px-10">
-          <section className="registerGlassCard relative mx-auto max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-white/10 bg-white/[0.04] px-5 py-6 shadow-[0_0_60px_rgba(99,102,241,0.12)] backdrop-blur-2xl before:absolute before:left-1/2 before:top-0 before:h-px before:w-2/3 before:-translate-x-1/2 before:bg-gradient-to-r before:from-transparent before:via-indigo-500 before:to-transparent sm:px-10 sm:py-8">
+          <section className="authFormPanelPro registerGlassCard relative mx-auto max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-white/10 bg-white/[0.04] px-5 py-6 shadow-[0_0_60px_rgba(99,102,241,0.12)] backdrop-blur-2xl sm:px-10 sm:py-8">
             {settingsLoading ? (
               <RegistrationLoadingCard />
             ) : !registrationOpen ? (
@@ -376,7 +372,7 @@ export default function RegisterPage({ settings }) {
               <button
                 type="submit"
                 disabled={!isFormValid || submitting}
-                className="registerCreateButton group mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 via-purple-500 to-cyan-500 px-5 py-3.5 text-sm font-bold tracking-wide text-white shadow-[0_0_30px_rgba(99,102,241,0.3)] transition-all duration-200 hover:scale-[1.02] hover:shadow-[0_0_50px_rgba(99,102,241,0.5)] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-70"
+                className="authActionButton registerCreateButton group mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 via-purple-500 to-cyan-500 px-5 py-3.5 text-sm font-bold tracking-wide text-white shadow-[0_0_30px_rgba(99,102,241,0.3)] transition-all duration-200 hover:scale-[1.02] hover:shadow-[0_0_50px_rgba(99,102,241,0.5)] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {submitting ? (
                   <>
@@ -526,7 +522,7 @@ function RegistrationPausedCard({ form, isValid, sent, submitting, onChange, onS
               placeholder="Tell the admin which course, group, or exam access you need."
               rows={4}
               required
-              className="w-full resize-y rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 pl-11 text-sm leading-6 text-white outline-none transition-all duration-200 placeholder:text-gray-600 focus:border-indigo-500/40 focus:ring-2 focus:ring-indigo-500/60 focus:shadow-[0_0_20px_rgba(99,102,241,0.12)]"
+              className="authInputPro w-full resize-y rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 pl-11 text-sm leading-6 text-white outline-none transition-all duration-200 placeholder:text-gray-600 focus:border-indigo-500/40 focus:ring-2 focus:ring-indigo-500/60 focus:shadow-[0_0_20px_rgba(99,102,241,0.12)]"
             />
           </span>
           <span className="ml-1 mt-1.5 block text-[11px] text-gray-600">Minimum 10 characters</span>
@@ -535,7 +531,7 @@ function RegistrationPausedCard({ form, isValid, sent, submitting, onChange, onS
         <button
           type="submit"
           disabled={!isValid || submitting}
-          className="registerCreateButton group mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 via-indigo-500 to-purple-500 px-5 py-3.5 text-sm font-bold tracking-wide text-white shadow-[0_0_30px_rgba(99,102,241,0.3)] transition-all duration-200 hover:scale-[1.02] hover:shadow-[0_0_50px_rgba(99,102,241,0.5)] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-70"
+          className="authActionButton registerCreateButton group mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 via-indigo-500 to-purple-500 px-5 py-3.5 text-sm font-bold tracking-wide text-white shadow-[0_0_30px_rgba(99,102,241,0.3)] transition-all duration-200 hover:scale-[1.02] hover:shadow-[0_0_50px_rgba(99,102,241,0.5)] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-70"
         >
           {submitting ? (
             <>
@@ -597,7 +593,7 @@ function RegisterInput({
           required={required}
           {...props}
           className={cn(
-            "w-full rounded-xl border bg-white/[0.04] px-4 py-3 pl-11 text-sm text-white outline-none transition-all duration-200 placeholder:text-gray-600 focus:shadow-[0_0_20px_rgba(99,102,241,0.12)]",
+            "authInputPro w-full rounded-xl border bg-white/[0.04] px-4 py-3 pl-11 text-sm text-white outline-none transition-all duration-200 placeholder:text-gray-600 focus:shadow-[0_0_20px_rgba(99,102,241,0.12)]",
             error
               ? "border-red-500/50 focus:border-red-500/40 focus:ring-2 focus:ring-red-500/40"
               : "border-white/[0.08] focus:border-indigo-500/40 focus:ring-2 focus:ring-indigo-500/60"

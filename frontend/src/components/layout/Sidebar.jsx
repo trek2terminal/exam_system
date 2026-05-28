@@ -11,7 +11,7 @@ export function Sidebar({ auth, platformName, platformLogoUrl, mobile = false, o
   return (
     <aside
       className={cn(
-        "flex h-full flex-col overflow-y-auto border-r border-white/10 bg-background-card/95 text-text-primary shadow-lg backdrop-blur-2xl dark:bg-[#0b1020]/95",
+        "flex h-full flex-col overflow-y-auto border-r border-border/70 bg-background-card/95 text-text-primary shadow-lg backdrop-blur-2xl dark:border-white/10 dark:bg-[#0b1020]/95",
         mobile ? "w-72 p-5" : "fixed inset-y-0 left-0 z-30 hidden w-16 p-3 md:flex lg:w-56 lg:p-4"
       )}
     >
@@ -30,7 +30,7 @@ export function Sidebar({ auth, platformName, platformLogoUrl, mobile = false, o
         </div>
       </div>
 
-      <nav className="grid gap-1.5 border-b border-white/10 pb-4">
+      <nav className="grid gap-1.5 border-b border-border/70 pb-4 dark:border-white/10">
         {items.map(item => {
           const Icon = item.icon;
           const active = location.pathname === item.to || (item.to !== `/${role}` && location.pathname.startsWith(`${item.to}/`));
@@ -38,10 +38,10 @@ export function Sidebar({ auth, platformName, platformLogoUrl, mobile = false, o
             <Link
               key={item.to}
               className={cn(
-                "flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm font-semibold transition-all duration-200",
+                "navItem flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm font-semibold transition-all duration-200",
                 active
-                  ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-950/25"
-                  : "text-gray-400 hover:bg-white/5 hover:text-white hover:translate-x-0.5",
+                  ? "navActiveItem text-white"
+                  : "text-text-secondary hover:bg-background-elevated hover:text-text-primary hover:translate-x-0.5 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-white",
                 !mobile && "md:justify-center lg:justify-start"
               )}
               to={item.to}
@@ -56,7 +56,7 @@ export function Sidebar({ auth, platformName, platformLogoUrl, mobile = false, o
         })}
       </nav>
 
-      <div className="mt-auto border-t border-white/10 pt-4">
+      <div className="mt-auto border-t border-border/70 pt-4 dark:border-white/10">
         <div className={cn("mb-3 flex min-h-11 items-center gap-3", !mobile && "md:justify-center lg:justify-start")}>
           <Avatar name={userName(auth)} src={auth?.profile_picture} size="md" />
           <div className={cn("min-w-0 flex-1 items-center gap-2", !mobile && "hidden lg:flex", mobile && "flex")}>

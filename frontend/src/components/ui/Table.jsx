@@ -107,7 +107,7 @@ export function Table({
                 <td colSpan={totalColumns}><SkeletonTableRows rows={rowsPerPage} /></td>
               </tr>
             ) : visibleRows.map((row, index) => (
-              <tr className="group bg-background-card/70 transition hover:bg-background-surface/90" key={row[rowKey] || index} role="row">
+              <tr className="group animate-fade-in-up bg-background-card/70 transition hover:bg-background-surface/90" key={row[rowKey] || index} role="row" style={{ animationDelay: `${Math.min(index, 8) * 25}ms` }}>
                 {columns.map(column => (
                   <td className={cn("px-3 py-2.5 text-text-primary", column.cellClassName)} key={column.key} role="cell">
                     {column.render ? column.render(row) : row[column.key]}

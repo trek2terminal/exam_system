@@ -23,7 +23,7 @@ export function SkeletonCard({ index = 0 }) {
 
 export function SkeletonTableRows({ rows = 5 }) {
   return Array.from({ length: rows }).map((_, index) => (
-    <div className="grid grid-cols-4 gap-4 border-t border-border px-4 py-3" key={index}>
+    <div className="grid animate-fade-in-up grid-cols-4 gap-4 border-t border-border px-4 py-3" key={index} style={{ animationDelay: `${index * 35}ms` }}>
       <Skeleton className="h-4" />
       <Skeleton className="h-4" />
       <Skeleton className="h-4" />

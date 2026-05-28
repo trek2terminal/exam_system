@@ -5,10 +5,12 @@ import App from "./App.jsx";
 import { ToastViewport } from "./components/ui";
 import "./styles.css";
 
+const DEFAULT_THEME = "dark";
+
 function applyInitialTheme() {
   try {
     const stored = window.localStorage.getItem("examTheme");
-    const theme = stored === "light" || stored === "dark" ? stored : "dark";
+    const theme = stored === "light" || stored === "dark" ? stored : DEFAULT_THEME;
     const fontSize = window.localStorage.getItem("examFontSize") || "medium";
     const highContrast = window.localStorage.getItem("examHighContrast") === "true";
     document.documentElement.classList.toggle("dark", theme === "dark");

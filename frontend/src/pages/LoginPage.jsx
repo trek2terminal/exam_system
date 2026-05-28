@@ -90,12 +90,8 @@ export default function LoginPage({ settings }) {
   return (
     <div className="loginCyberScene min-h-screen bg-[#0d0f1a] text-white">
       <div className="flex min-h-screen flex-col lg:flex-row">
-        <aside className="loginCyberPanel relative hidden flex-1 overflow-hidden p-10 text-white lg:flex lg:flex-col lg:justify-between xl:p-16">
-          <div className="pointer-events-none absolute inset-0">
-            <div className="absolute -left-28 top-20 h-80 w-80 rounded-full bg-indigo-500/20 blur-[120px]" />
-            <div className="absolute bottom-10 right-0 h-96 w-96 rounded-full bg-cyan-400/15 blur-[130px]" />
-            <div className="absolute right-1/3 top-1/3 h-64 w-64 rounded-full bg-purple-500/20 blur-[120px]" />
-          </div>
+        <aside className="authPanelPro loginCyberPanel relative hidden flex-1 overflow-hidden p-10 text-white lg:flex lg:flex-col lg:justify-between xl:p-16">
+          <div className="authSignalMesh" />
 
           <div className="relative z-10 max-w-2xl">
             <div className="mb-10 inline-flex items-center gap-4">
@@ -157,7 +153,7 @@ export default function LoginPage({ settings }) {
         </aside>
 
         <main className="flex flex-1 items-center justify-center bg-[#0d0f1a] px-4 py-10 sm:px-6 lg:px-10">
-          <section className="w-full max-w-md rounded-3xl border border-white/10 border-t-indigo-500/40 bg-white/5 p-6 shadow-[0_0_60px_rgba(99,102,241,0.15)] backdrop-blur-xl sm:p-10">
+          <section className="authFormPanelPro w-full max-w-md rounded-3xl border border-white/10 border-t-indigo-500/40 bg-white/5 p-6 shadow-[0_0_60px_rgba(99,102,241,0.15)] backdrop-blur-xl sm:p-10">
             <div className="mb-8 text-center">
               <div className="mx-auto mb-5 grid h-14 w-14 place-items-center rounded-2xl border border-indigo-300/30 bg-indigo-500/10 shadow-[0_0_28px_rgba(99,102,241,0.35)] lg:hidden">
                 <Shield className="h-7 w-7 text-cyan-200" />
@@ -171,7 +167,7 @@ export default function LoginPage({ settings }) {
               <p className="text-sm text-gray-400">Sign in to continue to your secure workspace</p>
             </div>
 
-            <div className="mb-8 flex gap-1 rounded-2xl border border-white/10 bg-white/5 p-1" role="tablist" aria-label="Login role">
+            <div className="authRoleTabs mb-8 flex gap-1 rounded-2xl border border-white/10 bg-white/5 p-1" role="tablist" aria-label="Login role">
               {["student", "teacher"].map(item => (
                 <button
                   key={item}
@@ -204,7 +200,7 @@ export default function LoginPage({ settings }) {
                     onChange={event => setIdentifier(event.target.value)}
                     autoComplete="username"
                     required
-                    className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 pl-10 text-white outline-none transition-all placeholder:text-gray-600 focus:border-transparent focus:ring-2 focus:ring-indigo-500"
+                    className="authInputPro w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 pl-10 text-white outline-none transition-all placeholder:text-gray-600 focus:border-transparent focus:ring-2 focus:ring-indigo-500"
                   />
                 </span>
               </label>
@@ -221,7 +217,7 @@ export default function LoginPage({ settings }) {
                     onChange={event => setPassword(event.target.value)}
                     autoComplete="current-password"
                     required
-                    className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 pl-10 pr-12 text-white outline-none transition-all placeholder:text-gray-600 focus:border-transparent focus:ring-2 focus:ring-indigo-500"
+                    className="authInputPro w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 pl-10 pr-12 text-white outline-none transition-all placeholder:text-gray-600 focus:border-transparent focus:ring-2 focus:ring-indigo-500"
                   />
                   <button
                     type="button"
@@ -237,7 +233,7 @@ export default function LoginPage({ settings }) {
               <button
                 type="submit"
                 disabled={submitting}
-                className="group inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 via-purple-500 to-cyan-500 px-5 py-3.5 text-base font-bold text-white shadow-[0_0_30px_rgba(99,102,241,0.4)] transition-all duration-200 hover:scale-[1.02] hover:shadow-[0_0_45px_rgba(99,102,241,0.6)] disabled:pointer-events-none disabled:opacity-70"
+                className="authActionButton group inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 via-purple-500 to-cyan-500 px-5 py-3.5 text-base font-bold text-white shadow-[0_0_30px_rgba(99,102,241,0.4)] transition-all duration-200 hover:scale-[1.02] hover:shadow-[0_0_45px_rgba(99,102,241,0.6)] disabled:pointer-events-none disabled:opacity-70"
               >
                 {submitting ? (
                   <>

@@ -129,7 +129,7 @@ export function Select({
   };
 
   return (
-    <div className={cn("grid min-w-0 gap-2 text-sm font-medium text-text-secondary", className)} ref={ref}>
+    <div className={cn("uiInputFrame grid min-w-0 gap-2 text-sm font-medium text-text-secondary", className)} ref={ref}>
       {label && (
         <label htmlFor={id}>
           {label}
@@ -151,7 +151,7 @@ export function Select({
         onClick={() => setOpen(current => !current)}
         onKeyDown={onKeyDown}
         className={cn(
-          "flex min-h-10 w-full min-w-0 items-center justify-between gap-3 rounded-md border bg-background-card/90 px-3 text-left text-sm text-text-primary shadow-sm transition duration-150 ease-out",
+          "uiInputControl flex min-h-10 w-full min-w-0 items-center justify-between gap-3 rounded-md border bg-background-card/90 px-3 text-left text-sm text-text-primary shadow-sm transition duration-150 ease-out",
           "focus:outline-none focus:ring-2 focus:ring-brand-primary/20 disabled:cursor-not-allowed disabled:opacity-60",
           error ? "border-danger" : "border-border"
         )}
