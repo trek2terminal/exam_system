@@ -473,6 +473,175 @@ html.live-data-updated body::after {
   background-image: linear-gradient(90deg, rgb(var(--color-background-surface)) 0%, rgb(var(--color-background-elevated)) 50%, rgb(var(--color-background-surface)) 100%);
 }
 
+.statCardSurface {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.statCardSurface::before,
+.statCardSurface::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  transition: opacity 220ms ease, transform 260ms ease;
+}
+
+.statCardSurface::before {
+  inset: 0;
+  z-index: 0;
+  background: linear-gradient(135deg, transparent 0%, rgb(var(--role-accent) / 0.08) 100%);
+  opacity: 0;
+}
+
+.statCardSurface::after {
+  top: -55%;
+  bottom: -55%;
+  left: -42%;
+  z-index: 0;
+  width: 38%;
+  background: linear-gradient(90deg, transparent, rgb(var(--role-accent) / 0.16), transparent);
+  opacity: 0;
+  transform: translateX(-120%) rotate(14deg);
+}
+
+.statCardSurface > * {
+  position: relative;
+  z-index: 1;
+}
+
+.statCardSurface:hover::before,
+.statCardSurface:focus-visible::before {
+  opacity: 1;
+}
+
+.statCardSurface:hover::after,
+.statCardSurface:focus-visible::after {
+  opacity: 1;
+  transform: translateX(420%) rotate(14deg);
+}
+
+.workspaceLoaderShell {
+  position: relative;
+  isolation: isolate;
+}
+
+.workspaceLoaderShell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: linear-gradient(120deg, rgb(var(--role-accent) / 0.12), transparent 42%, rgb(var(--color-info) / 0.07));
+  pointer-events: none;
+}
+
+.workspaceLoaderShell > * {
+  position: relative;
+  z-index: 1;
+}
+
+.workspaceLoaderMark {
+  position: relative;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid rgb(var(--role-accent) / 0.28);
+  border-radius: 8px;
+  background: rgb(var(--role-accent) / 0.08);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.04);
+}
+
+.workspaceLoaderMark::before {
+  content: "";
+  position: absolute;
+  inset: 7px;
+  border: 2px solid rgb(var(--role-accent) / 0.24);
+  border-top-color: rgb(var(--role-accent));
+  border-radius: 9999px;
+  animation: workspaceLoaderSpin 900ms linear infinite;
+}
+
+.workspaceLoaderMark span {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: rgb(var(--role-accent));
+  box-shadow: 0 0 18px rgb(var(--role-accent) / 0.55);
+}
+
+.workspaceLoaderRail {
+  height: 3px;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: rgb(var(--color-border) / 0.52);
+}
+
+.workspaceLoaderRail span {
+  display: block;
+  width: 44%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, transparent, rgb(var(--role-accent) / 0.9), rgb(var(--color-success) / 0.72), transparent);
+  animation: workspaceLoaderRail 1300ms cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+.workspaceSkeletonStat {
+  position: relative;
+  overflow: hidden;
+}
+
+.workspaceSkeletonStat::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgb(var(--role-accent) / 0.58), transparent);
+  animation: workspaceLoaderGlow 1500ms ease-in-out infinite;
+}
+
+@keyframes workspaceLoaderSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes workspaceLoaderRail {
+  from {
+    transform: translateX(-110%);
+  }
+  to {
+    transform: translateX(260%);
+  }
+}
+
+@keyframes workspaceLoaderGlow {
+  0%,
+  100% {
+    opacity: 0.28;
+  }
+  50% {
+    opacity: 0.88;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .statCardSurface::before,
+  .statCardSurface::after,
+  .workspaceLoaderMark::before,
+  .workspaceLoaderRail span,
+  .workspaceSkeletonStat::after {
+    animation: none;
+    transition: none;
+  }
+
+  .statCardSurface::after {
+    display: none;
+  }
+}
+
 /* tooltip always dark background */
 .tooltip-bg {
   background: rgba(17, 24, 39, 0.96);

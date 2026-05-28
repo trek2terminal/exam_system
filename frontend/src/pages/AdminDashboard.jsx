@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   AlertTriangle,
   BarChart3,
@@ -144,16 +145,17 @@ export default function AdminDashboard() {
   const hasParticipationData = participationTrend.some(item => Number(item.participants || 0) > 0);
   const trends = dashboard?.trends || stats.trends || {};
   const statCards = [
-    { icon: Users, label: "Total Users", value: stats.total_users || 0, variant: "indigo", trend: trends.total_users },
-    { icon: Users, label: "Teachers", value: stats.total_teachers || 0, variant: "info", trend: trends.total_teachers },
-    { icon: Users, label: "Students", value: stats.total_students || 0, variant: "success", trend: trends.total_students },
-    { icon: BookOpenCheck, label: "Active Exams", value: stats.active_exams || 0, variant: "purple", trend: trends.active_exams },
+    { icon: Users, label: "Total Users", value: stats.total_users || 0, variant: "indigo", trend: trends.total_users, to: "/admin/users" },
+    { icon: Users, label: "Teachers", value: stats.total_teachers || 0, variant: "info", trend: trends.total_teachers, to: "/admin/users" },
+    { icon: Users, label: "Students", value: stats.total_students || 0, variant: "success", trend: trends.total_students, to: "/admin/users" },
+    { icon: BookOpenCheck, label: "Active Exams", value: stats.active_exams || 0, variant: "purple", trend: trends.active_exams, to: "/admin/exams" },
     {
       icon: AlertTriangle,
       label: "Violations Today",
       value: stats.violations_today || 0,
       variant: "danger",
       trend: trends.violations_today,
+      to: "/admin/proctoring",
       className: Number(stats.violations_today || 0) > 0 ? "border-danger/35 bg-danger/5" : ""
     },
     {
@@ -162,6 +164,7 @@ export default function AdminDashboard() {
       value: stats.pending_reviews || 0,
       variant: "warning",
       trend: trends.pending_reviews,
+      to: "/admin/reports",
       className: Number(stats.pending_reviews || 0) > 0 ? "border-warning/35 bg-warning/5" : ""
     }
   ];
@@ -185,17 +188,14 @@ export default function AdminDashboard() {
             onToggleLive={() => setLivePaused(current => !current)}
             onRefresh={() => loadDashboard(true, { force: true })}
           />
-          <Button variant="primary" size="sm" as="a" href="/react/admin/users" className="min-h-10 px-4">
+          <Button variant="primary" size="sm" as={Link} to="/admin/users" className="min-h-10 px-4">
             <Plus size={16} /> Create Teacher
           </Button>
-          <Button variant="info" size="sm" as="a" href="/react/admin/users" className="min-h-10 px-4">
+          <Button variant="info" size="sm" as={Link} to="/admin/users" className="min-h-10 px-4">
             <Upload size={16} /> Import Students
           </Button>
-          <Button variant="warning" size="sm" as="a" href="/react/admin/proctoring" className="min-h-10 px-4">
+          <Button variant="warning" size="sm" as={Link} to="/admin/proctoring" className="min-h-10 px-4">
             <AlertTriangle size={16} /> View Violations
-          </Button>
-          <Button variant="secondary" size="sm" as="a" href="/react/admin/settings" className="min-h-10 border-slate-300 bg-slate-600 px-4 text-white hover:bg-slate-700 dark:border-slate-600 dark:bg-slate-700 dark:hover:bg-slate-600">
-            <DatabaseBackup size={16} /> Backup Database
           </Button>
         </div>
       </div>

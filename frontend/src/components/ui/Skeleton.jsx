@@ -11,9 +11,9 @@ export function Skeleton({ className }) {
   );
 }
 
-export function SkeletonCard() {
+export function SkeletonCard({ index = 0 }) {
   return (
-    <div className="rounded-card border border-border bg-background-card p-5 shadow-card">
+    <div className="animate-fade-in-up rounded-card border border-border bg-background-card p-5 shadow-card" style={{ animationDelay: `${index * 60}ms` }}>
       <Skeleton className="mb-4 h-5 w-2/3" />
       <Skeleton className="mb-3 h-4 w-full" />
       <Skeleton className="h-4 w-5/6" />
@@ -32,9 +32,9 @@ export function SkeletonTableRows({ rows = 5 }) {
   ));
 }
 
-export function SkeletonStat() {
+export function SkeletonStat({ index = 0 }) {
   return (
-    <div className="rounded-card border border-border bg-background-card p-5 shadow-card">
+    <div className="workspaceSkeletonStat animate-fade-in-up rounded-card border border-border bg-background-card p-5 shadow-card" style={{ animationDelay: `${index * 60}ms` }}>
       <Skeleton className="mb-5 h-10 w-10 rounded-lg" />
       <Skeleton className="mb-3 h-4 w-1/2" />
       <Skeleton className="h-8 w-1/3" />

@@ -1,6 +1,8 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import {
+  AlertTriangle,
+  BarChart3,
   Bell,
   BookOpenCheck,
   CalendarClock,
@@ -284,6 +286,12 @@ function StudentDashboard({ dashboard }) {
       return matchesFilter && matchesSearch;
     });
   }, [examFilter, examSearch, exams]);
+  const showExamFilter = value => {
+    setExamFilter(value);
+    window.requestAnimationFrame?.(() => {
+      document.getElementById("student-exams-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -342,10 +350,10 @@ function StudentDashboard({ dashboard }) {
 
       {/* Stats Row */}
       <section className="grid grid-cols-2 gap-4 min-[900px]:grid-cols-4">
-        <StatCard icon={BookOpenCheck} label="Assigned" value={stats.assigned || 0} variant="default" />
-        <StatCard icon={Play} label="Available" value={stats.available || 0} variant="default" />
-        <StatCard icon={Clock3} label="Active" value={stats.in_progress || 0} variant="default" />
-        <StatCard icon={Trophy} label="Results" value={stats.published_results || 0} variant="default" />
+        <StatCard icon={BookOpenCheck} label="Assigned" value={stats.assigned || 0} variant="default" onClick={() => showExamFilter("all")} />
+        <StatCard icon={Play} label="Available" value={stats.available || 0} variant="success" onClick={() => showExamFilter("available")} />
+        <StatCard icon={Clock3} label="Active" value={stats.in_progress || 0} variant="info" onClick={() => showExamFilter("in_progress")} />
+        <StatCard icon={Trophy} label="Results" value={stats.published_results || 0} variant="warning" to={dashboard?.links?.results || "/student/results"} />
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
@@ -362,7 +370,7 @@ function StudentDashboard({ dashboard }) {
       />
 
       {/* Exams Section */}
-      <div>
+      <div id="student-exams-section">
         <div className="mb-5 flex items-center justify-between gap-4">
           <div>
             <h2 className="text-2xl font-bold text-text-primary">Assigned exams</h2>
@@ -1056,10 +1064,10 @@ function TeacherDashboard({ dashboard }) {
       </div>
 
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard icon={BookOpenCheck} label="Total Exams" value={stats.total} />
-        <StatCard icon={CheckCircle2} label="Published Exams" value={stats.published} />
-        <StatCard icon={FileText} label="Pending Reviews" value={stats.pending} />
-        <StatCard icon={Users} label="Students Enrolled" value={stats.enrolled} />
+        <StatCard icon={BookOpenCheck} label="Total Exams" value={stats.total} variant="info" to="/teacher/exams" />
+        <StatCard icon={CheckCircle2} label="Published Exams" value={stats.published} variant="success" to="/teacher/exams" />
+        <StatCard icon={FileText} label="Pending Reviews" value={stats.pending} variant="warning" to="/teacher/reports" />
+        <StatCard icon={Users} label="Students Enrolled" value={stats.enrolled} variant="purple" to="/teacher/reports" />
       </section>
 
       <DashboardSchedulePanel
@@ -1174,16 +1182,16 @@ function TeacherExamCard({ exam, index, onStatusChange }) {
 
 function AdminOverview({ dashboard }) {
   const stats = dashboard?.stats || {};
-  const labels = {
-    total_users: "Total Users",
-    total_students: "Students",
-    total_teachers: "Teachers",
-    total_exams: "Total Exams",
-    active_exams: "Active Exams",
-    submitted_sessions: "Submitted Sessions",
-    published_results: "Published Results",
-    violations_today: "Violations Today",
-    pending_reviews: "Pending Reviews"
+  const cards = {
+    total_users: { icon: Users, label: "Total Users", variant: "indigo", to: "/admin/users" },
+    total_students: { icon: Users, label: "Students", variant: "success", to: "/admin/users" },
+    total_teachers: { icon: Users, label: "Teachers", variant: "info", to: "/admin/users" },
+    total_exams: { icon: BookOpenCheck, label: "Total Exams", variant: "purple", to: "/admin/exams" },
+    active_exams: { icon: CheckCircle2, label: "Active Exams", variant: "success", to: "/admin/exams" },
+    submitted_sessions: { icon: FileText, label: "Submitted Sessions", variant: "info", to: "/admin/reports" },
+    published_results: { icon: Trophy, label: "Published Results", variant: "warning", to: "/admin/reports" },
+    violations_today: { icon: AlertTriangle, label: "Violations Today", variant: "danger", to: "/admin/proctoring" },
+    pending_reviews: { icon: BarChart3, label: "Pending Reviews", variant: "warning", to: "/admin/reports" }
   };
   return (
     <div className="cardList">
@@ -1195,12 +1203,10 @@ function AdminOverview({ dashboard }) {
         <Button variant="primary" size="sm" as={Link} to="/admin/proctoring"><Radio size={18} /> Live proctoring</Button>
       </div>
       <section className="statsGrid">
-        {Object.entries(stats).map(([key, value]) => (
-          <Card key={key} className="statCard">
-            <span>{labels[key] || key.replaceAll("_", " ")}</span>
-            <strong>{Number(value || 0).toLocaleString()}</strong>
-          </Card>
-        ))}
+        {Object.entries(stats).map(([key, value]) => {
+          const card = cards[key] || { icon: BarChart3, label: key.replaceAll("_", " "), variant: "default", to: "/admin/reports" };
+          return <StatCard key={key} {...card} value={value} />;
+        })}
       </section>
     </div>
   );

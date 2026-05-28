@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowDownRight, ArrowUpRight } from "lucide-react";
+import { Link } from "react-router-dom";
+import { ArrowDownRight, ArrowUpRight, ChevronRight } from "lucide-react";
 import { Card } from "./Card";
 import { cn } from "./utils";
 
@@ -13,7 +14,19 @@ const iconTones = {
   danger: "bg-danger/10 text-danger"
 };
 
-export function StatCard({ icon: Icon, label, value = 0, trend, variant = "default", className }) {
+export function StatCard({
+  icon: Icon,
+  label,
+  value = 0,
+  trend,
+  variant = "default",
+  className,
+  to,
+  href,
+  onClick,
+  ariaLabel,
+  style
+}) {
   const [displayValue, setDisplayValue] = useState(0);
   const previousValueRef = useRef(0);
   const numericValue = Number(value || 0);
@@ -43,15 +56,23 @@ export function StatCard({ icon: Icon, label, value = 0, trend, variant = "defau
 
   const hasTrend = trend != null && trend !== "";
   const trendUp = Number(trend || 0) >= 0;
+  const clickable = Boolean(to || href || onClick);
+  const Component = to ? Link : href ? "a" : onClick ? "button" : "section";
+  const navigationProps = to ? { to } : href ? { href } : {};
 
   return (
     <Card
-      interactive
+      as={Component}
+      interactive={clickable}
+      onClick={onClick}
+      aria-label={ariaLabel || (clickable ? `Open ${label}` : undefined)}
+      {...navigationProps}
       className={cn(
-        "grid gap-3 p-4 animate-fade-in-up hover:border-brand-primary/35 hover:shadow-elevated",
+        "statCardSurface group grid min-h-[10.25rem] gap-3 p-4 animate-fade-in-up text-left no-underline hover:border-brand-primary/35 hover:shadow-elevated",
+        clickable && "cursor-pointer active:scale-[0.99]",
         className
       )}
-      style={{ animationDelay: "var(--stagger-delay, 0ms)" }}
+      style={{ animationDelay: "var(--stagger-delay, 0ms)", ...style }}
     >
       <div className="flex items-start justify-between gap-4">
         <span className={cn(
@@ -64,6 +85,11 @@ export function StatCard({ icon: Icon, label, value = 0, trend, variant = "defau
           <span className={cn("inline-flex items-center gap-1 rounded-pill px-2 py-1 text-xs font-semibold", trendUp ? "bg-success/10 text-success" : "bg-danger/10 text-danger")}>
             {trendUp ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
             {Math.abs(Number(trend))}%
+          </span>
+        )}
+        {!hasTrend && clickable && (
+          <span className="statCardCue grid h-8 w-8 place-items-center rounded-full border border-border/80 bg-background-base text-text-muted transition group-hover:border-brand-primary/30 group-hover:text-brand-primary" aria-hidden="true">
+            <ChevronRight size={16} />
           </span>
         )}
       </div>

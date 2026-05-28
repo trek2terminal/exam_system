@@ -79,6 +79,12 @@ export default function AdminExams() {
     closed: stats.closed ?? exams.filter(exam => exam.status === "closed").length,
     draft: stats.draft ?? exams.filter(exam => exam.status === "draft").length
   };
+  const showStatus = status => {
+    setStatusFilter(status);
+    window.requestAnimationFrame?.(() => {
+      document.getElementById("admin-exams-list")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
 
   const runAction = async () => {
     if (!pendingAction) return;
@@ -158,10 +164,10 @@ export default function AdminExams() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">
-        <StatCard icon={BookOpenCheck} label="Total Exams" value={derivedStats.total} />
-        <StatCard icon={CheckCircle2} label="Published" value={derivedStats.published} />
-        <StatCard icon={XCircle} label="Closed" value={derivedStats.closed} variant="danger" />
-        <StatCard icon={FileText} label="Draft" value={derivedStats.draft} />
+        <StatCard icon={BookOpenCheck} label="Total Exams" value={derivedStats.total} variant="purple" onClick={() => showStatus("all")} />
+        <StatCard icon={CheckCircle2} label="Published" value={derivedStats.published} variant="success" onClick={() => showStatus("active")} />
+        <StatCard icon={XCircle} label="Closed" value={derivedStats.closed} variant="danger" onClick={() => showStatus("closed")} />
+        <StatCard icon={FileText} label="Draft" value={derivedStats.draft} variant="warning" onClick={() => showStatus("draft")} />
       </div>
 
       <Card className="p-4">
@@ -192,61 +198,63 @@ export default function AdminExams() {
         </div>
       </Card>
 
-      {loading ? (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {[0, 1, 2, 3, 4, 5].map(item => <SkeletonCard key={item} />)}
-        </div>
-      ) : filteredExams.length > 0 ? (
-        <>
-          <div className="grid gap-4 md:hidden">
-            {filteredExams.map((exam, index) => (
-              <ExamMobileCard
-                key={exam.id}
-                exam={exam}
-                index={index}
-                onAction={setPendingAction}
+      <div id="admin-exams-list">
+        {loading ? (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {[0, 1, 2, 3, 4, 5].map(item => <SkeletonCard key={item} index={item} />)}
+          </div>
+        ) : filteredExams.length > 0 ? (
+          <>
+            <div className="grid gap-4 md:hidden">
+              {filteredExams.map((exam, index) => (
+                <ExamMobileCard
+                  key={exam.id}
+                  exam={exam}
+                  index={index}
+                  onAction={setPendingAction}
+                />
+              ))}
+            </div>
+            <div className="hidden md:block">
+              <Table
+                columns={columns}
+                data={filteredExams}
+                rowsPerPageOptions={[10, 20, 50]}
+                renderRowActions={row => (
+                  <>
+                    <Button as="a" href={`/react/admin/reports?exam=${row.id}`} variant="ghost" size="sm">
+                      <Eye size={16} /> View
+                    </Button>
+                    {row.status === "draft" && (
+                      <Button variant="success" size="sm" onClick={() => setPendingAction({ type: "activate", exam: row })}>
+                        <CheckCircle2 size={16} /> Publish
+                      </Button>
+                    )}
+                    {row.status === "active" && (
+                      <Button variant="warning" size="sm" onClick={() => setPendingAction({ type: "deactivate", exam: row })}>
+                        <PencilLine size={16} /> Deactivate
+                      </Button>
+                    )}
+                    {row.status === "active" && (
+                      <Button variant="danger" size="sm" onClick={() => setPendingAction({ type: "close", exam: row })}>
+                        <XCircle size={16} /> End
+                      </Button>
+                    )}
+                    <Button as="a" href={`/api/admin/exams/${row.id}/report.pdf`} variant="secondary" size="sm">
+                      <FileText size={16} /> PDF
+                    </Button>
+                    <Button variant="danger" size="sm" onClick={() => setPendingAction({ type: "delete", exam: row })}>
+                      <Trash2 size={16} /> Delete
+                    </Button>
+                  </>
+                )}
               />
-            ))}
-          </div>
-          <div className="hidden md:block">
-            <Table
-              columns={columns}
-              data={filteredExams}
-              rowsPerPageOptions={[10, 20, 50]}
-              renderRowActions={row => (
-                <>
-                  <Button as="a" href={`/react/admin/reports?exam=${row.id}`} variant="ghost" size="sm">
-                    <Eye size={16} /> View
-                  </Button>
-                  {row.status === "draft" && (
-                    <Button variant="success" size="sm" onClick={() => setPendingAction({ type: "activate", exam: row })}>
-                      <CheckCircle2 size={16} /> Publish
-                    </Button>
-                  )}
-                  {row.status === "active" && (
-                    <Button variant="warning" size="sm" onClick={() => setPendingAction({ type: "deactivate", exam: row })}>
-                      <PencilLine size={16} /> Deactivate
-                    </Button>
-                  )}
-                  {row.status === "active" && (
-                    <Button variant="danger" size="sm" onClick={() => setPendingAction({ type: "close", exam: row })}>
-                      <XCircle size={16} /> End
-                    </Button>
-                  )}
-                  <Button as="a" href={`/api/admin/exams/${row.id}/report.pdf`} variant="secondary" size="sm">
-                    <FileText size={16} /> PDF
-                  </Button>
-                  <Button variant="danger" size="sm" onClick={() => setPendingAction({ type: "delete", exam: row })}>
-                    <Trash2 size={16} /> Delete
-                  </Button>
-                </>
-              )}
-            />
-          </div>
-        </>
-      ) : (
-        <EmptyState icon={Search} heading="No exams found" description="Try another search or status filter." />
-      )}
+            </div>
+          </>
+        ) : (
+          <EmptyState icon={Search} heading="No exams found" description="Try another search or status filter." />
+        )}
+      </div>
 
       <ConfirmationDialog
         open={!!pendingAction}
