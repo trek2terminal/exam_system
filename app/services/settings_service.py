@@ -2,7 +2,7 @@ import json
 import random
 from datetime import datetime
 
-from flask import current_app
+from flask import current_app, g, has_request_context
 
 from app.models.database import db
 from app.models.settings_model import PlatformSettings
@@ -67,8 +67,13 @@ class SettingsService:
 
     @staticmethod
     def get_settings():
+        if has_request_context() and hasattr(g, "_platform_settings"):
+            return g._platform_settings
+
         settings = PlatformSettings.query.order_by(PlatformSettings.id.asc()).first()
         if settings:
+            if has_request_context():
+                g._platform_settings = settings
             return settings
 
         settings = PlatformSettings(
@@ -91,6 +96,8 @@ class SettingsService:
         )
         db.session.add(settings)
         db.session.commit()
+        if has_request_context():
+            g._platform_settings = settings
         return settings
 
     @staticmethod
@@ -167,6 +174,8 @@ class SettingsService:
         settings.updated_at = datetime.utcnow()
 
         db.session.commit()
+        if has_request_context():
+            g._platform_settings = settings
         return settings
 
     @staticmethod

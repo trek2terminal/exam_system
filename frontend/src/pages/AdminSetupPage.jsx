@@ -85,7 +85,7 @@ export default function AdminSetupPage() {
 
         {checking ? (
           <div className="grid min-h-40 place-items-center">
-            <span className="h-5 w-5 rounded-full border-2 border-brand-primary/25 border-t-brand-primary animate-spin" aria-label="Checking setup status" />
+            <span className="authStatusSpinner" aria-label="Checking setup status" />
           </div>
         ) : (
           <form className="grid gap-4" onSubmit={handleSubmit}>

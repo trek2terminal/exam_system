@@ -20,6 +20,9 @@ export function PageLoading({ title = "Loading workspace...", variant = "dashboa
               <Skeleton className="h-4 w-[min(34rem,100%)]" />
             </div>
           </div>
+          <div className="workspaceLoaderBars" aria-hidden="true">
+            {[0, 1, 2, 3, 4].map(item => <span key={item} style={{ animationDelay: `${item * 90}ms` }} />)}
+          </div>
           <div className="flex gap-2">
             <Skeleton className="h-10 w-28" />
             <Skeleton className="h-10 w-24" />

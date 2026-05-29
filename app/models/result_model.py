@@ -4,6 +4,10 @@ from app.models.database import db
 
 class Result(db.Model):
     __tablename__ = "results"
+    __table_args__ = (
+        db.Index('ix_results_published', 'published'),
+        db.Index('ix_results_published_at', 'published_at'),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
 

@@ -5,6 +5,13 @@ from app.models.database import db
 class AuditLog(db.Model):
     """Tracks all administrative and important system actions"""
     __tablename__ = "audit_logs"
+    __table_args__ = (
+        db.Index('ix_audit_logs_created', 'created_at'),
+        db.Index('ix_audit_logs_user', 'user_id'),
+        db.Index('ix_audit_logs_resource', 'resource_type', 'resource_id'),
+        db.Index('ix_audit_logs_user_action_created', 'user_id', 'action', 'created_at'),
+        db.Index('ix_audit_logs_status_created', 'status', 'created_at'),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
 
@@ -87,4 +94,3 @@ class ViolationLog(db.Model):
         db.session.add(self)
         db.session.commit()
         return self
-

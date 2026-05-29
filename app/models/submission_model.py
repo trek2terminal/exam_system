@@ -16,6 +16,12 @@ def generate_session_token():
 
 class StudentSession(db.Model):
     __tablename__ = "student_sessions"
+    __table_args__ = (
+        db.Index('ix_student_sessions_exam_rollno', 'exam_set_id', 'roll_no'),
+        db.Index('ix_student_sessions_status', 'status'),
+        db.Index('ix_student_sessions_exam_status_created', 'exam_set_id', 'status', 'created_at'),
+        db.Index('ix_student_sessions_created_at', 'created_at'),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
 
@@ -83,6 +89,10 @@ class StudentSession(db.Model):
 
 class Answer(db.Model):
     __tablename__ = "answers"
+    __table_args__ = (
+        db.Index('ix_answers_session_question', 'session_id', 'question_id'),
+        db.Index('ix_answers_question', 'question_id'),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
 

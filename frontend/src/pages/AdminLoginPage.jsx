@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, ArrowRight, Eye, EyeOff, Loader2, Lock, Mail, ShieldCheck, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, Eye, EyeOff, Lock, Mail, ShieldCheck, X } from "lucide-react";
 import { useAppStore } from "../store/appStore";
 import { api } from "../services/api";
 import { cn } from "../components/ui/utils";
@@ -85,38 +85,35 @@ export default function AdminLoginPage() {
   };
 
   return (
-    <main className="adminMissionScene relative flex min-h-screen items-center justify-center overflow-hidden bg-[#04050f] px-4 py-10 text-white sm:px-6">
-      <div className="authSignalMesh opacity-50" />
-      <div className="adminMissionDots pointer-events-none absolute inset-0 z-0 opacity-[0.03]" />
-      <div className="adminMissionScanline pointer-events-none absolute inset-x-0 top-0 z-0 h-24 opacity-30" />
+    <main className="adminMissionScene loginCyberScene relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-10 text-white sm:px-6">
+      <div className="authSignalMesh opacity-[0.45]" />
 
       <section
-        className="authFormPanelPro adminMissionCard relative z-10 mx-auto w-full max-w-md overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03] p-6 shadow-[0_0_80px_rgba(109,40,217,0.12)] backdrop-blur-2xl sm:p-10"
+        className="authFormPanelPro adminMissionCard relative z-10 mx-auto w-full max-w-md overflow-hidden rounded-2xl border border-white/10 bg-slate-950/55 p-6 shadow-[0_24px_70px_rgba(0,0,0,0.36)] backdrop-blur-xl sm:p-10"
         aria-labelledby="admin-login-title"
       >
-        <div className="relative mx-auto mb-6 grid h-16 w-16 place-items-center rounded-2xl border border-violet-500/30 bg-violet-500/10 text-violet-400 shadow-[0_0_35px_rgba(139,92,246,0.22)]">
-          <span className="absolute inset-0 rounded-2xl bg-violet-500/20 animate-ping" aria-hidden="true" />
+        <div className="relative mx-auto mb-6 grid h-16 w-16 place-items-center rounded-2xl border border-white/10 bg-white/[0.055] text-indigo-200">
           <ShieldCheck className="relative h-8 w-8" />
         </div>
 
         <div className="text-center">
-          <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-emerald-400/15 bg-emerald-400/5 px-2.5 py-1 font-mono text-[10px] font-bold tracking-widest text-emerald-400">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.9)]" />
-            SECURE
+          <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.045] px-3 py-1 text-xs font-semibold text-slate-300">
+            <Lock className="h-3.5 w-3.5 text-indigo-300" />
+            Administrator access
           </div>
           <h1
             id="admin-login-title"
-            className="bg-gradient-to-r from-white via-violet-200 to-white bg-clip-text text-center text-3xl font-black tracking-tight text-transparent"
+            className="text-center text-3xl font-semibold tracking-tight text-white"
           >
             Admin Portal
           </h1>
-          <p className="mt-2 inline-flex items-center justify-center gap-1.5 text-sm text-gray-500">
+          <p className="mt-2 inline-flex items-center justify-center gap-1.5 text-sm text-slate-400">
             <Lock className="h-3 w-3" />
             Secure access only
           </p>
         </div>
 
-        <div className="my-6 h-px w-full bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+        <div className="my-6 h-px w-full bg-white/10" />
 
         <form className="space-y-5" onSubmit={handleSubmit}>
           <label className={cn("block", shakeKey && "adminLoginShake")} key={`user-${shakeKey}`}>
@@ -134,8 +131,8 @@ export default function AdminLoginPage() {
                 className={cn(
                   "authInputPro w-full rounded-xl border bg-white/[0.04] px-4 py-3.5 pl-11 text-sm text-white outline-none transition-all duration-200 placeholder:text-gray-600",
                   displayedError
-                    ? "border-red-500/50 focus:border-red-500/40 focus:ring-2 focus:ring-red-500/40"
-                    : "border-white/[0.08] focus:border-violet-500/40 focus:ring-2 focus:ring-violet-500/60 focus:shadow-[0_0_20px_rgba(139,92,246,0.15)]"
+                    ? "border-red-500/50 focus:border-red-500/40 focus:ring-2 focus:ring-red-500/35"
+                    : "border-white/[0.08] focus:border-indigo-400/55 focus:ring-2 focus:ring-indigo-500/30"
                 )}
               />
             </span>
@@ -157,8 +154,8 @@ export default function AdminLoginPage() {
                 className={cn(
                   "authInputPro w-full rounded-xl border bg-white/[0.04] px-4 py-3.5 pl-11 pr-12 text-sm text-white outline-none transition-all duration-200 placeholder:text-gray-600",
                   displayedError
-                    ? "border-red-500/50 focus:border-red-500/40 focus:ring-2 focus:ring-red-500/40"
-                    : "border-white/[0.08] focus:border-violet-500/40 focus:ring-2 focus:ring-violet-500/60 focus:shadow-[0_0_20px_rgba(139,92,246,0.15)]"
+                    ? "border-red-500/50 focus:border-red-500/40 focus:ring-2 focus:ring-red-500/35"
+                    : "border-white/[0.08] focus:border-indigo-400/55 focus:ring-2 focus:ring-indigo-500/30"
                 )}
               />
               <button
@@ -173,13 +170,13 @@ export default function AdminLoginPage() {
           </label>
 
           <button
-            className="authActionButton adminMissionButton group mt-8 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 via-indigo-500 to-violet-600 px-5 py-3.5 text-sm font-bold tracking-wide text-white shadow-[0_0_30px_rgba(139,92,246,0.35)] transition-all duration-200 hover:scale-[1.02] hover:brightness-110 hover:shadow-[0_0_50px_rgba(139,92,246,0.5)] disabled:pointer-events-none disabled:opacity-70"
+            className="authActionButton adminMissionButton group mt-8 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-indigo-500 px-5 py-3.5 text-sm font-semibold tracking-wide text-white shadow-lg shadow-indigo-950/30 transition-all duration-200 hover:-translate-y-0.5 hover:bg-indigo-400 disabled:pointer-events-none disabled:opacity-70"
             type="submit"
             disabled={loading || lockoutSeconds > 0}
           >
             {loading ? (
               <>
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <span className="authButtonSpinner" aria-hidden="true" />
                 Authenticating...
               </>
             ) : (

@@ -443,6 +443,34 @@ class MigrationService:
         MigrationService._add_column_if_missing("student_sessions", "current_question_id", "INTEGER")
 
     @staticmethod
+    def _migration_performance_indexes():
+        indexes = [
+            ("answers", "ix_answers_session_question", "session_id, question_id"),
+            ("answers", "ix_answers_question", "question_id"),
+            ("student_sessions", "ix_student_sessions_exam_rollno", "exam_set_id, roll_no"),
+            ("student_sessions", "ix_student_sessions_status", "status"),
+            ("student_sessions", "ix_student_sessions_exam_status_created", "exam_set_id, status, created_at"),
+            ("student_sessions", "ix_student_sessions_created_at", "created_at"),
+            ("questions", "ix_questions_exam_number", "exam_set_id, question_number"),
+            ("questions", "ix_questions_exam_type", "exam_set_id, question_type"),
+            ("notifications", "ix_notifications_recipient_read_created", "recipient_user_id, is_read, created_at"),
+            ("notifications", "ix_notifications_session_read_created", "session_id, is_read, created_at"),
+            ("notifications", "ix_notifications_entity", "related_entity_type, related_entity_id"),
+            ("audit_logs", "ix_audit_logs_created", "created_at"),
+            ("audit_logs", "ix_audit_logs_user", "user_id"),
+            ("audit_logs", "ix_audit_logs_resource", "resource_type, resource_id"),
+            ("audit_logs", "ix_audit_logs_user_action_created", "user_id, action, created_at"),
+            ("audit_logs", "ix_audit_logs_status_created", "status, created_at"),
+            ("exam_sets", "ix_exam_sets_status", "status"),
+            ("exam_sets", "ix_exam_sets_created_by", "created_by"),
+            ("exam_sets", "ix_exam_sets_created_by_status", "created_by, status"),
+            ("results", "ix_results_published", "published"),
+            ("results", "ix_results_published_at", "published_at"),
+        ]
+        for table_name, index_name, columns_sql in indexes:
+            MigrationService._create_index_sql_if_missing(table_name, index_name, columns_sql)
+
+    @staticmethod
     def _migration_platform_settings_seed():
         if PlatformSettings.query.first():
             return
@@ -610,6 +638,11 @@ class MigrationService:
             "Track the student's current question for live proctoring",
             _migration_session_current_question_tracking.__func__,
         ),
+        (
+            "20260529_030_performance_indexes",
+            "Add indexes for high-traffic dashboards, exports, notifications, and reviews",
+            _migration_performance_indexes.__func__,
+        ),
     ]
 
     @staticmethod
@@ -763,6 +796,19 @@ class MigrationService:
             return (
                 MigrationService._has_column("student_sessions", "current_question_index")
                 and MigrationService._has_column("student_sessions", "current_question_id")
+            )
+        if version == "20260529_030_performance_indexes":
+            return all(
+                MigrationService._has_index(table_name, index_name)
+                for table_name, index_name in (
+                    ("answers", "ix_answers_session_question"),
+                    ("student_sessions", "ix_student_sessions_exam_status_created"),
+                    ("questions", "ix_questions_exam_number"),
+                    ("notifications", "ix_notifications_recipient_read_created"),
+                    ("audit_logs", "ix_audit_logs_user_action_created"),
+                    ("exam_sets", "ix_exam_sets_created_by_status"),
+                    ("results", "ix_results_published_at"),
+                )
             )
         return False
 

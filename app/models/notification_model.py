@@ -5,6 +5,11 @@ from app.models.database import db
 
 class Notification(db.Model):
     __tablename__ = "notifications"
+    __table_args__ = (
+        db.Index('ix_notifications_recipient_read_created', 'recipient_user_id', 'is_read', 'created_at'),
+        db.Index('ix_notifications_session_read_created', 'session_id', 'is_read', 'created_at'),
+        db.Index('ix_notifications_entity', 'related_entity_type', 'related_entity_id'),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     recipient_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True, index=True)

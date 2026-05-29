@@ -13,7 +13,6 @@ import {
   EyeOff,
   Hash,
   Layers,
-  Loader2,
   Lock,
   Mail,
   MessageCircle,
@@ -166,9 +165,9 @@ export default function RegisterPage({ settings }) {
   };
 
   return (
-    <div className="loginCyberScene min-h-screen bg-[#0d0f1a] text-white">
+    <div className="loginCyberScene min-h-screen text-white">
       <div className="flex min-h-screen flex-col md:flex-row">
-        <aside className="authPanelPro loginCyberPanel relative hidden flex-1 overflow-hidden p-10 text-white md:flex md:flex-col md:justify-between xl:p-16">
+        <aside className="authPanelPro loginCyberPanel relative hidden flex-1 overflow-hidden border-r border-white/10 p-10 text-white md:flex md:flex-col md:justify-between xl:p-16">
           <div className="authSignalMesh" />
 
           <div className="relative z-10 max-w-xl">
@@ -181,22 +180,21 @@ export default function RegisterPage({ settings }) {
                 />
               ) : (
                 <div className="relative grid h-14 w-14 place-items-center">
-                  <div className="absolute inset-0 rotate-45 rounded-2xl border border-indigo-300/70 bg-indigo-500/10 shadow-[0_0_36px_rgba(99,102,241,0.65)]" />
-                  <div className="absolute inset-2 rotate-45 rounded-xl bg-[#0f0c29]/70 shadow-inner shadow-cyan-300/20" />
-                  <Shield className="relative z-10 h-7 w-7 text-cyan-200 drop-shadow-[0_0_12px_rgba(103,232,249,0.75)]" />
+                  <div className="absolute inset-0 rounded-2xl border border-white/10 bg-white/[0.06]" />
+                  <Shield className="relative z-10 h-7 w-7 text-indigo-200" />
                 </div>
               )}
               <div>
                 {settingsLoading ? (
                   <div className="h-10 w-64 max-w-[36vw] animate-pulse rounded-xl bg-white/10" />
                 ) : (
-                  <h1 className="text-4xl font-black tracking-tight text-white">{panelContent.heading || platformSettings.platformName}</h1>
+                  <h1 className="text-4xl font-semibold tracking-tight text-white">{panelContent.heading || platformSettings.platformName}</h1>
                 )}
-                <div className="loginBrandUnderline mt-3 h-0.5 rounded-full bg-gradient-to-r from-cyan-300 via-indigo-300 to-purple-300" />
+                <div className="loginBrandUnderline mt-4 h-px max-w-40 rounded-full bg-white/25" />
               </div>
             </div>
 
-            <p className="mt-3 max-w-md text-base font-light italic text-cyan-300/70">
+            <p className="mt-3 max-w-md text-base font-medium text-slate-200">
               {panelContent.tagline}
             </p>
             <p className="mt-5 max-w-md text-base leading-7 text-slate-300/80">
@@ -209,10 +207,10 @@ export default function RegisterPage({ settings }) {
                 return (
                   <div
                     key={`${item.text}-${index}`}
-                    className="loginFeatureItem flex items-center gap-4 text-sm text-gray-300 transition-all duration-200 hover:translate-x-1 hover:text-white"
+                    className="loginFeatureItem flex items-center gap-4 rounded-2xl border border-white/[0.07] bg-white/[0.035] p-3 text-sm text-slate-300 transition-colors duration-200 hover:border-white/[0.14] hover:bg-white/[0.055] hover:text-white"
                     style={{ animationDelay: `${120 + index * 100}ms` }}
                   >
-                    <span className="grid h-10 w-10 place-items-center rounded-xl border border-white/10 bg-white/5 text-indigo-400 shadow-lg shadow-indigo-950/30">
+                    <span className="grid h-10 w-10 place-items-center rounded-lg border border-white/[0.08] bg-white/[0.045] text-indigo-300">
                       <Icon size={20} />
                     </span>
                     <span>{item.text}</span>
@@ -223,15 +221,15 @@ export default function RegisterPage({ settings }) {
           </div>
 
           {panelContent.securityBadgeEnabled && panelContent.securityBadgeText && (
-            <div className="relative z-10 inline-flex w-fit items-center gap-2 rounded-full border border-cyan-300/20 bg-white/5 px-4 py-2 text-xs font-semibold text-cyan-100/80 backdrop-blur-xl">
+            <div className="relative z-10 inline-flex w-fit items-center gap-2 rounded-full border border-white/10 bg-white/[0.045] px-4 py-2 text-xs font-semibold text-slate-200/80 backdrop-blur-xl">
               <Lock size={14} />
               {panelContent.securityBadgeText}
             </div>
           )}
         </aside>
 
-        <main className="flex flex-1 items-center justify-center bg-[#0d0f1a] px-4 py-6 sm:px-6 lg:px-10">
-          <section className="authFormPanelPro registerGlassCard relative mx-auto max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-white/10 bg-white/[0.04] px-5 py-6 shadow-[0_0_60px_rgba(99,102,241,0.12)] backdrop-blur-2xl sm:px-10 sm:py-8">
+        <main className="flex flex-1 items-center justify-center px-4 py-6 sm:px-6 lg:px-10">
+          <section className="authFormPanelPro registerGlassCard relative mx-auto max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-white/10 bg-slate-950/55 px-5 py-6 shadow-[0_24px_70px_rgba(0,0,0,0.36)] backdrop-blur-xl sm:px-10 sm:py-8">
             {settingsLoading ? (
               <RegistrationLoadingCard />
             ) : !registrationOpen ? (
@@ -246,16 +244,16 @@ export default function RegisterPage({ settings }) {
             ) : (
               <>
             <div className="text-center">
-              <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl border border-indigo-500/30 bg-indigo-500/10 text-indigo-400">
+              <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl border border-white/10 bg-white/[0.055] text-indigo-200">
                 <UserPlus className="h-6 w-6" />
               </div>
-              <h1 className="mt-4 text-center text-2xl font-black text-white">Create student account</h1>
-              <p className="mx-auto mt-1 max-w-xs text-center text-sm text-gray-500">
+              <h1 className="mt-4 text-center text-2xl font-semibold tracking-tight text-white">Create student account</h1>
+              <p className="mx-auto mt-1 max-w-xs text-center text-sm text-slate-400">
                 Create your account to access assigned exams and results.
               </p>
             </div>
 
-            <div className="mb-5 mt-5 h-px w-full bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+            <div className="mb-5 mt-5 h-px w-full bg-white/10" />
 
             <form className="space-y-5" onSubmit={handleSubmit}>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -372,11 +370,11 @@ export default function RegisterPage({ settings }) {
               <button
                 type="submit"
                 disabled={!isFormValid || submitting}
-                className="authActionButton registerCreateButton group mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 via-purple-500 to-cyan-500 px-5 py-3.5 text-sm font-bold tracking-wide text-white shadow-[0_0_30px_rgba(99,102,241,0.3)] transition-all duration-200 hover:scale-[1.02] hover:shadow-[0_0_50px_rgba(99,102,241,0.5)] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-70"
+                className="authActionButton registerCreateButton group mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-indigo-500 px-5 py-3.5 text-sm font-semibold tracking-wide text-white shadow-lg shadow-indigo-950/30 transition-all duration-200 hover:-translate-y-0.5 hover:bg-indigo-400 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {submitting ? (
                   <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span className="authButtonSpinner" aria-hidden="true" />
                     Creating account...
                   </>
                 ) : (
@@ -407,11 +405,11 @@ export default function RegisterPage({ settings }) {
 function RegistrationLoadingCard() {
   return (
     <div className="py-16 text-center">
-      <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl border border-indigo-500/30 bg-indigo-500/10 text-indigo-300">
-        <Loader2 className="h-6 w-6 animate-spin" />
+      <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl border border-white/10 bg-white/[0.055] text-indigo-200">
+        <span className="authStatusSpinner" aria-label="Checking registration status" />
       </div>
-      <h1 className="mt-4 text-2xl font-black text-white">Checking registration status</h1>
-      <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-gray-500">
+      <h1 className="mt-4 text-2xl font-semibold tracking-tight text-white">Checking registration status</h1>
+      <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-slate-400">
         We are preparing the right student access page for you.
       </p>
     </div>
@@ -422,16 +420,16 @@ function RegistrationPausedCard({ form, isValid, sent, submitting, onChange, onS
   return (
     <div>
       <div className="text-center">
-        <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl border border-cyan-300/20 bg-cyan-300/10 text-cyan-200 shadow-[0_0_30px_rgba(34,211,238,0.16)]">
+        <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl border border-white/10 bg-white/[0.055] text-indigo-200">
           <MessageCircle className="h-7 w-7" />
         </div>
-        <h1 className="mt-4 text-2xl font-black text-white">Registration is paused for now</h1>
-        <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-gray-400">
+        <h1 className="mt-4 text-2xl font-semibold tracking-tight text-white">Registration is paused for now</h1>
+        <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-400">
           Student self-registration is currently closed. Send your details to the admin and they can help you with access.
         </p>
       </div>
 
-      <div className="mb-5 mt-5 h-px w-full bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+      <div className="mb-5 mt-5 h-px w-full bg-white/10" />
 
       {sent && (
         <div className="mb-5 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm font-semibold text-emerald-100">
@@ -522,7 +520,7 @@ function RegistrationPausedCard({ form, isValid, sent, submitting, onChange, onS
               placeholder="Tell the admin which course, group, or exam access you need."
               rows={4}
               required
-              className="authInputPro w-full resize-y rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 pl-11 text-sm leading-6 text-white outline-none transition-all duration-200 placeholder:text-gray-600 focus:border-indigo-500/40 focus:ring-2 focus:ring-indigo-500/60 focus:shadow-[0_0_20px_rgba(99,102,241,0.12)]"
+              className="authInputPro w-full resize-y rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 pl-11 text-sm leading-6 text-white outline-none transition-all duration-200 placeholder:text-slate-600 focus:border-indigo-400/55 focus:ring-2 focus:ring-indigo-500/30"
             />
           </span>
           <span className="ml-1 mt-1.5 block text-[11px] text-gray-600">Minimum 10 characters</span>
@@ -531,11 +529,11 @@ function RegistrationPausedCard({ form, isValid, sent, submitting, onChange, onS
         <button
           type="submit"
           disabled={!isValid || submitting}
-          className="authActionButton registerCreateButton group mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 via-indigo-500 to-purple-500 px-5 py-3.5 text-sm font-bold tracking-wide text-white shadow-[0_0_30px_rgba(99,102,241,0.3)] transition-all duration-200 hover:scale-[1.02] hover:shadow-[0_0_50px_rgba(99,102,241,0.5)] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-70"
+          className="authActionButton registerCreateButton group mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-indigo-500 px-5 py-3.5 text-sm font-semibold tracking-wide text-white shadow-lg shadow-indigo-950/30 transition-all duration-200 hover:-translate-y-0.5 hover:bg-indigo-400 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-70"
         >
           {submitting ? (
             <>
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <span className="authButtonSpinner" aria-hidden="true" />
               Sending request...
             </>
           ) : (
@@ -549,7 +547,7 @@ function RegistrationPausedCard({ form, isValid, sent, submitting, onChange, onS
 
       <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-gray-400 sm:flex-row sm:items-center sm:justify-between">
         <span className="inline-flex items-center gap-2">
-          <Clock3 className="h-4 w-4 text-cyan-300" />
+          <Clock3 className="h-4 w-4 text-indigo-300" />
           The admin will see this in their notification inbox.
         </span>
         <Link to="/login" className="inline-flex items-center gap-1 font-medium text-indigo-400 underline-offset-4 transition-colors hover:text-indigo-300 hover:underline">
@@ -593,10 +591,10 @@ function RegisterInput({
           required={required}
           {...props}
           className={cn(
-            "authInputPro w-full rounded-xl border bg-white/[0.04] px-4 py-3 pl-11 text-sm text-white outline-none transition-all duration-200 placeholder:text-gray-600 focus:shadow-[0_0_20px_rgba(99,102,241,0.12)]",
+            "authInputPro w-full rounded-xl border bg-white/[0.04] px-4 py-3 pl-11 text-sm text-white outline-none transition-all duration-200 placeholder:text-slate-600",
             error
-              ? "border-red-500/50 focus:border-red-500/40 focus:ring-2 focus:ring-red-500/40"
-              : "border-white/[0.08] focus:border-indigo-500/40 focus:ring-2 focus:ring-indigo-500/60"
+              ? "border-red-500/50 focus:border-red-500/40 focus:ring-2 focus:ring-red-500/35"
+              : "border-white/[0.08] focus:border-indigo-400/55 focus:ring-2 focus:ring-indigo-500/30"
           )}
         />
       </span>

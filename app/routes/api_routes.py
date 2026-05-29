@@ -8,7 +8,7 @@ import subprocess
 from datetime import datetime, timezone, timedelta
 from difflib import SequenceMatcher
 
-from flask import Blueprint, current_app, jsonify, request, send_file, session, url_for
+from flask import Blueprint, Response, current_app, jsonify, request, send_file, session, stream_with_context, url_for
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import selectinload
 from werkzeug.utils import secure_filename
@@ -860,35 +860,77 @@ def _teacher_audit_query(teacher):
 
 
 def _audit_csv_response(query, actor, filename_prefix="AuditLog"):
-    logs = query.order_by(AuditLog.created_at.desc()).limit(5000).all()
-    cache = _audit_resource_cache(logs)
+    """Stream audit logs to CSV without loading the whole table into memory."""
+    from io import StringIO
+    import csv
+
     headers = ["Date", "Time", "Actor", "Actor Role", "Category", "Severity", "Action", "Target", "IP Address", "Status", "Reason"]
-    rows = []
-    for item in logs:
-        created_at = item.created_at
-        payload = _audit_payload(item, cache)
-        rows.append(
-            [
-                created_at.strftime("%Y-%m-%d") if created_at else "",
-                created_at.strftime("%H:%M:%S") if created_at else "",
-                payload["actor_name"],
-                payload["actor_role"],
-                payload["category"],
-                payload["severity"],
-                payload["formatted_message"],
-                f"{item.resource_type}:{item.resource_id}" if item.resource_id else item.resource_type,
-                item.ip_address,
-                item.status,
-                item.reason or "",
-            ]
-        )
-    return build_csv_response(
-        "Audit Log",
-        actor,
-        rows,
-        headers,
-        filename=f"{filename_prefix}_{datetime.utcnow().strftime('%Y%m%d')}.csv",
-        extra_metadata=[("Total Entries", len(rows))],
+
+    def generate_csv():
+        output = StringIO()
+        writer = csv.writer(output)
+
+        writer.writerow(headers)
+        yield output.getvalue()
+        output.truncate(0)
+        output.seek(0)
+
+        base_query = query.order_by(None).enable_eagerloads(False)
+        batch_size = 500
+        last_created_at = None
+        last_id = None
+
+        while True:
+            batch_query = base_query
+            if last_id is not None:
+                if last_created_at is None:
+                    batch_query = batch_query.filter(AuditLog.id < last_id)
+                else:
+                    batch_query = batch_query.filter(
+                        or_(
+                            AuditLog.created_at < last_created_at,
+                            and_(AuditLog.created_at == last_created_at, AuditLog.id < last_id),
+                        )
+                    )
+
+            logs = (
+                batch_query.order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
+                .limit(batch_size)
+                .all()
+            )
+            if not logs:
+                break
+
+            cache = _audit_resource_cache(logs)
+            for item in logs:
+                created_at = item.created_at
+                payload = _audit_payload(item, cache)
+                writer.writerow([
+                    created_at.strftime("%Y-%m-%d") if created_at else "",
+                    created_at.strftime("%H:%M:%S") if created_at else "",
+                    payload["actor_name"],
+                    payload["actor_role"],
+                    payload["category"],
+                    payload["severity"],
+                    payload["formatted_message"],
+                    f"{item.resource_type}:{item.resource_id}" if item.resource_id else item.resource_type,
+                    item.ip_address,
+                    item.status,
+                    item.reason or "",
+                ])
+
+            yield output.getvalue()
+            output.truncate(0)
+            output.seek(0)
+            last_created_at = logs[-1].created_at
+            last_id = logs[-1].id
+
+    return Response(
+        stream_with_context(generate_csv()),
+        mimetype="text/csv",
+        headers={
+            "Content-Disposition": f"attachment; filename={filename_prefix}_{datetime.utcnow().strftime('%Y%m%d')}.csv"
+        }
     )
 
 
@@ -4645,7 +4687,11 @@ def teacher_reports_exam_results_csv_api(exam_id):
         return error_response
 
     sessions = (
-        StudentSession.query.filter_by(exam_set_id=exam.id)
+        StudentSession.query.options(
+            selectinload(StudentSession.answers),
+            selectinload(StudentSession.result),
+        )
+        .filter_by(exam_set_id=exam.id)
         .order_by(StudentSession.created_at.desc())
         .all()
     )
@@ -5172,6 +5218,25 @@ def teacher_similarity_api(exam_id):
         Question.question_type.in_(["long", "coding"]),
     ).order_by(Question.question_number.asc()).all()
 
+    def normalize_text(value):
+        return re.sub(r"\s+", " ", (value or "").strip().lower())
+
+    def text_signature(value):
+        compact = normalize_text(value)
+        words = {word for word in re.findall(r"[a-z0-9_]{3,}", compact)}
+        if len(compact) < 8:
+            return words or {compact}
+        char_grams = {compact[index:index + 4] for index in range(max(len(compact) - 3, 0))}
+        return words | char_grams
+
+    def jaccard_score(left_signature, right_signature):
+        if not left_signature or not right_signature:
+            return 0
+        intersection_size = len(left_signature & right_signature)
+        if not intersection_size:
+            return 0
+        return intersection_size / len(left_signature | right_signature)
+
     for question in questions:
         answers = (
             db.session.query(StudentSession, Answer)
@@ -5183,36 +5248,63 @@ def teacher_similarity_api(exam_id):
             )
             .all()
         )
-        for index, (left_session, left_answer) in enumerate(answers):
-            left_text = (left_answer.answer_text or "").strip()
-            if len(left_text) < 40:
+
+        valid_answers = []
+        for session, answer in answers:
+            text = (answer.answer_text or "").strip()
+            normalized = normalize_text(text)
+            if len(normalized) < 40:
                 continue
-            for right_session, right_answer in answers[index + 1:]:
-                right_text = (right_answer.answer_text or "").strip()
-                if len(right_text) < 40:
+            valid_answers.append(
+                {
+                    "session": session,
+                    "text": text,
+                    "normalized": normalized,
+                    "length": len(normalized),
+                    "signature": text_signature(normalized),
+                }
+            )
+
+        valid_answers.sort(key=lambda item: item["length"])
+        compare_all_pairs = len(valid_answers) <= 120
+        compared_pairs = set()
+        for index, left in enumerate(valid_answers):
+            for right in valid_answers[index + 1:]:
+                length_upper_bound = (2 * left["length"]) / (left["length"] + right["length"])
+                if length_upper_bound < threshold:
+                    break
+
+                pair_key = (left["session"].id, right["session"].id)
+                if pair_key in compared_pairs:
                     continue
-                score = SequenceMatcher(None, left_text.lower(), right_text.lower()).ratio()
+                compared_pairs.add(pair_key)
+
+                if not compare_all_pairs:
+                    signature_score = jaccard_score(left["signature"], right["signature"])
+                    same_opening = left["normalized"][:80] == right["normalized"][:80]
+                    if signature_score < 0.34 and not same_opening:
+                        continue
+
+                score = SequenceMatcher(None, left["normalized"], right["normalized"]).ratio()
                 if score >= threshold:
-                    flags.append(
-                        {
-                            "question_id": question.id,
-                            "question_text": question.question_text,
-                            "question_type": question.question_type,
-                            "student_a": {
-                                "session_id": left_session.id,
-                                "name": left_session.student_name,
-                                "roll_no": left_session.roll_no,
-                                "answer": left_text,
-                            },
-                            "student_b": {
-                                "session_id": right_session.id,
-                                "name": right_session.student_name,
-                                "roll_no": right_session.roll_no,
-                                "answer": right_text,
-                            },
-                            "score": round(score * 100, 1),
-                        }
-                    )
+                    flags.append({
+                        "question_id": question.id,
+                        "question_text": question.question_text,
+                        "question_type": question.question_type,
+                        "student_a": {
+                            "session_id": left["session"].id,
+                            "name": left["session"].student_name,
+                            "roll_no": left["session"].roll_no,
+                            "answer": left["text"],
+                        },
+                        "student_b": {
+                            "session_id": right["session"].id,
+                            "name": right["session"].student_name,
+                            "roll_no": right["session"].roll_no,
+                            "answer": right["text"],
+                        },
+                        "score": round(score * 100, 1),
+                    })
 
     flags.sort(key=lambda item: item["score"], reverse=True)
     return jsonify({"ok": True, "threshold": int(threshold * 100), "flags": flags})
@@ -5289,29 +5381,57 @@ def teacher_publish_exam_results_api(exam_id):
 
     payload = _get_json_payload()
     publish = bool(payload.get("publish"))
-    sessions = StudentSession.query.filter_by(exam_set_id=exam.id).all()
+    sessions = (
+        StudentSession.query.options(selectinload(StudentSession.result))
+        .filter_by(exam_set_id=exam.id)
+        .all()
+    )
     changed_count = 0
+    notification_targets = []
+    now = datetime.utcnow()
 
     for student_session in sessions:
         result = student_session.result
         if not result:
             continue
+        was_published = bool(result.published)
+        if was_published == publish and (not publish or result.published_at):
+            continue
         result.published = publish
-        result.published_at = datetime.utcnow() if publish else None
-        if publish:
-            student = User.query.filter(
+        result.published_at = now if publish else None
+        if publish and not was_published:
+            notification_targets.append(student_session)
+        changed_count += 1
+
+    if notification_targets:
+        roll_numbers = {
+            (student_session.roll_no or "").strip().upper()
+            for student_session in notification_targets
+            if (student_session.roll_no or "").strip()
+        }
+        students_by_roll = {
+            (student.roll_number or "").strip().upper(): student
+            for student in User.query.filter(
                 User.role == "student",
-                db.func.upper(User.roll_number) == (student_session.roll_no or "").upper(),
-            ).first()
-            if student:
-                NotificationService.notify_user(
-                    student.id,
-                    f"Results published for {exam.exam_name}.",
+                db.func.upper(User.roll_number).in_(roll_numbers),
+            ).all()
+        } if roll_numbers else {}
+        notifications = []
+        for student_session in notification_targets:
+            student = students_by_roll.get((student_session.roll_no or "").strip().upper())
+            if not student:
+                continue
+            notifications.append(
+                Notification(
+                    recipient_user_id=student.id,
+                    message=f"Results published for {exam.exam_name}.",
                     notification_type="result_published",
                     related_entity_type="exam",
                     related_entity_id=exam.id,
                 )
-        changed_count += 1
+            )
+        if notifications:
+            db.session.add_all(notifications)
 
     db.session.commit()
     return jsonify({"ok": True, "changed": changed_count, "published": publish})
@@ -5366,7 +5486,9 @@ def teacher_session_review_api(session_id):
             result = Result(session_id=student_session.id)
             db.session.add(result)
             db.session.flush()
+            was_published = False
         else:
+            was_published = bool(result.published)
             QuestionMark.query.filter_by(result_id=result.id).delete()
 
         result.total_marks = total_possible
@@ -5388,7 +5510,7 @@ def teacher_session_review_api(session_id):
             )
 
         student_session.status = "evaluated"
-        if result.published:
+        if result.published and not was_published:
             student = User.query.filter(
                 User.role == "student",
                 db.func.upper(User.roll_number) == (student_session.roll_no or "").upper(),

@@ -12,6 +12,11 @@ def generate_access_code():
 
 class ExamSet(db.Model):
     __tablename__ = "exam_sets"
+    __table_args__ = (
+        db.Index('ix_exam_sets_status', 'status'),
+        db.Index('ix_exam_sets_created_by', 'created_by'),
+        db.Index('ix_exam_sets_created_by_status', 'created_by', 'status'),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
 
@@ -116,6 +121,10 @@ class ExamEnrollment(db.Model):
 
 class Question(db.Model):
     __tablename__ = "questions"
+    __table_args__ = (
+        db.Index('ix_questions_exam_number', 'exam_set_id', 'question_number'),
+        db.Index('ix_questions_exam_type', 'exam_set_id', 'question_type'),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
 
