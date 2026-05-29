@@ -7720,6 +7720,44 @@ def request_pause(session_code):
     return jsonify({"ok": True, "message": "Pause request sent to admin."})
 
 
+def _normalize_terminal_text(value):
+    return str(value or "").replace("\r\n", "\n").replace("\r", "\n")
+
+
+def _sanitize_input_prompts(value):
+    if not isinstance(value, list):
+        return []
+    prompts = []
+    for prompt in value[:20]:
+        prompts.append(str(prompt or "")[:240])
+    return prompts
+
+
+def _strip_prompt_echoes(output_text, prompts):
+    remaining = _normalize_terminal_text(output_text)
+    for prompt in prompts:
+        clean_prompt = str(prompt or "")
+        if clean_prompt and remaining.startswith(clean_prompt):
+            remaining = remaining[len(clean_prompt):]
+    return remaining.lstrip("\n")
+
+
+def _compose_terminal_output(transcript, output_text, error_text, prompts, timed_out=False, timeout_seconds=10):
+    parts = []
+    clean_transcript = _normalize_terminal_text(transcript).strip()
+    if clean_transcript:
+        parts.append(clean_transcript)
+    clean_output = _strip_prompt_echoes(output_text, prompts).rstrip()
+    if clean_output:
+        parts.append(clean_output)
+    if timed_out and not error_text:
+        parts.append(f"Execution timed out after {timeout_seconds}s")
+    clean_error = _normalize_terminal_text(error_text).rstrip()
+    if clean_error and clean_error != clean_output:
+        parts.append(clean_error)
+    return "\n".join(parts)
+
+
 def _code_run_response(student_session, data, legacy=False):
     question_id = _parse_int_field(data, "question_id")
     code = data.get("code")
@@ -7727,6 +7765,8 @@ def _code_run_response(student_session, data, legacy=False):
         code = data.get("code_text")
     code = code or ""
     stdin_text = data.get("stdin") or ""
+    input_prompts = _sanitize_input_prompts(data.get("input_prompts"))
+    terminal_transcript = _normalize_terminal_text(data.get("terminal_transcript") or "")[:12000]
 
     if question_id is None:
         return jsonify({"ok": False, "message": "Valid question_id is required"}), 400
@@ -7775,9 +7815,17 @@ def _code_run_response(student_session, data, legacy=False):
         output_parts.append(result.message)
     output_text = "\n".join(part for part in output_parts if part)
     error_text = result.stderr or (result.message if result.status in {"error", "timeout", "rejected"} and not result.stdout else "")
+    terminal_output = _compose_terminal_output(
+        terminal_transcript,
+        output_text,
+        error_text,
+        input_prompts,
+        timed_out=result.status == "timeout",
+        timeout_seconds=timeout_seconds,
+    )
 
     answer.answer_text = code
-    answer.code_output = output_text or error_text or result.message
+    answer.code_output = terminal_output or output_text or error_text or result.message
     answer.execution_status = result.status
     answer.execution_time_ms = result.execution_time_ms
     answer.visit_status = AutoSaveService.normalize_visit_status(data.get("navigator_status") or data.get("visit_status"), code)
@@ -7812,6 +7860,8 @@ def _code_run_response(student_session, data, legacy=False):
             "timed_out": result.status == "timeout",
             "status": result.status,
             "message": result.message,
+            "terminal_output": terminal_output,
+            "input_prompts": input_prompts,
         }
     )
 

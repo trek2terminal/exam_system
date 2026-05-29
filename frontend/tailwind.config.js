@@ -28,7 +28,8 @@ export default {
         info: "rgb(var(--color-info) / <alpha-value>)"
       },
       fontFamily: {
-        sans: ["Inter", "system-ui", "sans-serif"],
+        sans: ["DM Sans", "system-ui", "sans-serif"],
+        display: ["Sora", "Plus Jakarta Sans", "system-ui", "sans-serif"],
         mono: ["JetBrains Mono", "Fira Code", "monospace"]
       },
       fontSize: {

@@ -4,6 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App.jsx";
 import { ToastViewport } from "./components/ui";
 import "./styles.css";
+import "./exam-redesign.css";
 
 const DEFAULT_THEME = "dark";
 

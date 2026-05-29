@@ -14,76 +14,116 @@ input[type="number"]::-webkit-inner-spin-button {
 }
 
 :root {
-  color-scheme: light;
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --bg: #eef4fb;
-  --panel: #ffffff;
-  --text: #0f172a;
-  --muted: #5f6f86;
-  --border: #cfd9e8;
-  --primary: #5b4fe8;
-  --success: #059669;
-  --warning: #d97706;
-  --danger: #dc2626;
-  --info: #0284c7;
+  color-scheme: dark;
+  font-family: "Sora", "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  
+  /* === NEW PREMIUM DARK MODE SURFACES === */
+  --bg-base:       #080d1a;   /* deepest background */
+  --bg-elevated:   #0f1629;   /* sidebar, panels */
+  --bg-card:       #161f35;   /* cards, editor bg */
+  --bg-hover:      #1e2a45;   /* hover states */
+  --bg-active:     #243050;   /* active/selected */
+  
+  /* === BORDERS === */
+  --border-subtle:  rgba(99,102,241,0.12);
+  --border-default: rgba(99,102,241,0.25);
+  --border-strong:  rgba(99,102,241,0.5);
+  
+  /* === BRAND ACCENT === */
+  --accent-primary:     #6366f1;  /* indigo */
+  --accent-primary-glow: rgba(99,102,241,0.25);
+  --accent-secondary:    #06b6d4;  /* cyan */
+  --accent-secondary-glow: rgba(6,182,212,0.2);
+  
+  /* === STATUS COLORS === */
+  --status-success:  #10b981;
+  --status-warning:  #f59e0b;
+  --status-danger:   #f43f5e;
+  --status-info:     #3b82f6;
+  
+  /* === TYPOGRAPHY === */
+  --font-display: 'Sora', 'Plus Jakarta Sans', sans-serif;
+  --font-body:    'DM Sans', sans-serif;
+  --font-mono:    'JetBrains Mono', 'Fira Code', monospace;
+  
+  /* === FONT SIZES === */
+  --text-xs:   0.75rem;
+  --text-sm:   0.8125rem;
+  --text-base: 0.9375rem;
+  --text-lg:   1.0625rem;
+  --text-xl:   1.25rem;
+  --text-2xl:  1.5rem;
+  --text-3xl:  1.875rem;
+  
+  /* === SPACING === */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  
+  /* === RADIUS === */
+  --radius-sm:   6px;
+  --radius-md:   10px;
+  --radius-lg:   14px;
+  --radius-xl:   20px;
+  --radius-full: 9999px;
+  
+  /* === SHADOWS === */
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.4), 0 0 0 1px var(--border-subtle);
+  --shadow-glow-primary: 0 0 20px var(--accent-primary-glow);
+  --shadow-glow-success: 0 0 16px rgba(16,185,129,0.3);
+  
+  /* === TRANSITIONS === */
+  --transition-fast:   150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow:   400ms cubic-bezier(0.4, 0, 0.2, 1);
+  
+  /* === LEGACY COMPATIBILITY === */
+  --bg: #080d1a;
+  --panel: #0f1629;
+  --text: #e2e8f0;
+  --muted: #94a3b8;
+  --border: #26334c;
+  --primary: #6366f1;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #f43f5e;
+  --info: #3b82f6;
   /* design token variables for Tailwind config */
-  --color-background-app: 238 244 251;
-  --color-background-base: 244 248 253; /* will be used as rgb(var(--color-background-base)) */
-  --color-background-card: 255 255 255;
-  --color-background-surface: 248 251 255;
-  --color-background-elevated: 229 237 247;
-  --color-border: 207 217 232;
-  --color-text-primary: 15 23 42;
-  --color-text-secondary: 57 71 91;
-  --color-text-muted: 96 111 134;
-  --color-brand-primary: 91 79 232;
-  --color-brand-primary-hover: 74 64 210;
-  --color-success: 5 150 105;
-  --color-warning: 217 119 6;
-  --color-danger: 220 38 38;
-  --color-info: 2 132 199;
-  --shadow-card: 0 1px 2px rgba(15,23,42,0.05), 0 10px 24px rgba(37,52,82,0.08);
-  --shadow-elevated: 0 2px 8px rgba(15,23,42,0.10), 0 18px 42px rgba(37,52,82,0.14);
-  --role-accent: 91 79 232;
+  --color-background-app: 8 13 26;
+  --color-background-base: 15 22 41;
+  --color-background-card: 22 31 53;
+  --color-background-surface: 30 42 69;
+  --color-background-elevated: 15 22 41;
+  --color-border: 99 102 241;
+  --color-text-primary: 226 232 240;
+  --color-text-secondary: 148 163 184;
+  --color-text-muted: 148 163 184;
+  --color-brand-primary: 99 102 241;
+  --color-brand-primary-hover: 79 70 229;
+  --color-success: 16 185 137;
+  --color-warning: 245 158 11;
+  --color-danger: 244 63 94;
+  --color-info: 59 130 246;
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.4), 0 0 0 1px rgba(99,102,241,0.12);
+  --shadow-elevated: 0 1px 0 rgb(255 255 255 / 0.04) inset, 0 18px 52px rgb(0 0 0 / 0.34);
+  --role-accent: 99 102 241;
   --motion-fast: 150ms;
   --motion-base: 220ms;
   --motion-slow: 420ms;
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
   --focus-ring: 0 0 0 3px rgb(var(--role-accent) / 0.20);
-  --surface-noise: linear-gradient(135deg, rgb(255 255 255 / 0.66), rgb(var(--color-background-surface) / 0.72));
+  --surface-noise: linear-gradient(135deg, rgb(255 255 255 / 0.045), rgb(var(--color-background-surface) / 0.30));
 }
 
 .dark {
   color-scheme: dark;
-  --bg: #070a13;
-  --panel: #111827;
-  --text: #eef4ff;
-  --muted: #a9b4c7;
-  --border: #26334c;
-  --primary: #8b5cf6;
-  --success: #34d399;
-  --warning: #fbbf24;
-  --danger: #f87171;
-  /* dark mode design tokens (RGB triplets) */
-  --color-background-app: 4 5 15;
-  --color-background-base: 7 10 19;
-  --color-background-card: 15 23 42;
-  --color-background-surface: 18 27 47;
-  --color-background-elevated: 29 40 65;
-  --color-border: 38 51 76;
-  --color-text-primary: 248 250 252;
-  --color-text-secondary: 199 210 229;
-  --color-text-muted: 137 150 174;
-  --color-brand-primary: 124 92 255;
-  --color-brand-primary-hover: 142 116 255;
-  --color-success: 34 197 94;
-  --color-warning: 245 158 11;
-  --color-danger: 248 113 113;
-  --color-info: 56 189 248;
-  --shadow-card: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 14px 34px rgb(0 0 0 / 0.24);
-  --shadow-elevated: 0 1px 0 rgb(255 255 255 / 0.04) inset, 0 18px 52px rgb(0 0 0 / 0.34);
-  --surface-noise: linear-gradient(135deg, rgb(255 255 255 / 0.045), rgb(var(--color-background-surface) / 0.30));
+  /* Premium dark mode already set in :root */
 }
 
 html.role-student {
@@ -131,9 +171,10 @@ body,
 body {
   margin: 0;
   background:
-    linear-gradient(180deg, rgb(var(--color-background-app)) 0%, rgb(var(--color-background-base)) 100%);
-  color: rgb(var(--color-text-primary));
+    linear-gradient(180deg, var(--bg-base) 0%, var(--bg-elevated) 100%);
+  color: #e2e8f0;
   text-rendering: geometricPrecision;
+  font-family: var(--font-body);
 }
 
 .appShellSurface {
@@ -7522,5 +7563,726 @@ p {
 
   .examSubmitModal {
     max-height: calc(100vh - 24px);
+  }
+}
+
+/* Student exam immersive shell pass */
+.examWindow {
+  --exam-bg: #080d19;
+  --exam-card: #101827;
+  --exam-panel: #0d1424;
+  --exam-border: #26344f;
+  --exam-text: #eef4ff;
+  --exam-muted: #a7b4c8;
+  --exam-soft: #0a1020;
+  --exam-accent: #7c5cff;
+  --exam-accent-strong: #5eead4;
+  --exam-danger: #ff6575;
+  min-height: 100vh;
+  background:
+    linear-gradient(180deg, rgba(94, 234, 212, 0.05), transparent 28%),
+    var(--exam-bg);
+  color: var(--exam-text);
+}
+
+.examWindow button:focus-visible,
+.examWindow textarea:focus-visible,
+.examWindow [role="textbox"]:focus-visible {
+  outline: 2px solid #5eead4;
+  outline-offset: 2px;
+}
+
+.examHeaderBar {
+  height: 96px;
+  grid-template-columns: minmax(0, 1fr) auto minmax(320px, 1fr);
+  gap: 18px;
+  border-bottom: 1px solid var(--exam-border);
+  background: rgba(13, 20, 36, 0.98);
+  padding: 14px 18px;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.26);
+}
+
+.examHeaderLeft {
+  display: grid;
+  align-content: center;
+  gap: 4px;
+}
+
+.examHeaderEyebrow {
+  color: #a7b4c8;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.examHeaderLeft h1 {
+  max-width: min(48vw, 620px);
+  color: #f8fbff;
+  font-size: clamp(24px, 2vw, 32px);
+  font-weight: 900;
+  line-height: 1.05;
+}
+
+.examHeaderMeta {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  color: #a7b4c8;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.examHeaderMeta span + span::before {
+  content: "|";
+  margin-right: 10px;
+  color: #59667d;
+}
+
+.examTimerPill {
+  display: grid;
+  min-width: 178px;
+  gap: 6px;
+  border: 1px solid var(--exam-border);
+  border-radius: 8px;
+  background: #101827;
+  padding: 14px 18px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.examTimerPill span {
+  color: #a7b4c8;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.examTimerPill strong {
+  color: #f8fbff;
+  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+  font-size: 30px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.examTimerPill.warning {
+  border-color: rgba(251, 191, 36, 0.42);
+  background: rgba(120, 53, 15, 0.28);
+}
+
+.examTimerPill.critical,
+.examTimerPill.danger {
+  border-color: rgba(255, 101, 117, 0.52);
+  background: rgba(127, 29, 29, 0.35);
+}
+
+.examHeaderRight {
+  gap: 10px;
+}
+
+.examHeaderRight > span {
+  min-width: 74px;
+  color: #c7d2e5;
+  font-weight: 900;
+  text-align: center;
+}
+
+.examHeaderSave {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid var(--exam-border);
+  border-radius: 8px;
+  background: #101827;
+  color: #c7d2e5;
+  padding: 0 14px;
+  font-weight: 800;
+}
+
+.examHeaderSave.saved {
+  color: #a7f3d0;
+}
+
+.examHeaderSave.saving svg {
+  animation: examSpin 0.8s linear infinite;
+}
+
+.examHeaderSave.error {
+  color: #fecaca;
+}
+
+.examFlagButton {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--exam-border);
+  border-radius: 8px;
+  background: #101827;
+  color: #dbe7fa;
+  transition: transform 160ms ease, border-color 160ms ease, background-color 160ms ease;
+}
+
+.examFlagButton:hover {
+  border-color: rgba(124, 92, 255, 0.7);
+  background: #151f33;
+  transform: translateY(-1px);
+}
+
+.examFlagButton.active {
+  border-color: rgba(251, 191, 36, 0.62);
+  color: #fbbf24;
+}
+
+.examHeaderSubmit {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 8px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #ff6575, #f05264);
+  padding: 0 16px;
+  font-size: 14px;
+  font-weight: 900;
+  box-shadow: 0 12px 26px rgba(240, 82, 100, 0.28);
+}
+
+.examHeaderSubmit:hover {
+  background: linear-gradient(135deg, #ff7785, #e94357);
+}
+
+.examConnectivityBanner {
+  top: 96px;
+  right: 0;
+  left: 264px;
+}
+
+.examContentZone {
+  inset: 96px 0 0 264px;
+  overflow: hidden;
+  background: var(--exam-bg);
+  padding: 20px;
+}
+
+.examContentInner {
+  width: 100%;
+  max-width: none;
+  animation: examSurfaceIn 320ms var(--ease-emphasized) both;
+}
+
+.examRightPanel {
+  top: 96px;
+  right: auto;
+  left: 0;
+  width: 264px;
+  border-right: 1px solid var(--exam-border);
+  border-left: 0;
+  background: var(--exam-panel);
+  padding: 16px 13px;
+  box-shadow: 12px 0 30px rgba(0, 0, 0, 0.18);
+}
+
+.examStudentStrip {
+  border-bottom-color: var(--exam-border);
+}
+
+.examStudentStrip > span {
+  background: linear-gradient(135deg, #169b8f, #2457d6);
+  color: #ffffff;
+}
+
+.examStudentStrip strong,
+.examSideTimer strong {
+  color: #f8fbff;
+}
+
+.examStudentStrip small,
+.examSideTimer span,
+.examLegend span,
+.examStatRow {
+  color: var(--exam-muted);
+}
+
+.examFontControls,
+.examSideTimer {
+  border-color: var(--exam-border);
+}
+
+.examFontControls button,
+.examProgressSummary,
+.examQuestionNavigator,
+.examSideTimer {
+  background: transparent;
+}
+
+.examFontControls button {
+  min-height: 34px;
+  border-color: var(--exam-border);
+  color: #dbe7fa;
+}
+
+.examFontControls button.active {
+  border-color: rgba(94, 234, 212, 0.56);
+  background: rgba(94, 234, 212, 0.1);
+  color: #ccfbf1;
+}
+
+.examProgressSummary h2,
+.examQuestionNavigator h2 {
+  color: #c7d2e5;
+}
+
+.examProgressBar {
+  height: 8px;
+  background: #202b41;
+}
+
+.examProgressBar span {
+  background: linear-gradient(90deg, #34d399, #5eead4);
+}
+
+.examNavigatorGrid {
+  grid-template-columns: repeat(5, 40px);
+  gap: 7px;
+}
+
+.examNavigatorGrid button {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  font-weight: 900;
+  transition: transform 140ms ease, box-shadow 140ms ease;
+}
+
+.examNavigatorGrid button:hover {
+  transform: translateY(-1px);
+}
+
+.examNavigatorGrid button.current {
+  outline: 2px solid #5eead4;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(94, 234, 212, 0.14);
+}
+
+.status-not-visited {
+  border-color: #526179;
+  background: #8c99ad;
+  color: #ffffff;
+}
+
+.status-visited-unanswered {
+  border-color: #ff6575;
+  background: #ff6575;
+  color: #ffffff;
+}
+
+.status-answered {
+  border-color: #34d399;
+  background: #1fcf77;
+  color: #052e20;
+}
+
+.status-marked-review {
+  border-color: #8b5cf6;
+  background: #8b5cf6;
+  color: #ffffff;
+}
+
+.status-answered-marked {
+  border-color: #38bdf8;
+  background: #38bdf8;
+  color: #06253a;
+}
+
+.examPanelSubmit {
+  min-height: 44px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #ff6575, #f05264);
+  font-weight: 900;
+}
+
+.examQuestionCard {
+  border-color: var(--exam-border);
+  border-radius: 8px;
+  background: var(--exam-card);
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.26);
+}
+
+.examQuestionCard::before {
+  height: 3px;
+  background: linear-gradient(90deg, #5eead4, #7c5cff, #38bdf8);
+}
+
+.examQuestionCardCode {
+  grid-template-columns: minmax(300px, 34%) minmax(0, 1fr);
+}
+
+.examPromptPane {
+  border-right-color: var(--exam-border);
+  background: #101827;
+  color: var(--exam-text);
+}
+
+.examAnswerPane {
+  background: #0a1020;
+}
+
+.examQuestionCardCode .examQuestionHeader,
+.examQuestionHeader {
+  border-bottom-color: var(--exam-border);
+  background: rgba(16, 24, 39, 0.92);
+}
+
+.examQuestionHeader span {
+  color: #8d70ff;
+  font-size: 14px;
+  text-transform: none;
+}
+
+.examQuestionHeader b {
+  border-color: rgba(56, 189, 248, 0.3);
+  background: rgba(56, 189, 248, 0.12);
+  color: #7dd3fc;
+}
+
+.examQuestionHeader em {
+  border-color: var(--exam-border);
+  background: #111a2d;
+  color: #c7d2e5;
+}
+
+.examQuestionBody p,
+.dark .examQuestionBody p {
+  color: #f8fbff;
+  font-weight: 800;
+}
+
+.examQuestionBody code {
+  background: rgba(94, 234, 212, 0.12);
+  color: #ccfbf1;
+}
+
+.examMcqOption {
+  min-height: 54px;
+  border-color: var(--exam-border);
+  background: #0c1324;
+  color: var(--exam-text);
+}
+
+.examMcqOption:hover:not(:disabled) {
+  border-color: rgba(94, 234, 212, 0.54);
+  background: #111b30;
+}
+
+.examMcqOption.selected {
+  border-color: #5eead4;
+  background: rgba(94, 234, 212, 0.12);
+}
+
+.examMcqOption strong {
+  color: #f8fbff;
+}
+
+.examTextAnswer textarea {
+  border-color: var(--exam-border);
+  background: #070b16;
+  color: #f8fbff;
+}
+
+.examTextAnswer textarea:focus {
+  border-color: #5eead4;
+  box-shadow: 0 0 0 3px rgba(94, 234, 212, 0.16);
+}
+
+.examCommandBar {
+  border-color: var(--exam-border);
+  border-radius: 8px;
+  background: rgba(13, 20, 36, 0.96);
+  box-shadow: 0 -14px 34px rgba(0, 0, 0, 0.24);
+}
+
+.examCommandButton {
+  min-height: 44px;
+  border-radius: 8px;
+}
+
+.examCommandButton.neutral {
+  border-color: var(--exam-border);
+  background: #101827;
+  color: #dbe7fa;
+}
+
+.examCommandButton.neutral:hover:not(:disabled) {
+  border-color: rgba(94, 234, 212, 0.5);
+  background: #151f33;
+}
+
+.examCommandButton.review {
+  border-color: rgba(251, 191, 36, 0.42);
+  background: rgba(251, 191, 36, 0.1);
+  color: #fde68a;
+}
+
+.examCommandButton.save {
+  border-color: rgba(94, 234, 212, 0.36);
+  background: linear-gradient(135deg, #7c5cff, #2457d6);
+  box-shadow: 0 12px 28px rgba(36, 87, 214, 0.26);
+}
+
+.examCommandButton.final {
+  border-color: rgba(255, 101, 117, 0.42);
+  background: linear-gradient(135deg, #ff6575, #f05264);
+}
+
+.examAutosaveStatus {
+  color: #c7d2e5;
+}
+
+.examCodeAnswer {
+  gap: 14px;
+}
+
+.examCodeAnswer label,
+.examRunToolbar label {
+  margin: 0;
+  color: #c7d2e5;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.examCodeEditor,
+.examReferenceCode {
+  border-color: var(--exam-border);
+  border-radius: 8px;
+  background: #050816;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.28);
+}
+
+.examQuestionCardCode .examCodeEditor {
+  min-height: min(44vh, 470px);
+}
+
+.examShellConsole {
+  position: relative;
+  display: grid;
+  gap: 10px;
+}
+
+.examRunToolbar {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.examRunButton {
+  min-width: 132px;
+  height: 44px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #7c5cff, #2457d6);
+  padding: 0 16px;
+  font-weight: 900;
+  box-shadow: 0 12px 28px rgba(124, 92, 255, 0.28);
+  transition: transform 160ms ease, box-shadow 160ms ease, filter 160ms ease;
+}
+
+.examRunButton:hover:not(:disabled) {
+  background: linear-gradient(135deg, #8d70ff, #2f65ee);
+  box-shadow: 0 16px 34px rgba(124, 92, 255, 0.34);
+  transform: translateY(-1px);
+}
+
+.examShellConsole.awaitingInput .examRunButton {
+  background: linear-gradient(135deg, #14b8a6, #0891b2);
+}
+
+.examTerminalWrap {
+  border-color: var(--exam-border);
+  border-radius: 8px;
+  background: #050816;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 18px 42px rgba(0, 0, 0, 0.26);
+}
+
+.examShellConsole.awaitingInput .examTerminalWrap {
+  border-color: rgba(94, 234, 212, 0.68);
+  box-shadow: 0 0 0 3px rgba(94, 234, 212, 0.12), 0 18px 42px rgba(0, 0, 0, 0.28);
+}
+
+.examTerminal {
+  height: 190px;
+  padding: 10px 12px;
+}
+
+.examQuestionCardCode .examTerminal {
+  height: 190px;
+}
+
+.examShellConsole > span {
+  justify-self: end;
+  color: #7f8ea5;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.examLoadingScreen {
+  background:
+    linear-gradient(180deg, rgba(94, 234, 212, 0.08), transparent 34%),
+    #080d19;
+}
+
+.examLoadingScreen p {
+  color: #dbe7fa;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.examSpinner {
+  border-color: rgba(94, 234, 212, 0.2);
+  border-top-color: #5eead4;
+  box-shadow: 0 0 30px rgba(94, 234, 212, 0.2);
+}
+
+.examSkeletonCard {
+  border-color: var(--exam-border);
+  border-radius: 8px;
+  background: #101827;
+}
+
+.examSkeletonCard span,
+.examSkeletonCard strong,
+.examSkeletonCard em,
+.examSkeletonCard i,
+.examQuestionSkeleton span,
+.examQuestionSkeleton strong,
+.examQuestionSkeleton i {
+  background: linear-gradient(90deg, #1c2940, #33415e, #1c2940);
+  background-size: 220% 100%;
+}
+
+@keyframes examSurfaceIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 1024px) {
+  .examHeaderBar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    height: 88px;
+  }
+
+  .examHeaderRight {
+    display: none;
+  }
+
+  .examContentZone {
+    inset: 88px 0 0 0;
+  }
+
+  .examConnectivityBanner {
+    top: 88px;
+    left: 0;
+  }
+
+  .examRightPanel:not(.mobile) {
+    display: none;
+  }
+
+  .examMobileNavigatorButton {
+    display: grid;
+  }
+
+  .examQuestionCardCode {
+    grid-template-columns: 1fr;
+  }
+
+  .examPromptPane {
+    border-right: 0;
+    border-bottom: 1px solid var(--exam-border);
+  }
+}
+
+@media (max-width: 767px) {
+  .examHeaderBar {
+    height: 74px;
+    padding: 10px 12px;
+  }
+
+  .examHeaderLeft h1 {
+    max-width: 56vw;
+    font-size: 18px;
+  }
+
+  .examHeaderEyebrow {
+    font-size: 10px;
+  }
+
+  .examHeaderMeta {
+    gap: 4px 8px;
+    font-size: 11px;
+  }
+
+  .examTimerPill {
+    min-width: 108px;
+    padding: 10px;
+  }
+
+  .examTimerPill span {
+    font-size: 10px;
+  }
+
+  .examTimerPill strong {
+    font-size: 20px;
+  }
+
+  .examContentZone {
+    inset: 74px 0 0 0;
+    overflow-y: auto;
+    padding: 10px 10px 92px;
+  }
+
+  .examConnectivityBanner {
+    top: 74px;
+  }
+
+  .examPromptPane,
+  .examAnswerPane {
+    padding: 14px;
+  }
+
+  .examRunToolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .examRunButton {
+    width: 100%;
+  }
+
+  .examTerminal,
+  .examQuestionCardCode .examTerminal {
+    height: 220px;
+  }
+
+  .examCommandBar {
+    border-radius: 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .examContentInner,
+  .examFlagButton,
+  .examRunButton,
+  .examNavigatorGrid button {
+    animation: none;
+    transition: none;
   }
 }

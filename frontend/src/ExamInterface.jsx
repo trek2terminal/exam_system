@@ -140,6 +140,111 @@ function safeJsonWrite(key, value) {
   }
 }
 
+function decodePythonStringEscape(sequence) {
+  const escapes = {
+    "\\n": "\n",
+    "\\r": "\r",
+    "\\t": "\t",
+    "\\\\": "\\",
+    "\\'": "'",
+    '\\"': '"'
+  };
+  return escapes[sequence] ?? sequence.slice(1);
+}
+
+function readPythonStringLiteral(source, startIndex) {
+  const quote = source[startIndex];
+  const triple = source.slice(startIndex, startIndex + 3) === quote.repeat(3);
+  let index = startIndex + (triple ? 3 : 1);
+  let value = "";
+
+  while (index < source.length) {
+    if (triple && source.slice(index, index + 3) === quote.repeat(3)) {
+      return { value, endIndex: index + 3 };
+    }
+    if (!triple && source[index] === quote) {
+      return { value, endIndex: index + 1 };
+    }
+    if (source[index] === "\\" && index + 1 < source.length) {
+      value += decodePythonStringEscape(source.slice(index, index + 2));
+      index += 2;
+      continue;
+    }
+    value += source[index];
+    index += 1;
+  }
+
+  return { value, endIndex: index };
+}
+
+function extractInputPrompts(code) {
+  const source = String(code || "");
+  const prompts = [];
+  const pattern = /\binput\s*\(/g;
+  let match = pattern.exec(source);
+
+  while (match && prompts.length < 20) {
+    let index = pattern.lastIndex;
+    while (/\s/.test(source[index] || "")) index += 1;
+
+    let prefix = "";
+    while (/[rRuUbBfF]/.test(source[index] || "")) {
+      prefix += source[index];
+      index += 1;
+    }
+
+    const quote = source[index];
+    if (quote === "'" || quote === '"') {
+      const literal = readPythonStringLiteral(source, index);
+      prompts.push(prefix.toLowerCase().includes("f") ? literal.value.replace(/\{[^}]*\}/g, "{...}") : literal.value);
+      pattern.lastIndex = literal.endIndex;
+    } else {
+      prompts.push("");
+    }
+
+    match = pattern.exec(source);
+  }
+
+  return prompts;
+}
+
+function normalizeTerminalText(value) {
+  return String(value || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+}
+
+function stripPromptEchoes(output, prompts = []) {
+  let remaining = normalizeTerminalText(output);
+  prompts.forEach(prompt => {
+    const cleanPrompt = String(prompt || "");
+    if (cleanPrompt && remaining.startsWith(cleanPrompt)) {
+      remaining = remaining.slice(cleanPrompt.length);
+    }
+  });
+  return remaining.replace(/^\n+/, "");
+}
+
+function buildTerminalTranscript(inputPrompts = [], inputLines = [], includeCommand = true) {
+  const lines = [];
+  if (includeCommand) lines.push("$ python main.py");
+  inputPrompts.forEach((prompt, index) => {
+    const visiblePrompt = prompt || "input> ";
+    lines.push(`${visiblePrompt}${inputLines[index] ?? ""}`);
+  });
+  return lines.length ? `${lines.join("\n")}\n` : "";
+}
+
+function buildTerminalOutput({ transcript = "", output = "", error = "", timedOut = false, timeoutSeconds = 10, prompts = [] }) {
+  const parts = [];
+  const cleanTranscript = normalizeTerminalText(transcript).trimEnd();
+  if (cleanTranscript) parts.push(cleanTranscript);
+  const cleanOutput = stripPromptEchoes(output, prompts).trimEnd();
+  if (cleanOutput) parts.push(cleanOutput);
+  if (timedOut) parts.push(`Execution timed out after ${timeoutSeconds}s`);
+  const cleanError = normalizeTerminalText(error).trimEnd();
+  if (cleanError && cleanError !== cleanOutput) parts.push(cleanError);
+  return parts.join("\n");
+}
+
 function renderInlineMarkdown(text) {
   return String(text || "").split(/(\*\*[^*]+\*\*|`[^`]+`|\n)/g).map((part, index) => {
     if (part === "\n") return <br key={index} />;
@@ -208,6 +313,7 @@ function normalizeSavedAnswer(question, saved) {
 function isEditableTarget(target) {
   if (!(target instanceof window.Element)) return false;
   if (target.closest(".monaco-editor")) return true;
+  if (target.closest(".examShellConsole") || target.closest(".xterm")) return true;
   if (target.closest("[data-stdin-input='true']")) return true;
   const tagName = target.tagName?.toLowerCase();
   return tagName === "textarea" || tagName === "input" || target.isContentEditable;
@@ -533,6 +639,7 @@ export default function ExamInterface() {
       delete nextOutputs[currentQuestion.id];
       return nextOutputs;
     });
+    setStdinValues(current => ({ ...current, [currentQuestion.id]: "" }));
     scheduleAutosave(currentQuestion, nextAnswer);
   }, [answersRef, canWork, currentQuestion, scheduleAutosave]);
 
@@ -715,20 +822,33 @@ export default function ExamInterface() {
     }
   }, [currentIndexRef, getQuestionTimeSpentSeconds, handleHeartbeatPayload, onlineRef, questionsRef, sessionCode, sessionTokenRef, submittingRef]);
 
-  const runCode = useCallback(async question => {
+  const runCode = useCallback(async (question, stdinOverride = null, terminalMeta = {}) => {
     if (!question || question.type !== "code" || !canWork) return;
     const answer = answersRef.current[question.id] || emptyAnswer();
+    const stdinText = typeof stdinOverride === "string" ? stdinOverride : stdinValues[question.id] || "";
+    const inputPrompts = Array.isArray(terminalMeta.prompts) ? terminalMeta.prompts : [];
+    const terminalTranscript = typeof terminalMeta.transcript === "string" ? terminalMeta.transcript : "";
     setRunningQuestionId(question.id);
     setRunOutputs(current => ({
       ...current,
-      [question.id]: { output: "", error: "", timed_out: false, execution_time_seconds: null, status: "running" }
+      [question.id]: {
+        output: "",
+        error: "",
+        timed_out: false,
+        execution_time_seconds: null,
+        status: "running",
+        transcript: terminalTranscript,
+        input_prompts: inputPrompts
+      }
     }));
     try {
       const { data } = await api.post(`/student/session/${sessionCode}/code-run`, {
         session_token: sessionTokenRef.current,
         question_id: question.id,
         code: answer.code_text || "",
-        stdin: stdinValues[question.id] || "",
+        stdin: stdinText,
+        terminal_transcript: terminalTranscript,
+        input_prompts: inputPrompts,
         navigator_status: statusFromAnswer(question, answer, isMarked(answer.navigator_status), true)
       });
       const nextOutput = {
@@ -736,26 +856,45 @@ export default function ExamInterface() {
         error: data.error || "",
         timed_out: Boolean(data.timed_out),
         execution_time_seconds: data.execution_time_seconds,
-        status: data.status || "success"
+        status: data.status || "success",
+        transcript: terminalTranscript,
+        terminal_output: data.terminal_output || "",
+        input_prompts: Array.isArray(data.input_prompts) ? data.input_prompts : inputPrompts
       };
+      const displayOutput = nextOutput.terminal_output || buildTerminalOutput({
+        transcript: terminalTranscript,
+        output: nextOutput.output,
+        error: nextOutput.error,
+        timedOut: nextOutput.timed_out,
+        timeoutSeconds: question.execution_time_limit_seconds,
+        prompts: nextOutput.input_prompts
+      });
       setRunOutputs(current => ({ ...current, [question.id]: nextOutput }));
       setAnswers(current => ({
         ...current,
         [question.id]: {
           ...(current[question.id] || emptyAnswer()),
-          code_output: [nextOutput.output, nextOutput.error].filter(Boolean).join("\n"),
+          code_output: displayOutput,
           navigator_status: STATUS.ANSWERED
         }
       }));
     } catch (runError) {
+      const errorText = runError.message || "Code execution failed.";
       setRunOutputs(current => ({
         ...current,
         [question.id]: {
           output: "",
-          error: runError.message || "Code execution failed.",
+          error: errorText,
           timed_out: false,
           execution_time_seconds: null,
-          status: "error"
+          status: "error",
+          transcript: terminalTranscript,
+          terminal_output: buildTerminalOutput({
+            transcript: terminalTranscript,
+            error: errorText,
+            prompts: inputPrompts
+          }),
+          input_prompts: inputPrompts
         }
       }));
     } finally {
@@ -801,6 +940,8 @@ export default function ExamInterface() {
               error: "",
               timed_out: false,
               execution_time_seconds: saved.execution_time_seconds || null,
+              terminal_output: normalizedAnswer.code_output,
+              input_prompts: [],
               status: saved.execution_status || "saved"
             };
           }
@@ -1108,7 +1249,9 @@ export default function ExamInterface() {
         total={questions.length}
         remainingSeconds={remainingSeconds}
         currentStatus={currentAnswer.navigator_status}
+        saveState={saveState}
         onToggleFlag={toggleFlag}
+        onFullscreen={requestFullscreen}
         onSubmit={openSubmitConfirm}
       />
 
@@ -1120,7 +1263,6 @@ export default function ExamInterface() {
             question={currentQuestion}
             answer={currentAnswer}
             runOutput={currentQuestion ? runOutputs[currentQuestion.id] : null}
-            stdinValue={currentQuestion ? stdinValues[currentQuestion.id] || "" : ""}
             questionFontSize={questionFontSize}
             canWork={canWork}
             running={Boolean(currentQuestion && runningQuestionId === currentQuestion.id)}
@@ -1269,25 +1411,39 @@ function ExamLoading({ platformSettings }) {
   );
 }
 
-function ExamHeader({ exam, student, currentIndex, total, remainingSeconds, currentStatus, onToggleFlag, onSubmit }) {
+function ExamHeader({ exam, student, currentIndex, total, remainingSeconds, currentStatus, saveState, onToggleFlag, onFullscreen, onSubmit }) {
   return (
     <header className="examHeaderBar">
       <div className="examHeaderLeft">
+        <span className="examHeaderEyebrow">Now Writing</span>
         <h1>{exam.title || exam.exam_name || "Exam"}</h1>
-        <span className="examHeaderDivider" />
-        <span>{student.name || "Student"}</span>
-        <span>Roll: {student.roll_number || "-"}</span>
-        <span>Set: {exam.set_code || "-"}</span>
+        <div className="examHeaderMeta">
+          <span>{student.name || "Student"}</span>
+          <span>Roll {student.roll_number || "-"}</span>
+          <span>Set {exam.set_code || "-"}</span>
+        </div>
       </div>
       <TimerPill seconds={remainingSeconds} />
       <div className="examHeaderRight">
+        <div className={cn("examHeaderSave", saveState?.type || "saved")}>
+          <Save size={16} />
+          <span>{saveState?.text || "Saved"}</span>
+        </div>
         <span>Q {Math.min(currentIndex + 1, total)} / {total}</span>
         <Tooltip label="Flag for review">
           <button type="button" className={cn("examFlagButton", isMarked(currentStatus) && "active")} onClick={onToggleFlag} aria-label="Flag for review">
             <Bookmark size={17} />
           </button>
         </Tooltip>
-        <button type="button" className="examHeaderSubmit" onClick={onSubmit}>Submit Exam</button>
+        <Tooltip label="Fullscreen">
+          <button type="button" className="examFlagButton" onClick={onFullscreen} aria-label="Enter fullscreen">
+            <Maximize2 size={17} />
+          </button>
+        </Tooltip>
+        <button type="button" className="examHeaderSubmit" onClick={onSubmit}>
+          <Check size={16} />
+          Submit
+        </button>
       </div>
     </header>
   );
@@ -1297,7 +1453,8 @@ function TimerPill({ seconds }) {
   const state = seconds <= 60 ? "danger" : seconds <= 120 ? "critical" : seconds <= 600 ? "warning" : "normal";
   return (
     <div className={cn("examTimerPill", state, seconds < 60 && seconds % 10 === 0 && "shake")}>
-      {formatTime(seconds)}
+      <span>Time Left</span>
+      <strong>{formatTime(seconds)}</strong>
     </div>
   );
 }
@@ -1331,7 +1488,6 @@ function QuestionCard({
   question,
   answer,
   runOutput,
-  stdinValue,
   questionFontSize,
   canWork,
   running,
@@ -1360,13 +1516,12 @@ function QuestionCard({
           <CodeAnswer
             question={question}
             answer={answer}
-            stdinValue={stdinValue}
             runOutput={runOutput}
             canWork={canWork}
             running={running}
             onChange={value => onAnswerChange(question, { code_text: value })}
             onStdinChange={onStdinChange}
-            onRun={() => onRun(question)}
+            onRun={(stdinText, meta) => onRun(question, stdinText, meta)}
           />
         </section>
       </article>
@@ -1486,7 +1641,7 @@ function ReferenceCode({ code }) {
   );
 }
 
-function CodeAnswer({ question, answer, stdinValue, runOutput, canWork, running, onChange, onStdinChange, onRun }) {
+function CodeAnswer({ question, answer, runOutput, canWork, running, onChange, onStdinChange, onRun }) {
   const [editorHeight, setEditorHeight] = useState(320);
   const resizeRef = useRef(null);
 
@@ -1509,7 +1664,7 @@ function CodeAnswer({ question, answer, stdinValue, runOutput, canWork, running,
   return (
     <div className="examCodeAnswer">
       <section>
-        <label>Your Code</label>
+        <label>Python Editor</label>
         <div className="examCodeEditor" style={{ height: editorHeight }}>
           <Editor
             height="100%"
@@ -1535,51 +1690,119 @@ function CodeAnswer({ question, answer, stdinValue, runOutput, canWork, running,
         </div>
       </section>
 
-      <section className="examStdinBlock">
-        <label htmlFor={`stdin-${question.id}`}>Standard Input (stdin)</label>
-        <small id={`stdin-help-${question.id}`}>If your code uses input(), type values here, one per line</small>
-        <textarea
-          id={`stdin-${question.id}`}
-          data-stdin-input="true"
-          aria-describedby={`stdin-help-${question.id}`}
-          value={stdinValue}
-          disabled={!canWork}
-          rows={3}
-          spellCheck="false"
-          onChange={event => onStdinChange(event.target.value)}
-        />
-      </section>
-
       <section className="examRunBlock">
-        <button type="button" className="examRunButton" disabled={!canWork || running} onClick={onRun}>
-          {running ? <LoaderCircle size={16} className="spin" /> : <Play size={16} />}
-          {running ? "Running..." : "Run Code"}
-        </button>
-        <TerminalPanel output={runOutput} timeoutSeconds={question.execution_time_limit_seconds} />
+        <TerminalPanel
+          code={answer.code_text || ""}
+          output={runOutput}
+          timeoutSeconds={question.execution_time_limit_seconds}
+          canWork={canWork}
+          running={running}
+          onStdinChange={onStdinChange}
+          onRun={onRun}
+        />
       </section>
     </div>
   );
 }
 
-function TerminalPanel({ output, timeoutSeconds }) {
+function TerminalPanel({ code, output, timeoutSeconds, canWork, running, onStdinChange, onRun }) {
   const terminalHostRef = useRef(null);
   const terminalRef = useRef(null);
+  const collectingRef = useRef(false);
+  const promptIndexRef = useRef(0);
+  const promptsRef = useRef([]);
+  const inputLinesRef = useRef([]);
+  const inputBufferRef = useRef("");
+  const [collectingInput, setCollectingInput] = useState(false);
+  const canWorkRef = useLatestRef(canWork);
+  const runningRef = useLatestRef(running);
+  const onRunRef = useLatestRef(onRun);
+  const onStdinChangeRef = useLatestRef(onStdinChange);
   const content = useMemo(
-    () => output || { output: "", error: "", timed_out: false, execution_time_seconds: null, status: "idle" },
+    () => output || { output: "", error: "", timed_out: false, execution_time_seconds: null, status: "idle", input_prompts: [] },
     [output]
   );
+
+  const writePrompt = useCallback(prompt => {
+    const terminal = terminalRef.current;
+    if (!terminal) return;
+    const visiblePrompt = prompt || "input> ";
+    terminal.write(`\x1b[36m${visiblePrompt}\x1b[0m`);
+  }, []);
+
+  const cancelInputCollection = useCallback(message => {
+    collectingRef.current = false;
+    setCollectingInput(false);
+    inputBufferRef.current = "";
+    const terminal = terminalRef.current;
+    if (terminal && message) terminal.writeln(`\x1b[33m${message}\x1b[0m`);
+  }, []);
+
+  const finishInputCollection = useCallback(() => {
+    collectingRef.current = false;
+    setCollectingInput(false);
+    const inputLines = [...inputLinesRef.current];
+    const prompts = [...promptsRef.current];
+    const stdinText = inputLines.length ? `${inputLines.join("\n")}\n` : "";
+    const transcript = buildTerminalTranscript(prompts, inputLines);
+    onStdinChangeRef.current(stdinText);
+    onRunRef.current(stdinText, { transcript, prompts });
+  }, [onRunRef, onStdinChangeRef]);
+
+  const handleTerminalData = useCallback(data => {
+    if (!collectingRef.current || !canWorkRef.current || runningRef.current) return;
+    const terminal = terminalRef.current;
+    if (!terminal) return;
+
+    Array.from(data).forEach(character => {
+      if (!collectingRef.current) return;
+      if (character === "\u0003") {
+        terminal.write("^C\r\n");
+        cancelInputCollection("Run cancelled.");
+        return;
+      }
+      if (character === "\u001b") return;
+      if (character === "\r" || character === "\n") {
+        terminal.write("\r\n");
+        inputLinesRef.current.push(inputBufferRef.current);
+        inputBufferRef.current = "";
+        promptIndexRef.current += 1;
+        if (promptIndexRef.current < promptsRef.current.length) {
+          writePrompt(promptsRef.current[promptIndexRef.current]);
+        } else {
+          finishInputCollection();
+        }
+        return;
+      }
+      if (character === "\u007F" || character === "\b") {
+        if (inputBufferRef.current.length > 0) {
+          inputBufferRef.current = inputBufferRef.current.slice(0, -1);
+          terminal.write("\b \b");
+        }
+        return;
+      }
+      if (character >= " " && character !== "\u007F") {
+        inputBufferRef.current += character;
+        terminal.write(character);
+      }
+    });
+  }, [canWorkRef, cancelInputCollection, finishInputCollection, runningRef, writePrompt]);
 
   useEffect(() => {
     if (!terminalHostRef.current) return undefined;
     const terminal = new Terminal({
       cols: 80,
-      rows: 9,
+      rows: 10,
       convertEol: true,
-      cursorBlink: false,
-      disableStdin: true,
+      cursorBlink: true,
+      disableStdin: false,
       theme: {
-        background: "#0d1117",
-        foreground: "#d1d5db",
+        background: "#050816",
+        foreground: "#e5edf7",
+        cursor: "#f8fafc",
+        selectionBackground: "#334155",
+        blue: "#38bdf8",
+        brightBlue: "#7dd3fc",
         red: "#f87171",
         green: "#bbf7d0",
         yellow: "#fcd34d"
@@ -1589,33 +1812,85 @@ function TerminalPanel({ output, timeoutSeconds }) {
     });
     terminal.open(terminalHostRef.current);
     terminalRef.current = terminal;
+    const disposable = terminal.onData(handleTerminalData);
     return () => {
+      disposable.dispose();
       terminal.dispose();
       terminalRef.current = null;
     };
-  }, []);
+  }, [handleTerminalData]);
+
+  const startShellRun = useCallback(() => {
+    if (!canWork || running || collectingRef.current) return;
+    const terminal = terminalRef.current;
+    if (!terminal) return;
+    const prompts = extractInputPrompts(code);
+
+    terminal.clear();
+    terminal.writeln("\x1b[90m$ python main.py\x1b[0m");
+    terminal.focus();
+
+    if (prompts.length === 0) {
+      const transcript = buildTerminalTranscript([], [], true);
+      onRun("", { transcript, prompts: [] });
+      return;
+    }
+
+    collectingRef.current = true;
+    setCollectingInput(true);
+    promptsRef.current = prompts;
+    inputLinesRef.current = [];
+    promptIndexRef.current = 0;
+    inputBufferRef.current = "";
+
+    writePrompt(prompts[promptIndexRef.current]);
+  }, [canWork, code, onRun, running, writePrompt]);
+
+  useEffect(() => {
+    if (!canWork && collectingRef.current) cancelInputCollection("Exam is paused.");
+  }, [canWork, cancelInputCollection]);
 
   useEffect(() => {
     const terminal = terminalRef.current;
-    if (!terminal) return;
+    if (!terminal || collectingRef.current) return;
     terminal.clear();
     if (content.status === "idle") {
-      terminal.writeln("Run output will appear here.");
+      terminal.writeln("\x1b[90mPython shell ready.\x1b[0m");
       return;
     }
     if (content.status === "running") {
-      terminal.writeln("Running...");
+      if (content.transcript) terminal.write(normalizeTerminalText(content.transcript).replace(/\n/g, "\r\n"));
+      terminal.writeln("\x1b[90mRunning...\x1b[0m");
       return;
     }
-    if (content.timed_out) terminal.writeln(`\x1b[33mExecution timed out after ${timeoutSeconds}s\x1b[0m`);
-    if (content.error) terminal.writeln(`\x1b[31m${content.error}\x1b[0m`);
-    if (content.output) terminal.writeln(`\x1b[92m${content.output}\x1b[0m`);
-    if (!content.output && !content.error && !content.timed_out) terminal.writeln("Execution completed with no output.");
+    const terminalOutput = content.terminal_output || buildTerminalOutput({
+      transcript: content.transcript || "",
+      output: content.output || "",
+      error: content.error || "",
+      timedOut: content.timed_out,
+      timeoutSeconds,
+      prompts: content.input_prompts || []
+    });
+    if (terminalOutput) {
+      terminal.write(normalizeTerminalText(terminalOutput).replace(/\n/g, "\r\n"));
+      if (!normalizeTerminalText(terminalOutput).endsWith("\n")) terminal.write("\r\n");
+      return;
+    }
+    terminal.writeln("\x1b[90mExecution completed with no output.\x1b[0m");
   }, [content, timeoutSeconds]);
 
   return (
-    <div className="examTerminalWrap">
-      <div ref={terminalHostRef} className="examTerminal" />
+    <div className={cn("examShellConsole", collectingInput && "awaitingInput")}>
+      <div className="examRunToolbar">
+        <label>Python Shell</label>
+        <button type="button" className="examRunButton" disabled={!canWork || running || collectingInput} onClick={startShellRun}>
+          {running || collectingInput ? <LoaderCircle size={16} className="spin" /> : <Play size={16} />}
+          {running ? "Running..." : collectingInput ? "Waiting for input" : "Run Code"}
+        </button>
+      </div>
+      <div className="examTerminalWrap" role="textbox" aria-label="Interactive Python shell console" tabIndex={-1}>
+        <div ref={terminalHostRef} className="examTerminal" />
+      </div>
       {content.execution_time_seconds !== null && content.execution_time_seconds !== undefined && (
         <span>Ran in {Number(content.execution_time_seconds).toFixed(2)}s</span>
       )}

@@ -1,0 +1,1434 @@
+/* ===== EXAM UI REDESIGN — PREMIUM DARK MODE ===== */
+/* These styles override and extend the existing exam styles with the new design system */
+
+/* ===== SLICE 2: TOP NAVIGATION BAR ===== */
+
+.examHeaderBar {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 50;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  height: 72px;
+  padding: 0 var(--space-5);
+  background: var(--bg-elevated);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border-subtle);
+  box-shadow: 0 1px 0 var(--border-subtle), 0 4px 24px rgba(0, 0, 0, 0.3);
+}
+
+.examHeaderLeft {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.examHeaderEyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--accent-secondary);
+  font-family: var(--font-display);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* Pulsing dot animation for "NOW WRITING" */
+.examHeaderEyebrow::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--status-success);
+  animation: pulseGreen 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulseGreen {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.examHeaderLeft h1 {
+  max-width: 400px;
+  overflow: hidden;
+  margin: 0;
+  color: white;
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.examHeaderMeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-sm);
+  color: #94a3b8;
+}
+
+.examHeaderMeta span {
+  color: #94a3b8;
+}
+
+.examHeaderMeta span:not(:last-child)::after {
+  content: '·';
+  margin-left: 8px;
+  margin-right: 0;
+}
+
+/* Timer Pill */
+.examTimerPill {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 120px;
+  border-radius: var(--radius-full);
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  padding: 8px 24px;
+  gap: 2px;
+}
+
+.examTimerPill span {
+  font-size: var(--text-xs);
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.examTimerPill strong {
+  font-family: var(--font-mono);
+  font-size: var(--text-3xl);
+  font-weight: 700;
+  color: white;
+  line-height: 1;
+}
+
+/* Timer warning/danger states */
+.examTimerPill.warning {
+  background: rgba(245, 158, 11, 0.05);
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.examTimerPill.warning strong {
+  color: var(--status-warning);
+}
+
+.examTimerPill.critical,
+.examTimerPill.danger {
+  background: rgba(244, 63, 94, 0.05);
+  border-color: rgba(244, 63, 94, 0.3);
+  box-shadow: 0 0 20px rgba(244, 63, 94, 0.25);
+}
+
+.examTimerPill.critical strong,
+.examTimerPill.danger strong {
+  color: var(--status-danger);
+  animation: timerUrgency 0.8s ease-in-out infinite;
+}
+
+@keyframes timerUrgency {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.examTimerPill.shake {
+  animation: timerShake 180ms ease-in-out;
+}
+
+@keyframes timerShake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-2px); }
+  75% { transform: translateX(2px); }
+}
+
+/* Right section header */
+.examHeaderRight {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
+/* Saved indicator badge */
+.examHeaderSave {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(16, 185, 137, 0.1);
+  border: 1px solid rgba(16, 185, 137, 0.3);
+  border-radius: var(--radius-full);
+  color: var(--status-success);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.examHeaderSave svg {
+  width: 16px;
+  height: 16px;
+}
+
+.examHeaderSave.saving {
+  background: rgba(99, 102, 241, 0.1);
+  border-color: rgba(99, 102, 241, 0.3);
+  color: var(--accent-primary);
+}
+
+.examHeaderSave.saving svg {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.examHeaderSave.error {
+  background: rgba(244, 63, 94, 0.1);
+  border-color: rgba(244, 63, 94, 0.3);
+  color: var(--status-danger);
+}
+
+.examHeaderSave.offline {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.3);
+  color: var(--status-warning);
+}
+
+/* Question counter */
+.examHeaderRight > span {
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: white;
+  min-width: 50px;
+}
+
+/* Flag button */
+.examFlagButton {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.examFlagButton:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.examFlagButton.active {
+  border-color: var(--status-warning);
+  color: var(--status-warning);
+  background: rgba(245, 158, 11, 0.05);
+}
+
+/* Submit button */
+.examHeaderSubmit {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 20px;
+  background: linear-gradient(135deg, var(--status-danger), #e11d48);
+  border: none;
+  border-radius: var(--radius-md);
+  color: white;
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(244, 63, 94, 0.4);
+  transition: all var(--transition-fast);
+}
+
+.examHeaderSubmit:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(244, 63, 94, 0.5);
+}
+
+.examHeaderSubmit:active {
+  transform: translateY(0);
+}
+
+.examHeaderSubmit svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Update main content zone top offset for new 72px header */
+.examContentZone {
+  position: fixed;
+  inset: 72px 280px 0 0;
+  overflow-y: auto;
+  background: var(--bg-base);
+  padding: var(--space-8) var(--space-5);
+}
+
+/* Connectivity banner */
+.examConnectivityBanner {
+  position: fixed;
+  top: 72px;
+  left: 0;
+  right: 280px;
+  z-index: 49;
+  background: rgba(245, 158, 11, 0.95);
+  color: #111827;
+  padding: var(--space-3) var(--space-4);
+  text-align: center;
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.examConnectivityBanner.restored {
+  background: rgba(16, 185, 137, 0.95);
+  color: white;
+}
+
+/* ===== SLICE 3: LEFT SIDEBAR (ACTUALLY RIGHT PANEL IN CODE) ===== */
+
+.examRightPanel {
+  position: fixed;
+  top: 72px;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  width: 260px;
+  overflow-y: auto;
+  border-left: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  padding: var(--space-5);
+}
+
+.examStudentStrip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.examStudentStrip > span {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  place-items: center;
+  border-radius: var(--radius-full);
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  color: white;
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.examStudentStrip strong {
+  display: block;
+  color: white;
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.examStudentStrip small {
+  display: block;
+  color: #94a3b8;
+  font-size: var(--text-xs);
+}
+
+/* Font controls */
+.examFontControls {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+  margin-bottom: var(--space-6);
+}
+
+.examFontControls button {
+  height: 36px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: #94a3b8;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.examFontControls button:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.examFontControls button.active {
+  border-color: var(--accent-primary);
+  background: rgba(99, 102, 241, 0.1);
+  color: var(--accent-primary);
+}
+
+/* Progress summary */
+.examProgressSummary {
+  margin-bottom: var(--space-6);
+}
+
+.examProgressSummary h2,
+.examQuestionNavigator h2 {
+  margin: 0 0 var(--space-3);
+  color: #64748b;
+  font-family: var(--font-display);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.examStatRow {
+  display: flex;
+  height: 28px;
+  align-items: center;
+  justify-content: space-between;
+  color: #cbd5e1;
+  font-size: var(--text-sm);
+  margin-bottom: var(--space-2);
+}
+
+.examStatRow span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-body);
+}
+
+.examStatRow strong {
+  background: var(--bg-hover);
+  border-radius: var(--radius-full);
+  min-width: 24px;
+  padding: 0 8px;
+  text-align: center;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: white;
+}
+
+.examStatRow.green strong,
+.examStatRow.green svg {
+  color: var(--status-success);
+}
+
+.examStatRow.red strong,
+.examStatRow.red svg {
+  color: var(--status-danger);
+}
+
+.examStatRow.gray strong,
+.examStatRow.gray svg {
+  color: #64748b;
+}
+
+.examStatRow.amber strong,
+.examStatRow.amber svg {
+  color: var(--status-warning);
+}
+
+.examProgressBar {
+  height: 4px;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: var(--bg-hover);
+  margin-top: var(--space-3);
+}
+
+.examProgressBar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+  transition: width 600ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Questions section legend */
+.examQuestionNavigator {
+  margin-bottom: var(--space-6);
+}
+
+.examLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: var(--space-3);
+}
+
+.examLegend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #94a3b8;
+  font-size: var(--text-xs);
+}
+
+.examLegend i {
+  width: 6px;
+  height: 6px;
+  border-radius: 1px;
+}
+
+/* Question navigator grid */
+.examNavigatorGrid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  margin-bottom: var(--space-6);
+}
+
+.examNavigatorGrid button {
+  aspect-ratio: 1;
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.examNavigatorGrid button:hover {
+  transform: scale(1.05);
+}
+
+.examNavigatorGrid button.current {
+  box-shadow: var(--shadow-glow-primary);
+  background: var(--accent-primary);
+  color: white;
+}
+
+.status-not-visited {
+  border: 1px solid var(--border-default);
+  background: var(--bg-hover);
+  color: #94a3b8;
+}
+
+.status-visited-unanswered {
+  border: 1px solid rgba(244, 63, 94, 0.3);
+  background: rgba(244, 63, 94, 0.1);
+  color: var(--status-danger);
+}
+
+.status-answered {
+  border: 1px solid rgba(16, 185, 137, 0.3);
+  background: rgba(16, 185, 137, 0.1);
+  color: var(--status-success);
+}
+
+.status-marked-review {
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  background: rgba(99, 102, 241, 0.1);
+  color: var(--accent-primary);
+}
+
+.status-answered-marked {
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--status-warning);
+}
+
+/* Side timer */
+.examSideTimer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: var(--space-5);
+  margin-bottom: var(--space-5);
+  gap: 4px;
+}
+
+.examSideTimer strong {
+  color: white;
+  font-family: var(--font-mono);
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.examSideTimer span {
+  color: #94a3b8;
+  font-size: var(--text-xs);
+}
+
+.examSideTimer.warning strong {
+  color: var(--status-warning);
+}
+
+.examSideTimer.danger strong {
+  color: var(--status-danger);
+}
+
+.examSideTimer.pulse strong {
+  animation: timerUrgency 1s ease-in-out infinite;
+}
+
+/* Submit button in sidebar */
+.examPanelSubmit {
+  width: 100%;
+  height: 44px;
+  border: none;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, var(--status-danger), #e11d48);
+  color: white;
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(244, 63, 94, 0.35);
+  transition: all var(--transition-fast);
+}
+
+.examPanelSubmit:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(244, 63, 94, 0.4);
+}
+
+.examPanelSubmit:active {
+  transform: translateY(0);
+}
+
+.examRightPanel.mobile {
+  position: static;
+  width: 100%;
+  height: auto;
+  border-left: 0;
+  background: transparent;
+  padding: var(--space-4);
+}
+
+/* ===== SLICE 4: QUESTION DISPLAY PANEL ===== */
+
+.examQuestionCard {
+  margin-bottom: var(--space-5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  padding: var(--space-6);
+  box-shadow: var(--shadow-card);
+}
+
+.examQuestionHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: var(--space-5);
+}
+
+.examQuestionHeader div {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.examQuestionNumber {
+  font-family: var(--font-display);
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: white;
+}
+
+.examQuestionMarks {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: var(--radius-full);
+  color: var(--status-warning);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.examQuestionType {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  color: var(--accent-primary);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.examQuestionBody {
+  background: var(--bg-card);
+  color: #f1f5f9;
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: 1.6;
+  margin-bottom: var(--space-5);
+}
+
+.examQuestionBody p {
+  margin: 0 0 var(--space-3) 0;
+}
+
+/* Inline code in question */
+.examQuestionBody code {
+  background: var(--bg-hover);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  color: var(--accent-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+/* Question images */
+.examQuestionImages {
+  margin-bottom: var(--space-4);
+}
+
+.examQuestionImages img {
+  max-width: 100%;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.examQuestionImages img:hover {
+  border-color: var(--accent-primary);
+}
+
+/* Answer divider */
+.examAnswerDivider {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: var(--space-5) 0;
+}
+
+/* Hint section */
+.examHintAccordion {
+  margin: var(--space-5) 0;
+}
+
+.examHintAccordion summary {
+  cursor: pointer;
+  padding: var(--space-3) var(--space-4);
+  background: rgba(6, 182, 212, 0.05);
+  border: 1px solid rgba(6, 182, 212, 0.15);
+  border-radius: var(--radius-md);
+  color: var(--accent-secondary);
+  font-weight: 600;
+  user-select: none;
+  transition: all var(--transition-fast);
+}
+
+.examHintAccordion summary:hover {
+  background: rgba(6, 182, 212, 0.1);
+  border-color: rgba(6, 182, 212, 0.3);
+}
+
+.examHintAccordion p {
+  margin: var(--space-3) 0 0 0;
+  color: #94a3b8;
+  font-size: var(--text-sm);
+}
+
+/* ===== SLICE 5: CODE EDITOR PANEL ===== */
+
+.examCodeEditor {
+  background: #0d1117;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+}
+
+.examEditorToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: var(--space-3) var(--space-4);
+}
+
+.examLanguageBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  background: rgba(16, 185, 137, 0.1);
+  border: 1px solid rgba(16, 185, 137, 0.25);
+  border-radius: var(--radius-full);
+  color: var(--status-success);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.examEditorTools {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.examEditorTool {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.examEditorTool:hover {
+  background: var(--bg-hover);
+  color: white;
+}
+
+.examEditorStatus {
+  font-size: var(--text-xs);
+  color: #94a3b8;
+  font-family: var(--font-mono);
+}
+
+/* ===== SLICE 6: PYTHON SHELL / RUN CODE ===== */
+
+.examShellHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-elevated);
+  border-top: 2px solid var(--border-subtle);
+  padding: var(--space-3) var(--space-4);
+}
+
+.examShellLabel {
+  color: #64748b;
+  font-family: var(--font-display);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.examRunCodeButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 16px;
+  background: linear-gradient(135deg, var(--accent-primary), #4f46e5);
+  border: none;
+  border-radius: var(--radius-md);
+  color: white;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--text-sm);
+  cursor: pointer;
+  box-shadow: 0 4px 12px var(--accent-primary-glow);
+  transition: all var(--transition-fast);
+}
+
+.examRunCodeButton:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px var(--accent-primary-glow);
+}
+
+.examRunCodeButton:active {
+  transform: translateY(0);
+}
+
+.examShellOutput {
+  background: #090e1a;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  padding: var(--space-4);
+  min-height: 120px;
+  color: #e2e8f0;
+}
+
+.examShellPrompt {
+  color: var(--accent-secondary);
+}
+
+.examShellUserInput {
+  color: var(--status-warning);
+}
+
+.examShellOutput {
+  color: #a8d8a8;
+}
+
+.examShellError {
+  color: var(--status-danger);
+  background: rgba(244, 63, 94, 0.05);
+}
+
+.examShellCursor {
+  display: inline-block;
+  width: 1px;
+  height: 1em;
+  background: var(--accent-secondary);
+  animation: blink 1s step-start infinite;
+}
+
+@keyframes blink {
+  50% { background-color: transparent; }
+}
+
+.examShellStatusbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--border-subtle);
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-xs);
+  color: #4b5563;
+}
+
+/* ===== SLICE 7: BOTTOM ACTION BAR ===== */
+
+.examCommandBar {
+  position: sticky;
+  bottom: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  height: 64px;
+  padding: 0 var(--space-5);
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--border-subtle);
+  margin-top: var(--space-5);
+}
+
+.examCommandGroup {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.examCommandGroup.primary {
+  margin-left: auto;
+}
+
+.examCommandButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 18px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: #94a3b8;
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.examCommandButton:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-primary);
+  color: white;
+}
+
+.examCommandButton.review {
+  border-color: rgba(245, 158, 11, 0.3);
+  color: var(--status-warning);
+}
+
+.examCommandButton.review:hover {
+  background: rgba(245, 158, 11, 0.08);
+  border-color: var(--status-warning);
+  color: var(--status-warning);
+}
+
+.examCommandButton.save {
+  background: linear-gradient(135deg, var(--accent-primary), #4f46e5);
+  border: none;
+  color: white;
+  box-shadow: 0 4px 12px var(--accent-primary-glow);
+}
+
+.examCommandButton.save:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px var(--accent-primary-glow);
+}
+
+.examCommandButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ===== SLICE 8: MICRO-INTERACTIONS & ANIMATIONS ===== */
+
+/* Page entrance animations */
+.examRightPanel {
+  animation: slideInRight 300ms ease-out;
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.examHeaderBar {
+  animation: slideInTop 250ms ease-out;
+}
+
+@keyframes slideInTop {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.examContentZone {
+  animation: fadeIn 350ms ease-out 100ms both;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.examContentZone.isTransitioning {
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+/* Save badge pulse animation */
+.examHeaderSave.saved {
+  animation: savePulse 1.5s ease-out;
+}
+
+@keyframes savePulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 137, 0.5);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(16, 185, 137, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 137, 0);
+  }
+}
+
+/* Copy button success state */
+.examEditorTool.copy-success {
+  color: var(--status-success);
+  background: rgba(16, 185, 137, 0.1);
+}
+
+/* Progress bar animated load */
+.examProgressBar span {
+  animation: progressLoad 600ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes progressLoad {
+  from { width: 0; }
+}
+
+/* Question bubble state transitions */
+.examNavigatorGrid button {
+  transition: all var(--transition-fast);
+}
+
+.examNavigatorGrid button:not(.current):hover {
+  transform: scale(1.05);
+}
+
+/* Hover animations for command buttons */
+.examCommandButton svg {
+  transition: transform var(--transition-fast);
+}
+
+.examCommandButton:hover svg {
+  transform: translateX(2px);
+}
+
+/* ===== SLICE 9: RESPONSIVE & ACCESSIBILITY PASS ===== */
+
+/* Focus ring for all interactive elements */
+button, 
+[role="button"],
+input,
+textarea,
+select {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+
+button:focus-visible,
+[role="button"]:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+/* Keyboard shortcut hints */
+[data-shortcut]::after {
+  content: attr(data-shortcut);
+  font-size: 10px;
+  opacity: 0;
+  margin-left: 4px;
+  transition: opacity var(--transition-fast);
+}
+
+button:hover[data-shortcut]::after {
+  opacity: 0.7;
+}
+
+/* Responsive breakpoints */
+@media (max-width: 1280px) {
+  .examRightPanel {
+    width: 220px;
+  }
+  
+  .examContentZone {
+    inset: 72px 220px 0 0;
+  }
+}
+
+@media (max-width: 1024px) {
+  .examHeaderBar {
+    grid-template-columns: 1fr auto;
+  }
+  
+  .examHeaderRight {
+    grid-column: 2;
+  }
+  
+  .examRightPanel {
+    position: fixed;
+    top: 72px;
+    right: -260px;
+    width: 260px;
+    height: 100vh;
+    z-index: 45;
+    transition: right 300ms ease;
+    box-shadow: -4px 0 12px rgba(0, 0, 0, 0.3);
+  }
+  
+  .examRightPanel.open {
+    right: 0;
+  }
+  
+  .examContentZone {
+    inset: 72px 0 0 0;
+  }
+}
+
+@media (max-width: 768px) {
+  .examHeaderBar {
+    height: 56px;
+    padding: 0 var(--space-3);
+    grid-template-columns: 1fr auto;
+  }
+  
+  .examHeaderLeft h1 {
+    max-width: 200px;
+    font-size: var(--text-xl);
+  }
+  
+  .examHeaderMeta {
+    display: none;
+  }
+  
+  .examContentZone {
+    inset: 56px 0 0 0;
+    padding: var(--space-4) var(--space-3);
+  }
+  
+  .examCommandBar {
+    flex-direction: column;
+    gap: var(--space-2);
+    height: auto;
+    padding: var(--space-3);
+  }
+  
+  .examCommandGroup {
+    width: 100%;
+    justify-content: stretch;
+  }
+  
+  .examCommandButton {
+    flex: 1;
+    justify-content: center;
+  }
+}
+
+/* High contrast mode */
+@media (prefers-contrast: more) {
+  .examHeaderBar {
+    border-bottom: 2px solid var(--accent-primary);
+  }
+  
+  .examNavigatorGrid button {
+    border-width: 2px;
+  }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ===== XTERM TERMINAL STYLING ===== */
+
+/* XTerm scrollbar customization */
+.xterm {
+  background: #090e1a;
+  color: #e2e8f0;
+  font-family: var(--font-mono);
+  font-size: 14px;
+}
+
+.xterm .xterm-screen {
+  background: #090e1a;
+}
+
+.xterm .xterm-row {
+  font-feature-settings: "liga"0;
+}
+
+.xterm-viewport {
+  background: #090e1a;
+  scrollbar-color: #3d4f6e #1e2a45;
+  scrollbar-width: thin;
+}
+
+.xterm-viewport::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.xterm-viewport::-webkit-scrollbar-track {
+  background: #1e2a45;
+  border-radius: 3px;
+}
+
+.xterm-viewport::-webkit-scrollbar-thumb {
+  background: #3d4f6e;
+  border-radius: 3px;
+}
+
+.xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: #4b5563;
+}
+
+/* XTerm cursor */
+.xterm .xterm-cursor {
+  background: #06b6d4;
+  color: #090e1a;
+  opacity: 1;
+}
+
+.xterm .xterm-cursor.xterm-cursor-block {
+  background: #06b6d4;
+}
+
+.xterm.focus .xterm-cursor {
+  outline: 1px solid #06b6d4;
+}
+
+/* XTerm text colors aligned with premium theme */
+.xterm .xterm-bold { font-weight: 700; }
+.xterm .xterm-dim { opacity: 0.5; }
+.xterm .xterm-italic { font-style: italic; }
+.xterm .xterm-underline { text-decoration: underline; }
+
+/* XTerm 256 color palette customized */
+.xterm .xterm-color-0 { color: #1e293b; }
+.xterm .xterm-color-1 { color: #f43f5e; }  /* danger/red */
+.xterm .xterm-color-2 { color: #10b981; }  /* success/green */
+.xterm .xterm-color-3 { color: #f59e0b; }  /* warning/yellow */
+.xterm .xterm-color-4 { color: #3b82f6; }  /* info/blue */
+.xterm .xterm-color-5 { color: #c792ea; }  /* magenta */
+.xterm .xterm-color-6 { color: #06b6d4; }  /* cyan */
+.xterm .xterm-color-7 { color: #e2e8f0; }  /* white */
+
+/* Selection styling */
+.xterm .xterm-selection {
+  background: rgba(99, 102, 241, 0.3);
+}
+
+/* Underline cursor variant */
+.xterm .xterm-cursor-thin {
+  height: 2px;
+  background: #06b6d4;
+}
+
+/* ===== MONACO EDITOR SCROLLBAR ===== */
+
+/* Monaco editor custom scrollbar */
+.monaco-editor .monaco-scrollable-element > .scrollbar > .slider {
+  background: #3d4f6e;
+  opacity: 0.6;
+  border-radius: 3px;
+}
+
+.monaco-editor .monaco-scrollable-element > .scrollbar > .slider:hover {
+  background: #4b5563;
+  opacity: 0.8;
+}
+
+.monaco-editor .monaco-scrollable-element > .scrollbar > .slider.active {
+  background: #6366f1;
+  opacity: 1;
+}
+
+.monaco-editor .minimap-slider {
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.monaco-editor .minimap-slider:hover {
+  background: rgba(99, 102, 241, 0.15);
+}
+
+/* ===== ADDITIONAL POLISH ===== */
+
+/* Scrollbar styling for all scrollable elements */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3d4f6e;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4b5563;
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-color: #3d4f6e transparent;
+  scrollbar-width: thin;
+}
+
+/* Input focus styling */
+input:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+/* Select dropdown styling */
+select {
+  background: var(--bg-card);
+  color: white;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+select:hover {
+  border-color: var(--accent-primary);
+}
+
+select:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+/* Textarea styling */
+textarea {
+  background: var(--bg-card);
+  color: #e2e8f0;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1.6;
+  transition: all var(--transition-fast);
+}
+
+textarea:hover {
+  border-color: var(--accent-primary);
+}
+
+textarea:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+  border-color: var(--accent-primary);
+  background: var(--bg-hover);
+}
+
+/* Placeholder styling */
+::placeholder {
+  color: #64748b;
+  opacity: 0.7;
+}
+
+/* Selection styling */
+::selection {
+  background: rgba(99, 102, 241, 0.3);
+  color: white;
+}
+
+::-moz-selection {
+  background: rgba(99, 102, 241, 0.3);
+  color: white;
+}
+
+
+
