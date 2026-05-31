@@ -26,6 +26,46 @@ const defaultLoginFeatures = [
   { icon: "BookOpen", text: "Guided exam access for every learner", enabled: false }
 ];
 
+const defaultLoginFormContent = {
+  title: "Welcome back",
+  subtitle: "Sign in to continue to your workspace",
+  student_tab: "Student",
+  teacher_tab: "Teacher",
+  student_identifier_label: "Username, Email, or Roll Number",
+  student_identifier_placeholder: "student@example.com",
+  teacher_identifier_label: "Teacher Username",
+  teacher_identifier_placeholder: "teacher.username",
+  password_label: "Password",
+  password_placeholder: "Password",
+  submit_button: "Sign in",
+  submitting: "Signing in...",
+  student_register_prompt: "Do not have a student account?",
+  student_register_link: "Create one",
+  admin_link: "Admin sign in",
+  session_conflict: "Another session on a different device has been signed out."
+};
+
+const defaultRegistrationPageContent = {
+  account_title: "Create student account",
+  account_subtitle: "Create your account to access assigned exams and results.",
+  account_button: "Create Account",
+  account_submitting: "Creating account...",
+  sign_in_prompt: "Already have an account?",
+  sign_in_link: "Sign in",
+  loading_title: "Checking registration status",
+  loading_subtitle: "We are preparing the right student access page for you.",
+  paused_title: "Registration is paused for now",
+  paused_subtitle: "Student self-registration is currently closed. Send your details to the admin and they can help you with access.",
+  request_success: "Your message has reached the admin inbox.",
+  request_message_label: "Message to Admin",
+  request_message_placeholder: "Tell the admin which course, group, or exam access you need.",
+  request_message_helper: "Minimum 10 characters",
+  request_button: "Send Request to Admin",
+  request_submitting: "Sending request...",
+  request_footer: "The admin will see this in their notification inbox.",
+  request_back_link: "Back to sign in"
+};
+
 const loginFeatureIconOptions = ["Shield", "BarChart2", "Code2", "Layers", "UserCheck", "BookOpen", "Lock", "Zap"].map(icon => ({
   value: icon,
   label: icon
@@ -65,6 +105,26 @@ function settingsList(value) {
   return [];
 }
 
+function settingsRegistrationPageContent(value) {
+  const source = value && typeof value === "object" ? value : {};
+  return Object.entries(defaultRegistrationPageContent).reduce((result, [key, fallback]) => {
+    const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+    const nextValue = source[key] ?? source[camelKey];
+    result[key] = String(nextValue || fallback).trim() || fallback;
+    return result;
+  }, {});
+}
+
+function settingsLoginFormContent(value) {
+  const source = value && typeof value === "object" ? value : {};
+  return Object.entries(defaultLoginFormContent).reduce((result, [key, fallback]) => {
+    const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+    const nextValue = source[key] ?? source[camelKey];
+    result[key] = String(nextValue || fallback).trim() || fallback;
+    return result;
+  }, {});
+}
+
 export default function AdminSettings() {
   const [searchParams] = useSearchParams();
   const loadBootstrap = useAppStore(state => state.loadBootstrap);
@@ -89,6 +149,8 @@ export default function AdminSettings() {
     login_page_features: defaultLoginFeatures,
     login_page_security_badge_text: "Secured by end-to-end encryption",
     login_page_security_badge_enabled: true,
+    login_form_content: defaultLoginFormContent,
+    registration_page_content: defaultRegistrationPageContent,
     quote_pool: [
       "One calm question at a time.",
       "Focus brings success.",
@@ -126,6 +188,8 @@ export default function AdminSettings() {
           login_page_features: settingsFeatures(settings.login_page_features),
           login_page_security_badge_text: settings.login_page_security_badge_text || current.login_page_security_badge_text,
           login_page_security_badge_enabled: settings.login_page_security_badge_enabled !== false,
+          login_form_content: settingsLoginFormContent(settings.login_form_content || settings.login_form),
+          registration_page_content: settingsRegistrationPageContent(settings.registration_page_content || settings.registration_page),
           quote_pool: settingsList(settings.quote_pool).length ? settingsList(settings.quote_pool) : current.quote_pool
         }));
         setRegistration(current => ({
@@ -268,6 +332,8 @@ export default function AdminSettings() {
           .slice(0, 6),
         login_page_security_badge_text: general.login_page_security_badge_text,
         login_page_security_badge_enabled: general.login_page_security_badge_enabled,
+        login_form_content: general.login_form_content,
+        registration_page_content: general.registration_page_content,
         announcement_message: announcement.enabled ? announcement.message : "",
         quote_pool: general.quote_pool.join("\n"),
         max_violations_before_alert: security.violation_threshold,
@@ -513,6 +579,14 @@ function SettingsSection({
 }) {
   if (sectionId === "general") {
     const enabledFeatureCount = general.login_page_features.filter(feature => feature.enabled !== false && feature.text?.trim()).length;
+    const loginFormCopy = settingsLoginFormContent(general.login_form_content);
+    const updateLoginFormCopy = (field, value) => {
+      onGeneralChange("login_form_content", { ...loginFormCopy, [field]: value });
+    };
+    const registrationCopy = settingsRegistrationPageContent(general.registration_page_content);
+    const updateRegistrationCopy = (field, value) => {
+      onGeneralChange("registration_page_content", { ...registrationCopy, [field]: value });
+    };
     return (
       <Card className="p-6">
         <div className="space-y-5">
@@ -687,6 +761,220 @@ function SettingsSection({
                   {general.login_page_security_badge_text}
                 </p>
               )}
+            </div>
+          </div>
+          <div className="space-y-4 rounded-lg border border-border bg-background-base p-4">
+            <div>
+              <h3 className="text-base font-semibold text-text-primary">Login Form Copy</h3>
+              <p className="text-sm text-text-secondary">Controls the sign-in card text, tabs, labels, buttons, and links.</p>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <Input
+                label="Form Title"
+                value={loginFormCopy.title}
+                onChange={event => updateLoginFormCopy("title", event.target.value)}
+              />
+              <Input
+                label="Form Subtitle"
+                value={loginFormCopy.subtitle}
+                onChange={event => updateLoginFormCopy("subtitle", event.target.value)}
+              />
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <Input
+                label="Student Tab"
+                value={loginFormCopy.student_tab}
+                onChange={event => updateLoginFormCopy("student_tab", event.target.value)}
+              />
+              <Input
+                label="Teacher Tab"
+                value={loginFormCopy.teacher_tab}
+                onChange={event => updateLoginFormCopy("teacher_tab", event.target.value)}
+              />
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <Input
+                label="Student Identifier Label"
+                value={loginFormCopy.student_identifier_label}
+                onChange={event => updateLoginFormCopy("student_identifier_label", event.target.value)}
+              />
+              <Input
+                label="Student Identifier Placeholder"
+                value={loginFormCopy.student_identifier_placeholder}
+                onChange={event => updateLoginFormCopy("student_identifier_placeholder", event.target.value)}
+              />
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <Input
+                label="Teacher Identifier Label"
+                value={loginFormCopy.teacher_identifier_label}
+                onChange={event => updateLoginFormCopy("teacher_identifier_label", event.target.value)}
+              />
+              <Input
+                label="Teacher Identifier Placeholder"
+                value={loginFormCopy.teacher_identifier_placeholder}
+                onChange={event => updateLoginFormCopy("teacher_identifier_placeholder", event.target.value)}
+              />
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <Input
+                label="Password Label"
+                value={loginFormCopy.password_label}
+                onChange={event => updateLoginFormCopy("password_label", event.target.value)}
+              />
+              <Input
+                label="Password Placeholder"
+                value={loginFormCopy.password_placeholder}
+                onChange={event => updateLoginFormCopy("password_placeholder", event.target.value)}
+              />
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <Input
+                label="Submit Button"
+                value={loginFormCopy.submit_button}
+                onChange={event => updateLoginFormCopy("submit_button", event.target.value)}
+              />
+              <Input
+                label="Submitting Label"
+                value={loginFormCopy.submitting}
+                onChange={event => updateLoginFormCopy("submitting", event.target.value)}
+              />
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <Input
+                label="Student Account Prompt"
+                value={loginFormCopy.student_register_prompt}
+                onChange={event => updateLoginFormCopy("student_register_prompt", event.target.value)}
+              />
+              <Input
+                label="Student Account Link"
+                value={loginFormCopy.student_register_link}
+                onChange={event => updateLoginFormCopy("student_register_link", event.target.value)}
+              />
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <Input
+                label="Admin Link"
+                value={loginFormCopy.admin_link}
+                onChange={event => updateLoginFormCopy("admin_link", event.target.value)}
+              />
+              <Input
+                label="Session Conflict Notice"
+                value={loginFormCopy.session_conflict}
+                onChange={event => updateLoginFormCopy("session_conflict", event.target.value)}
+              />
+            </div>
+          </div>
+          <div className="space-y-4 rounded-lg border border-border bg-background-base p-4">
+            <div>
+              <h3 className="text-base font-semibold text-text-primary">Registration Page Copy</h3>
+              <p className="text-sm text-text-secondary">Controls the create-account and paused-registration panels.</p>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <Input
+                label="Account Form Title"
+                value={registrationCopy.account_title}
+                onChange={event => updateRegistrationCopy("account_title", event.target.value)}
+              />
+              <Input
+                label="Account Button"
+                value={registrationCopy.account_button}
+                onChange={event => updateRegistrationCopy("account_button", event.target.value)}
+              />
+            </div>
+            <Textarea
+              label="Account Form Subtitle"
+              value={registrationCopy.account_subtitle}
+              onChange={event => updateRegistrationCopy("account_subtitle", event.target.value)}
+              rows={2}
+            />
+            <div className="grid gap-3 md:grid-cols-2">
+              <Input
+                label="Submitting Label"
+                value={registrationCopy.account_submitting}
+                onChange={event => updateRegistrationCopy("account_submitting", event.target.value)}
+              />
+              <Input
+                label="Sign-In Link"
+                value={registrationCopy.sign_in_link}
+                onChange={event => updateRegistrationCopy("sign_in_link", event.target.value)}
+              />
+            </div>
+            <Input
+              label="Sign-In Prompt"
+              value={registrationCopy.sign_in_prompt}
+              onChange={event => updateRegistrationCopy("sign_in_prompt", event.target.value)}
+            />
+            <div className="grid gap-3 md:grid-cols-2">
+              <Input
+                label="Loading Title"
+                value={registrationCopy.loading_title}
+                onChange={event => updateRegistrationCopy("loading_title", event.target.value)}
+              />
+              <Input
+                label="Paused Title"
+                value={registrationCopy.paused_title}
+                onChange={event => updateRegistrationCopy("paused_title", event.target.value)}
+              />
+            </div>
+            <Textarea
+              label="Loading Subtitle"
+              value={registrationCopy.loading_subtitle}
+              onChange={event => updateRegistrationCopy("loading_subtitle", event.target.value)}
+              rows={2}
+            />
+            <Textarea
+              label="Paused Subtitle"
+              value={registrationCopy.paused_subtitle}
+              onChange={event => updateRegistrationCopy("paused_subtitle", event.target.value)}
+              rows={2}
+            />
+            <div className="grid gap-3 md:grid-cols-2">
+              <Input
+                label="Request Button"
+                value={registrationCopy.request_button}
+                onChange={event => updateRegistrationCopy("request_button", event.target.value)}
+              />
+              <Input
+                label="Request Sending Label"
+                value={registrationCopy.request_submitting}
+                onChange={event => updateRegistrationCopy("request_submitting", event.target.value)}
+              />
+            </div>
+            <Input
+              label="Request Success Message"
+              value={registrationCopy.request_success}
+              onChange={event => updateRegistrationCopy("request_success", event.target.value)}
+            />
+            <div className="grid gap-3 md:grid-cols-2">
+              <Input
+                label="Message Field Label"
+                value={registrationCopy.request_message_label}
+                onChange={event => updateRegistrationCopy("request_message_label", event.target.value)}
+              />
+              <Input
+                label="Message Helper"
+                value={registrationCopy.request_message_helper}
+                onChange={event => updateRegistrationCopy("request_message_helper", event.target.value)}
+              />
+            </div>
+            <Textarea
+              label="Message Placeholder"
+              value={registrationCopy.request_message_placeholder}
+              onChange={event => updateRegistrationCopy("request_message_placeholder", event.target.value)}
+              rows={2}
+            />
+            <div className="grid gap-3 md:grid-cols-2">
+              <Input
+                label="Request Footer"
+                value={registrationCopy.request_footer}
+                onChange={event => updateRegistrationCopy("request_footer", event.target.value)}
+              />
+              <Input
+                label="Paused Back Link"
+                value={registrationCopy.request_back_link}
+                onChange={event => updateRegistrationCopy("request_back_link", event.target.value)}
+              />
             </div>
           </div>
           <div className="space-y-3">

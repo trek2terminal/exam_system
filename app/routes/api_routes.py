@@ -141,6 +141,12 @@ def _settings_payload(settings):
         security_badge_text,
         security_badge_enabled,
     ) = _login_page_settings(settings)
+    registration_page_content = SettingsService.normalize_registration_page_content(
+        getattr(settings, "registration_page_content", None)
+    )
+    login_form_content = SettingsService.normalize_login_form_content(
+        getattr(settings, "login_form_content", None)
+    )
     return {
         "platform_name": settings.platform_name,
         "logo_path": logo_path,
@@ -157,6 +163,10 @@ def _settings_payload(settings):
         "login_tagline": login_tagline,
         "login_subheading": login_subheading,
         "login_features": login_features,
+        "login_form_content": login_form_content,
+        "login_form": login_form_content,
+        "registration_page_content": registration_page_content,
+        "registration_page": registration_page_content,
         "login_page": {
             "heading": login_heading,
             "tagline": login_tagline,
@@ -448,6 +458,10 @@ def _public_settings_payload(settings):
             "securityBadgeEnabled": payload.get("login_page_security_badge_enabled"),
         },
         "login_page": payload.get("login_page"),
+        "loginForm": payload.get("login_form_content"),
+        "login_form": payload.get("login_form_content"),
+        "registrationPage": payload.get("registration_page_content"),
+        "registration_page": payload.get("registration_page_content"),
     }
 
 
@@ -5697,6 +5711,8 @@ def admin_settings_api():
         "login_page_features": payload.get("login_page_features"),
         "login_page_security_badge_text": payload.get("login_page_security_badge_text"),
         "login_page_security_badge_enabled": "on" if payload.get("login_page_security_badge_enabled") else "",
+        "login_form_content": payload.get("login_form_content"),
+        "registration_page_content": payload.get("registration_page_content"),
         "quote_pool": payload.get("quote_pool"),
         "max_violations_before_alert": payload.get("max_violations_before_alert"),
         "student_self_registration": "on" if payload.get("student_self_registration") else "",

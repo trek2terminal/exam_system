@@ -38,6 +38,8 @@ class PlatformSettings(db.Model):
         default="Secured by end-to-end encryption",
     )
     login_page_security_badge_enabled = db.Column(db.Boolean, default=True, nullable=False)
+    login_form_content = db.Column(db.Text, nullable=True)
+    registration_page_content = db.Column(db.Text, nullable=True)
     student_self_registration = db.Column(db.Boolean, default=False, nullable=False)
     registration_code_required = db.Column(db.Boolean, default=False, nullable=False)
     registration_code = db.Column(db.String(80), nullable=True)

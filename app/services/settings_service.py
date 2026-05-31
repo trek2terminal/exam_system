@@ -27,6 +27,44 @@ class SettingsService:
         {"icon": "BookOpen", "text": "Guided exam access for every learner", "enabled": False},
     ]
     DEFAULT_SECURITY_BADGE_TEXT = "Secured by end-to-end encryption"
+    DEFAULT_LOGIN_FORM_CONTENT = {
+        "title": "Welcome back",
+        "subtitle": "Sign in to continue to your workspace",
+        "student_tab": "Student",
+        "teacher_tab": "Teacher",
+        "student_identifier_label": "Username, Email, or Roll Number",
+        "student_identifier_placeholder": "student@example.com",
+        "teacher_identifier_label": "Teacher Username",
+        "teacher_identifier_placeholder": "teacher.username",
+        "password_label": "Password",
+        "password_placeholder": "Password",
+        "submit_button": "Sign in",
+        "submitting": "Signing in...",
+        "student_register_prompt": "Do not have a student account?",
+        "student_register_link": "Create one",
+        "admin_link": "Admin sign in",
+        "session_conflict": "Another session on a different device has been signed out.",
+    }
+    DEFAULT_REGISTRATION_PAGE_CONTENT = {
+        "account_title": "Create student account",
+        "account_subtitle": "Create your account to access assigned exams and results.",
+        "account_button": "Create Account",
+        "account_submitting": "Creating account...",
+        "sign_in_prompt": "Already have an account?",
+        "sign_in_link": "Sign in",
+        "loading_title": "Checking registration status",
+        "loading_subtitle": "We are preparing the right student access page for you.",
+        "paused_title": "Registration is paused for now",
+        "paused_subtitle": "Student self-registration is currently closed. Send your details to the admin and they can help you with access.",
+        "request_success": "Your message has reached the admin inbox.",
+        "request_message_label": "Message to Admin",
+        "request_message_placeholder": "Tell the admin which course, group, or exam access you need.",
+        "request_message_helper": "Minimum 10 characters",
+        "request_button": "Send Request to Admin",
+        "request_submitting": "Sending request...",
+        "request_footer": "The admin will see this in their notification inbox.",
+        "request_back_link": "Back to sign in",
+    }
     FEATURE_ICON_ALLOWLIST = {"Shield", "BarChart2", "Code2", "Layers", "UserCheck", "BookOpen", "Lock", "Zap"}
 
     @staticmethod
@@ -66,6 +104,56 @@ class SettingsService:
         return json.dumps(SettingsService.normalize_login_features(value))
 
     @staticmethod
+    def normalize_registration_page_content(value):
+        if isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+            except (TypeError, ValueError):
+                parsed = {}
+        elif isinstance(value, dict):
+            parsed = value
+        else:
+            parsed = {}
+
+        content = dict(SettingsService.DEFAULT_REGISTRATION_PAGE_CONTENT)
+        for key, default_value in SettingsService.DEFAULT_REGISTRATION_PAGE_CONTENT.items():
+            raw_value = parsed.get(key)
+            if raw_value is None:
+                raw_value = parsed.get("".join(part.title() if index else part for index, part in enumerate(key.split("_"))))
+            text = str(raw_value if raw_value is not None else default_value).strip()
+            content[key] = text[:500] or default_value
+        return content
+
+    @staticmethod
+    def serialize_registration_page_content(value):
+        return json.dumps(SettingsService.normalize_registration_page_content(value))
+
+    @staticmethod
+    def normalize_login_form_content(value):
+        if isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+            except (TypeError, ValueError):
+                parsed = {}
+        elif isinstance(value, dict):
+            parsed = value
+        else:
+            parsed = {}
+
+        content = dict(SettingsService.DEFAULT_LOGIN_FORM_CONTENT)
+        for key, default_value in SettingsService.DEFAULT_LOGIN_FORM_CONTENT.items():
+            raw_value = parsed.get(key)
+            if raw_value is None:
+                raw_value = parsed.get("".join(part.title() if index else part for index, part in enumerate(key.split("_"))))
+            text = str(raw_value if raw_value is not None else default_value).strip()
+            content[key] = text[:500] or default_value
+        return content
+
+    @staticmethod
+    def serialize_login_form_content(value):
+        return json.dumps(SettingsService.normalize_login_form_content(value))
+
+    @staticmethod
     def get_settings():
         if has_request_context() and hasattr(g, "_platform_settings"):
             return g._platform_settings
@@ -86,6 +174,8 @@ class SettingsService:
             login_page_features=SettingsService.serialize_login_features(SettingsService.DEFAULT_LOGIN_PAGE_FEATURES),
             login_page_security_badge_text=SettingsService.DEFAULT_SECURITY_BADGE_TEXT,
             login_page_security_badge_enabled=True,
+            login_form_content=SettingsService.serialize_login_form_content(SettingsService.DEFAULT_LOGIN_FORM_CONTENT),
+            registration_page_content=SettingsService.serialize_registration_page_content(SettingsService.DEFAULT_REGISTRATION_PAGE_CONTENT),
             student_self_registration=False,
             registration_code_required=False,
             registration_code=None,
@@ -161,6 +251,20 @@ class SettingsService:
             settings.login_page_security_badge_text = SettingsService.DEFAULT_SECURITY_BADGE_TEXT
         if "login_page_security_badge_enabled" in data:
             settings.login_page_security_badge_enabled = data.get("login_page_security_badge_enabled") == "on"
+        if "login_form_content" in data:
+            settings.login_form_content = SettingsService.serialize_login_form_content(data.get("login_form_content"))
+        elif not getattr(settings, "login_form_content", None):
+            settings.login_form_content = SettingsService.serialize_login_form_content(
+                SettingsService.DEFAULT_LOGIN_FORM_CONTENT
+            )
+        if "registration_page_content" in data:
+            settings.registration_page_content = SettingsService.serialize_registration_page_content(
+                data.get("registration_page_content")
+            )
+        elif not getattr(settings, "registration_page_content", None):
+            settings.registration_page_content = SettingsService.serialize_registration_page_content(
+                SettingsService.DEFAULT_REGISTRATION_PAGE_CONTENT
+            )
         settings.student_self_registration = data.get("student_self_registration") == "on"
         settings.registration_code_required = data.get("registration_code_required") == "on"
         settings.registration_code = registration_code[:80] or None

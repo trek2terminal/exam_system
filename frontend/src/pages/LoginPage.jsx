@@ -35,31 +35,31 @@ export default function LoginPage({ settings }) {
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [conflictMessage, setConflictMessage] = useState("");
+  const panelContent = platformSettings.loginPage;
+  const formContent = platformSettings.loginForm;
+  const enabledFeatures = panelContent.features.filter(feature => feature.enabled !== false);
 
   const loginMeta = useMemo(() => {
     if (role === "teacher") {
       return {
         identifierName: "username",
-        identifierLabel: "Teacher Username",
-        identifierPlaceholder: "teacher.username"
+        identifierLabel: formContent.teacherIdentifierLabel,
+        identifierPlaceholder: formContent.teacherIdentifierPlaceholder
       };
     }
 
     return {
       identifierName: "identifier",
-      identifierLabel: "Username, Email, or Roll Number",
-      identifierPlaceholder: "student@example.com"
+      identifierLabel: formContent.studentIdentifierLabel,
+      identifierPlaceholder: formContent.studentIdentifierPlaceholder
     };
-  }, [role]);
+  }, [formContent, role]);
 
   useEffect(() => {
     if (!conflictMessage) return undefined;
     const timeoutId = window.setTimeout(() => setConflictMessage(""), 5000);
     return () => window.clearTimeout(timeoutId);
   }, [conflictMessage]);
-
-  const panelContent = platformSettings.loginPage;
-  const enabledFeatures = panelContent.features.filter(feature => feature.enabled !== false);
 
   const handleSubmit = async event => {
     event.preventDefault();
@@ -72,7 +72,7 @@ export default function LoginPage({ settings }) {
         password
       });
       if (data.session_conflict) {
-        setConflictMessage(data.conflict_message || "Another session on a different device has been signed out.");
+        setConflictMessage(data.conflict_message || formContent.sessionConflict);
         await new Promise(resolve => window.setTimeout(resolve, 1200));
       }
       notify.success(data.message || "Login successful");
@@ -88,12 +88,12 @@ export default function LoginPage({ settings }) {
   };
 
   return (
-    <div className="loginCyberScene min-h-screen text-white">
-      <div className="flex min-h-screen flex-col lg:flex-row">
-        <aside className="authPanelPro loginCyberPanel relative hidden flex-1 overflow-hidden border-r border-white/10 p-10 text-white lg:flex lg:flex-col lg:justify-between xl:p-16">
+    <div className="loginCyberScene min-h-[100dvh] overflow-y-auto text-white">
+      <div className="flex min-h-[100dvh] flex-col lg:flex-row">
+        <aside className="authPanelPro loginCyberPanel relative hidden flex-1 overflow-y-auto border-r border-white/10 p-10 text-white lg:sticky lg:top-0 lg:flex lg:h-[100dvh] lg:min-h-[100dvh] lg:self-start xl:p-16">
           <div className="authSignalMesh" />
 
-          <div className="relative z-10 max-w-2xl">
+          <div className="relative z-10 flex min-h-full max-w-3xl flex-col justify-center py-4">
             <div className="mb-10 inline-flex items-center gap-4">
               {platformSettings.logoUrl ? (
                 <img
@@ -124,7 +124,7 @@ export default function LoginPage({ settings }) {
               {panelContent.subheading}
             </p>
 
-            <div className="mt-14 space-y-5">
+            <div className="mt-10 space-y-4 xl:mt-12">
               {enabledFeatures.map((item, index) => {
                 const Icon = featureIconMap[item.icon] || Shield;
                 return (
@@ -141,40 +141,45 @@ export default function LoginPage({ settings }) {
                 );
               })}
             </div>
-          </div>
 
-          {panelContent.securityBadgeEnabled && panelContent.securityBadgeText && (
-            <div className="relative z-10 inline-flex w-fit items-center gap-2 rounded-full border border-white/10 bg-white/[0.045] px-4 py-2 text-xs font-semibold text-slate-200/80 backdrop-blur-xl">
-              <Lock size={14} />
-              {panelContent.securityBadgeText}
-            </div>
-          )}
+            {panelContent.securityBadgeEnabled && panelContent.securityBadgeText && (
+              <div className="mt-5 inline-flex max-w-full items-center gap-3 self-start rounded-2xl border border-white/[0.10] bg-white/[0.045] px-4 py-3 text-sm font-semibold text-slate-200/85 shadow-[0_16px_42px_rgba(0,0,0,0.14)] backdrop-blur-xl">
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-white/[0.10] bg-white/[0.055] text-indigo-200">
+                  <Lock size={16} />
+                </span>
+                <span className="min-w-0 leading-5">{panelContent.securityBadgeText}</span>
+              </div>
+            )}
+          </div>
         </aside>
 
-        <main className="flex flex-1 items-center justify-center px-4 py-10 sm:px-6 lg:px-10">
+        <main className="flex min-h-[100dvh] flex-1 items-center justify-center px-4 py-10 sm:px-6 lg:px-10">
           <section className="authFormPanelPro w-full max-w-md rounded-2xl border border-white/10 bg-slate-950/55 p-6 shadow-[0_24px_70px_rgba(0,0,0,0.36)] backdrop-blur-xl sm:p-10">
             <div className="mb-8 text-center">
               <div className="mx-auto mb-5 grid h-14 w-14 place-items-center rounded-2xl border border-white/10 bg-white/[0.055] text-indigo-200 lg:hidden">
                 <Shield className="h-7 w-7" />
               </div>
-              <h2 className="mb-2 text-3xl font-semibold tracking-tight text-white">Welcome back</h2>
-              <p className="text-sm text-slate-400">Sign in to continue to your workspace</p>
+              <h2 className="mb-2 text-3xl font-semibold tracking-tight text-white">{formContent.title}</h2>
+              <p className="text-sm text-slate-400">{formContent.subtitle}</p>
             </div>
 
             <div className="authRoleTabs mb-8 flex gap-1 rounded-2xl border border-white/10 bg-white/5 p-1" role="tablist" aria-label="Login role">
-              {["student", "teacher"].map(item => (
+              {[
+                { id: "student", label: formContent.studentTab },
+                { id: "teacher", label: formContent.teacherTab }
+              ].map(item => (
                 <button
-                  key={item}
+                  key={item.id}
                   type="button"
-                  onClick={() => setRole(item)}
+                  onClick={() => setRole(item.id)}
                   className={cn(
                     "min-h-11 flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-200",
-                    role === item
+                    role === item.id
                       ? "bg-white text-slate-950 shadow-sm"
                       : "text-slate-400 hover:bg-white/[0.055] hover:text-white"
                   )}
                 >
-                  {item.charAt(0).toUpperCase() + item.slice(1)}
+                  {item.label}
                 </button>
               ))}
             </div>
@@ -200,13 +205,13 @@ export default function LoginPage({ settings }) {
               </label>
 
               <label className="grid gap-1.5">
-                <span className="text-xs font-semibold uppercase tracking-widest text-gray-400">Password</span>
+                <span className="text-xs font-semibold uppercase tracking-widest text-gray-400">{formContent.passwordLabel}</span>
                 <span className="relative block">
                   <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
                   <input
                     name="password"
                     type={showPassword ? "text" : "password"}
-                    placeholder="Password"
+                    placeholder={formContent.passwordPlaceholder}
                     value={password}
                     onChange={event => setPassword(event.target.value)}
                     autoComplete="current-password"
@@ -232,11 +237,11 @@ export default function LoginPage({ settings }) {
                 {submitting ? (
                   <>
                     <span className="authButtonSpinner" aria-hidden="true" />
-                    Signing in...
+                    {formContent.submitting}
                   </>
                 ) : (
                   <>
-                    Sign in
+                    {formContent.submitButton}
                     <ArrowRight size={18} className="transition-transform duration-200 group-hover:translate-x-1" />
                   </>
                 )}
@@ -260,16 +265,16 @@ export default function LoginPage({ settings }) {
 
             <div className="mt-6 space-y-3 text-center text-sm">
               <div className="text-gray-500">
-                Do not have a student account?{" "}
+                {formContent.studentRegisterPrompt}{" "}
                 <Link to="/register" className="font-semibold text-indigo-400 underline-offset-2 transition hover:text-indigo-300 hover:underline">
-                  Create one
+                  {formContent.studentRegisterLink}
                 </Link>
               </div>
               <Link
                 to="/admin/login"
                 className="mx-auto inline-flex items-center justify-center rounded-lg border border-white/10 px-4 py-1.5 text-xs font-semibold text-slate-500 transition hover:border-white/25 hover:text-white"
               >
-                Admin sign in
+                {formContent.adminLink}
               </Link>
             </div>
           </section>

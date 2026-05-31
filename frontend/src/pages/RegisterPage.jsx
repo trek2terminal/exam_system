@@ -93,6 +93,7 @@ export default function RegisterPage({ settings }) {
     && validations.special
   );
   const panelContent = platformSettings.loginPage;
+  const registrationContent = platformSettings.registrationPage;
   const enabledFeatures = panelContent.features.filter(feature => feature.enabled !== false);
   const registrationOpen = platformSettings.student_self_registration !== false;
   const isRequestValid = Boolean(
@@ -167,10 +168,10 @@ export default function RegisterPage({ settings }) {
   return (
     <div className="loginCyberScene min-h-[100dvh] overflow-y-auto text-white">
       <div className="flex min-h-[100dvh] flex-col md:flex-row">
-        <aside className="authPanelPro loginCyberPanel relative hidden flex-1 overflow-hidden border-r border-white/10 p-10 text-white md:sticky md:top-0 md:flex md:h-[100dvh] md:min-h-[100dvh] md:self-start md:flex-col md:justify-between xl:p-16">
+        <aside className="authPanelPro loginCyberPanel relative hidden flex-1 overflow-y-auto border-r border-white/10 p-10 text-white md:sticky md:top-0 md:flex md:h-[100dvh] md:min-h-[100dvh] md:self-start xl:p-16">
           <div className="authSignalMesh" />
 
-          <div className="relative z-10 max-w-xl">
+          <div className="relative z-10 flex min-h-full max-w-3xl flex-col justify-center py-4">
             <div className="mb-8 inline-flex items-center gap-4">
               {platformSettings.logoUrl ? (
                 <img
@@ -201,7 +202,7 @@ export default function RegisterPage({ settings }) {
               {panelContent.subheading}
             </p>
 
-            <div className="mt-12 space-y-5">
+            <div className="mt-10 space-y-4 xl:mt-12">
               {enabledFeatures.map((item, index) => {
                 const Icon = featureIconMap[item.icon] || Shield;
                 return (
@@ -218,20 +219,22 @@ export default function RegisterPage({ settings }) {
                 );
               })}
             </div>
-          </div>
 
-          {panelContent.securityBadgeEnabled && panelContent.securityBadgeText && (
-            <div className="relative z-10 inline-flex w-fit items-center gap-2 rounded-full border border-white/10 bg-white/[0.045] px-4 py-2 text-xs font-semibold text-slate-200/80 backdrop-blur-xl">
-              <Lock size={14} />
-              {panelContent.securityBadgeText}
-            </div>
-          )}
+            {panelContent.securityBadgeEnabled && panelContent.securityBadgeText && (
+              <div className="mt-5 inline-flex max-w-full items-center gap-3 self-start rounded-2xl border border-white/[0.10] bg-white/[0.045] px-4 py-3 text-sm font-semibold text-slate-200/85 shadow-[0_16px_42px_rgba(0,0,0,0.14)] backdrop-blur-xl">
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-white/[0.10] bg-white/[0.055] text-indigo-200">
+                  <Lock size={16} />
+                </span>
+                <span className="min-w-0 leading-5">{panelContent.securityBadgeText}</span>
+              </div>
+            )}
+          </div>
         </aside>
 
         <main className="flex min-h-[100dvh] flex-1 items-start justify-center px-4 py-6 sm:px-6 lg:px-10 xl:py-8">
           <section className="authFormPanelPro registerGlassCard relative mx-auto w-full max-w-2xl rounded-2xl border border-white/10 bg-slate-950/55 px-5 py-6 shadow-[0_24px_70px_rgba(0,0,0,0.36)] backdrop-blur-xl sm:px-10 sm:py-8">
             {settingsLoading ? (
-              <RegistrationLoadingCard />
+              <RegistrationLoadingCard content={registrationContent} />
             ) : !registrationOpen ? (
               <RegistrationPausedCard
                 form={requestForm}
@@ -240,6 +243,7 @@ export default function RegisterPage({ settings }) {
                 submitting={requestSubmitting}
                 onChange={updateRequestForm}
                 onSubmit={handleRequestSubmit}
+                content={registrationContent}
               />
             ) : (
               <>
@@ -247,9 +251,9 @@ export default function RegisterPage({ settings }) {
               <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl border border-white/10 bg-white/[0.055] text-indigo-200">
                 <UserPlus className="h-6 w-6" />
               </div>
-              <h1 className="mt-4 text-center text-2xl font-semibold tracking-tight text-white">Create student account</h1>
+              <h1 className="mt-4 text-center text-2xl font-semibold tracking-tight text-white">{registrationContent.accountTitle}</h1>
               <p className="mx-auto mt-1 max-w-xs text-center text-sm text-slate-400">
-                Create your account to access assigned exams and results.
+                {registrationContent.accountSubtitle}
               </p>
             </div>
 
@@ -375,21 +379,21 @@ export default function RegisterPage({ settings }) {
                 {submitting ? (
                   <>
                     <span className="authButtonSpinner" aria-hidden="true" />
-                    Creating account...
+                    {registrationContent.accountSubmitting}
                   </>
                 ) : (
                   <>
                     <UserPlus className="h-4 w-4" />
-                    Create Account
+                    {registrationContent.accountButton}
                   </>
                 )}
               </button>
             </form>
 
             <div className="mt-5 text-center text-sm text-gray-600">
-              Already have an account?{" "}
+              {registrationContent.signInPrompt}{" "}
               <Link to="/login" className="inline-flex items-center gap-1 font-medium text-indigo-400 underline-offset-4 transition-colors hover:text-indigo-300 hover:underline">
-                Sign in
+                {registrationContent.signInLink}
                 <ArrowRight className="h-3.5 w-3.5" />
               </Link>
             </div>
@@ -402,30 +406,30 @@ export default function RegisterPage({ settings }) {
   );
 }
 
-function RegistrationLoadingCard() {
+function RegistrationLoadingCard({ content }) {
   return (
     <div className="py-16 text-center">
       <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl border border-white/10 bg-white/[0.055] text-indigo-200">
-        <span className="authStatusSpinner" aria-label="Checking registration status" />
+        <span className="authStatusSpinner" aria-label={content.loadingTitle} />
       </div>
-      <h1 className="mt-4 text-2xl font-semibold tracking-tight text-white">Checking registration status</h1>
+      <h1 className="mt-4 text-2xl font-semibold tracking-tight text-white">{content.loadingTitle}</h1>
       <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-slate-400">
-        We are preparing the right student access page for you.
+        {content.loadingSubtitle}
       </p>
     </div>
   );
 }
 
-function RegistrationPausedCard({ form, isValid, sent, submitting, onChange, onSubmit }) {
+function RegistrationPausedCard({ form, isValid, sent, submitting, onChange, onSubmit, content }) {
   return (
     <div>
       <div className="text-center">
         <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl border border-white/10 bg-white/[0.055] text-indigo-200">
           <MessageCircle className="h-7 w-7" />
         </div>
-        <h1 className="mt-4 text-2xl font-semibold tracking-tight text-white">Registration is paused for now</h1>
+        <h1 className="mt-4 text-2xl font-semibold tracking-tight text-white">{content.pausedTitle}</h1>
         <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-400">
-          Student self-registration is currently closed. Send your details to the admin and they can help you with access.
+          {content.pausedSubtitle}
         </p>
       </div>
 
@@ -433,7 +437,7 @@ function RegistrationPausedCard({ form, isValid, sent, submitting, onChange, onS
 
       {sent && (
         <div className="mb-5 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm font-semibold text-emerald-100">
-          Your message has reached the admin inbox.
+          {content.requestSuccess}
         </div>
       )}
 
@@ -509,7 +513,7 @@ function RegistrationPausedCard({ form, isValid, sent, submitting, onChange, onS
 
         <label className="block">
           <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400">
-            Message to Admin<span className="ml-0.5 text-indigo-400">*</span>
+            {content.requestMessageLabel}<span className="ml-0.5 text-indigo-400">*</span>
           </span>
           <span className="relative block">
             <MessageCircle className="absolute left-3.5 top-4 h-4 w-4 text-gray-500" />
@@ -517,13 +521,13 @@ function RegistrationPausedCard({ form, isValid, sent, submitting, onChange, onS
               name="request_message"
               value={form.message}
               onChange={event => onChange("message", event.target.value)}
-              placeholder="Tell the admin which course, group, or exam access you need."
+              placeholder={content.requestMessagePlaceholder}
               rows={4}
               required
               className="authInputPro w-full resize-y rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 pl-11 text-sm leading-6 text-white outline-none transition-all duration-200 placeholder:text-slate-600 focus:border-indigo-400/55 focus:ring-2 focus:ring-indigo-500/30"
             />
           </span>
-          <span className="ml-1 mt-1.5 block text-[11px] text-gray-600">Minimum 10 characters</span>
+          <span className="ml-1 mt-1.5 block text-[11px] text-gray-600">{content.requestMessageHelper}</span>
         </label>
 
         <button
@@ -534,12 +538,12 @@ function RegistrationPausedCard({ form, isValid, sent, submitting, onChange, onS
           {submitting ? (
             <>
               <span className="authButtonSpinner" aria-hidden="true" />
-              Sending request...
+              {content.requestSubmitting}
             </>
           ) : (
             <>
               <Send className="h-4 w-4" />
-              Send Request to Admin
+              {content.requestButton}
             </>
           )}
         </button>
@@ -548,10 +552,10 @@ function RegistrationPausedCard({ form, isValid, sent, submitting, onChange, onS
       <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-gray-400 sm:flex-row sm:items-center sm:justify-between">
         <span className="inline-flex items-center gap-2">
           <Clock3 className="h-4 w-4 text-indigo-300" />
-          The admin will see this in their notification inbox.
+          {content.requestFooter}
         </span>
         <Link to="/login" className="inline-flex items-center gap-1 font-medium text-indigo-400 underline-offset-4 transition-colors hover:text-indigo-300 hover:underline">
-          Back to sign in
+          {content.requestBackLink}
           <ArrowRight className="h-3.5 w-3.5" />
         </Link>
       </div>

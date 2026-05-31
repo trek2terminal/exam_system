@@ -301,6 +301,78 @@ class MigrationService:
             )
 
     @staticmethod
+    def _migration_registration_page_content():
+        MigrationService._add_column_if_missing("platform_settings", "registration_page_content", "TEXT")
+        with db.engine.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    UPDATE platform_settings
+                    SET registration_page_content = COALESCE(NULLIF(registration_page_content, ''), :content)
+                    """
+                ),
+                {
+                    "content": json.dumps(
+                        {
+                            "account_title": "Create student account",
+                            "account_subtitle": "Create your account to access assigned exams and results.",
+                            "account_button": "Create Account",
+                            "account_submitting": "Creating account...",
+                            "sign_in_prompt": "Already have an account?",
+                            "sign_in_link": "Sign in",
+                            "loading_title": "Checking registration status",
+                            "loading_subtitle": "We are preparing the right student access page for you.",
+                            "paused_title": "Registration is paused for now",
+                            "paused_subtitle": "Student self-registration is currently closed. Send your details to the admin and they can help you with access.",
+                            "request_success": "Your message has reached the admin inbox.",
+                            "request_message_label": "Message to Admin",
+                            "request_message_placeholder": "Tell the admin which course, group, or exam access you need.",
+                            "request_message_helper": "Minimum 10 characters",
+                            "request_button": "Send Request to Admin",
+                            "request_submitting": "Sending request...",
+                            "request_footer": "The admin will see this in their notification inbox.",
+                            "request_back_link": "Back to sign in",
+                        }
+                    )
+                },
+            )
+
+    @staticmethod
+    def _migration_login_form_content():
+        MigrationService._add_column_if_missing("platform_settings", "login_form_content", "TEXT")
+        with db.engine.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    UPDATE platform_settings
+                    SET login_form_content = COALESCE(NULLIF(login_form_content, ''), :content)
+                    """
+                ),
+                {
+                    "content": json.dumps(
+                        {
+                            "title": "Welcome back",
+                            "subtitle": "Sign in to continue to your workspace",
+                            "student_tab": "Student",
+                            "teacher_tab": "Teacher",
+                            "student_identifier_label": "Username, Email, or Roll Number",
+                            "student_identifier_placeholder": "student@example.com",
+                            "teacher_identifier_label": "Teacher Username",
+                            "teacher_identifier_placeholder": "teacher.username",
+                            "password_label": "Password",
+                            "password_placeholder": "Password",
+                            "submit_button": "Sign in",
+                            "submitting": "Signing in...",
+                            "student_register_prompt": "Do not have a student account?",
+                            "student_register_link": "Create one",
+                            "admin_link": "Admin sign in",
+                            "session_conflict": "Another session on a different device has been signed out.",
+                        }
+                    )
+                },
+            )
+
+    @staticmethod
     def _migration_student_group_join_codes():
         from app.models.group_model import StudentGroup, generate_group_join_code
 
@@ -643,6 +715,16 @@ class MigrationService:
             "Add indexes for high-traffic dashboards, exports, notifications, and reviews",
             _migration_performance_indexes.__func__,
         ),
+        (
+            "20260531_031_registration_page_content",
+            "Add admin-editable registration page content",
+            _migration_registration_page_content.__func__,
+        ),
+        (
+            "20260531_032_login_form_content",
+            "Add admin-editable login form content",
+            _migration_login_form_content.__func__,
+        ),
     ]
 
     @staticmethod
@@ -810,6 +892,10 @@ class MigrationService:
                     ("results", "ix_results_published_at"),
                 )
             )
+        if version == "20260531_031_registration_page_content":
+            return MigrationService._has_column("platform_settings", "registration_page_content")
+        if version == "20260531_032_login_form_content":
+            return MigrationService._has_column("platform_settings", "login_form_content")
         return False
 
     @staticmethod
