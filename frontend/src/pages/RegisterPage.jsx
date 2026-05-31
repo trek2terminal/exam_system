@@ -165,9 +165,9 @@ export default function RegisterPage({ settings }) {
   };
 
   return (
-    <div className="loginCyberScene min-h-screen text-white">
-      <div className="flex min-h-screen flex-col md:flex-row">
-        <aside className="authPanelPro loginCyberPanel relative hidden flex-1 overflow-hidden border-r border-white/10 p-10 text-white md:flex md:flex-col md:justify-between xl:p-16">
+    <div className="loginCyberScene min-h-[100dvh] overflow-y-auto text-white">
+      <div className="flex min-h-[100dvh] flex-col md:flex-row">
+        <aside className="authPanelPro loginCyberPanel relative hidden flex-1 overflow-hidden border-r border-white/10 p-10 text-white md:sticky md:top-0 md:flex md:h-[100dvh] md:min-h-[100dvh] md:self-start md:flex-col md:justify-between xl:p-16">
           <div className="authSignalMesh" />
 
           <div className="relative z-10 max-w-xl">
@@ -228,8 +228,8 @@ export default function RegisterPage({ settings }) {
           )}
         </aside>
 
-        <main className="flex flex-1 items-center justify-center px-4 py-6 sm:px-6 lg:px-10">
-          <section className="authFormPanelPro registerGlassCard relative mx-auto max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-white/10 bg-slate-950/55 px-5 py-6 shadow-[0_24px_70px_rgba(0,0,0,0.36)] backdrop-blur-xl sm:px-10 sm:py-8">
+        <main className="flex min-h-[100dvh] flex-1 items-start justify-center px-4 py-6 sm:px-6 lg:px-10 xl:py-8">
+          <section className="authFormPanelPro registerGlassCard relative mx-auto w-full max-w-2xl rounded-2xl border border-white/10 bg-slate-950/55 px-5 py-6 shadow-[0_24px_70px_rgba(0,0,0,0.36)] backdrop-blur-xl sm:px-10 sm:py-8">
             {settingsLoading ? (
               <RegistrationLoadingCard />
             ) : !registrationOpen ? (

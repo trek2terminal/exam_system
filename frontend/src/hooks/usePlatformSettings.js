@@ -8,8 +8,8 @@ export const defaultPlatformSettings = {
   logo_url: "",
   welcomeMessage: "Welcome to the Exam Platform",
   welcome_message: "Welcome to the Exam Platform",
-  student_self_registration: true,
-  studentSelfRegistration: true,
+  student_self_registration: false,
+  studentSelfRegistration: false,
   registration_code_required: false,
   loginPage: {
     heading: "Exam Platform",
