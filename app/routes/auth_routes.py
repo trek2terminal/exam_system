@@ -11,13 +11,17 @@ from app.utils.network import get_client_ip
 
 auth_bp = Blueprint("auth", __name__)
 
+STUDENT_PASSWORD_SPECIAL_CHARS = "!@#$%^&*"
+
 
 def _valid_student_password(password):
+    password = password or ""
     return (
-        len(password or "") >= 8
-        and any(ch.isupper() for ch in password or "")
-        and any(ch.isdigit() for ch in password or "")
-        and any(not ch.isalnum() for ch in password or "")
+        len(password) >= 8
+        and any(ch.isupper() for ch in password)
+        and any(ch.islower() for ch in password)
+        and any(ch.isdigit() for ch in password)
+        and any(ch in STUDENT_PASSWORD_SPECIAL_CHARS for ch in password)
     )
 
 
@@ -556,7 +560,7 @@ def student_register():
             return redirect(url_for("auth.student_register"))
 
         if not _valid_student_password(password):
-            flash("Password must be at least 8 characters and include uppercase, number, and special character.", "danger")
+            flash("Password must be at least 8 characters and include uppercase, lowercase, number, and special character (!@#$%^&*).", "danger")
             return redirect(url_for("auth.student_register"))
 
         if User.query.filter_by(username=username).first():

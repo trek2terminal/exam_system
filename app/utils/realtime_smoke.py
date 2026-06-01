@@ -6,6 +6,10 @@ from app.models.exam_model import ExamSet, Question
 from app.models.notification_model import Notification
 from app.models.submission_model import Answer, StudentSession
 from app.models.user_model import User
+from app.utils.csrf import CSRF_HEADER, CSRF_SESSION_KEY
+
+
+SMOKE_CSRF_TOKEN = "realtime-smoke-csrf-token"
 
 
 def _event_names(received):
@@ -142,6 +146,7 @@ def _make_proctor_client(app, socketio, user, role):
         browser_session["user_id"] = user.id
         browser_session[f"{role}_name"] = user.name
         browser_session["auth_session_token"] = auth_session_token
+        browser_session[CSRF_SESSION_KEY] = SMOKE_CSRF_TOKEN
         if role == "admin":
             browser_session["admin_last_activity"] = datetime.utcnow().isoformat()
     return socketio.test_client(app, flask_test_client=http_client), http_client
@@ -163,6 +168,7 @@ def _make_student_client(app, socketio, student, student_session, rotate_login=T
         browser_session["student_name"] = student.name
         browser_session["roll_no"] = student.roll_number
         browser_session["student_session_code"] = student_session.session_code
+        browser_session[CSRF_SESSION_KEY] = SMOKE_CSRF_TOKEN
         browser_session["student_session_token"] = student_session.session_token
         browser_session["exam_attempt_tokens"] = {
             student_session.session_code: student_session.session_token,
@@ -270,6 +276,7 @@ def run_realtime_smoke(app):
 
             response = admin_http.post(
                 f"/api/admin/proctoring/session/{student_session.id}/action",
+                headers={CSRF_HEADER: SMOKE_CSRF_TOKEN},
                 json={
                     "action": "message",
                     "admin_password": "RealtimeSmoke123",

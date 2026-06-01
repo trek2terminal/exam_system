@@ -3,7 +3,9 @@ import os
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 
-from flask import g, has_request_context, request
+from flask import g, has_request_context
+
+from app.utils.network import get_client_ip
 
 
 class RequestContextFilter(logging.Filter):
@@ -11,7 +13,7 @@ class RequestContextFilter(logging.Filter):
 
     def filter(self, record):
         if has_request_context():
-            record.remote_addr = request.headers.get("X-Forwarded-For", request.remote_addr) or "-"
+            record.remote_addr = get_client_ip()
             record.user_id = getattr(g, "user_id", "-")
         else:
             record.remote_addr = "-"

@@ -1,5 +1,4 @@
 import os
-from time import monotonic
 from flask import Flask, send_from_directory, session
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.utils import safe_join
@@ -7,6 +6,8 @@ from config import DevelopmentConfig, ProductionConfig
 
 # Import extensions
 from app.models.database import db, init_db
+from app.utils.csrf import get_csrf_token
+from app.utils.expired_exam_sweeper import start_expired_exam_sweeper
 from app.utils.logger import setup_logging
 
 
@@ -106,25 +107,7 @@ def create_app(config_class=None):
         app.config["REALTIME_ENABLED"] = False
         app.logger.exception("Realtime layer could not be initialized; polling fallback remains active.")
 
-    app.config["_LAST_EXPIRED_EXAM_SWEEP"] = 0
-
-    @app.before_request
-    def auto_submit_expired_exam_windows():
-        sweep_interval = app.config.get("EXPIRED_EXAM_SWEEP_SECONDS", 30)
-        now = monotonic()
-        if now - app.config.get("_LAST_EXPIRED_EXAM_SWEEP", 0) < sweep_interval:
-            return None
-
-        app.config["_LAST_EXPIRED_EXAM_SWEEP"] = now
-        try:
-            from app.services.exam_service import ExamService
-
-            submitted_count = ExamService.auto_submit_expired_sessions()
-            if submitted_count:
-                app.logger.info("Auto-submitted %s expired exam session(s).", submitted_count)
-        except Exception:
-            app.logger.exception("Expired exam auto-submit sweep failed.")
-        return None
+    start_expired_exam_sweeper(app)
 
     @app.context_processor
     def inject_platform_settings():
@@ -146,6 +129,7 @@ def create_app(config_class=None):
             recent_notifications = []
         return {
             "platform_settings": settings,
+            "csrf_token": get_csrf_token(),
             "notification_unread_count": notification_unread_count,
             "recent_notifications": recent_notifications,
         }

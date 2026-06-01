@@ -34,6 +34,7 @@ from app.services.settings_service import SettingsService
 from app.socketio.realtime_events import emit_data_changed, emit_to_proctors, emit_to_session
 from app.routes.teacher_routes import _save_question_images
 from app.utils.csv_base import build_csv_response, build_student_import_template_response
+from app.utils.csrf import CSRF_HEADER, SAFE_METHODS, csrf_token_matches, get_csrf_token
 from app.utils.export_utils import csv_response, format_datetime
 from app.utils.helpers import create_exam_report_pdf, create_result_certificate_pdf, create_submission_pdf, current_session_matches_user, parse_options
 from app.utils.pdf_base import pdf_response
@@ -42,6 +43,38 @@ from app.utils.rate_limiter import rate_limit
 from app.utils.validators import normalize_phone_10
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
+STUDENT_PASSWORD_SPECIAL_CHARS = "!@#$%^&*"
+
+
+def _submitted_csrf_token():
+    token = request.headers.get(CSRF_HEADER)
+    if token:
+        return token
+
+    payload = request.get_json(silent=True) if request.is_json else None
+    if isinstance(payload, dict):
+        token = payload.get("csrf_token")
+        if token:
+            return token
+
+    return request.form.get("csrf_token")
+
+
+@api_bp.before_request
+def require_csrf_for_mutating_api_requests():
+    if request.method in SAFE_METHODS:
+        return None
+
+    if csrf_token_matches(_submitted_csrf_token()):
+        return None
+
+    return jsonify({"ok": False, "message": "Security token expired. Refresh the page and try again."}), 403
+
+
+@api_bp.after_request
+def attach_csrf_token(response):
+    response.headers[CSRF_HEADER] = get_csrf_token()
+    return response
 
 REALTIME_MUTATION_METHODS = {"POST", "PATCH", "PUT", "DELETE"}
 REALTIME_MUTATION_EXCLUDES = (
@@ -129,7 +162,7 @@ def _login_page_settings(settings):
     return heading, tagline, subheading, features, security_badge_text, security_badge_enabled
 
 
-def _settings_payload(settings):
+def _settings_payload(settings, include_private=False):
     if not settings:
         return {}
     logo_path = getattr(settings, "logo_path", None)
@@ -147,7 +180,7 @@ def _settings_payload(settings):
     login_form_content = SettingsService.normalize_login_form_content(
         getattr(settings, "login_form_content", None)
     )
-    return {
+    payload = {
         "platform_name": settings.platform_name,
         "logo_path": logo_path,
         "logo_url": url_for("static", filename=logo_path) if logo_path else None,
@@ -178,11 +211,13 @@ def _settings_payload(settings):
         "quote_pool": SettingsService.get_quotes(settings),
         "student_self_registration": settings.student_self_registration,
         "registration_code_required": bool(getattr(settings, "registration_code_required", False)),
-        "registration_code": getattr(settings, "registration_code", None),
         "max_violations_before_alert": settings.max_violations_before_alert,
         "admin_lockout_count": getattr(settings, "admin_lockout_count", 3),
         "admin_idle_timeout_minutes": getattr(settings, "admin_idle_timeout_minutes", 120),
     }
+    if include_private:
+        payload["registration_code"] = getattr(settings, "registration_code", None)
+    return payload
 
 
 def _draft_json_data(draft):
@@ -1107,8 +1142,9 @@ def _valid_student_password(password):
     return (
         len(password) >= 8
         and any(char.isupper() for char in password)
+        and any(char.islower() for char in password)
         and any(char.isdigit() for char in password)
-        and any(char in "!@#$%^&*" for char in password)
+        and any(char in STUDENT_PASSWORD_SPECIAL_CHARS for char in password)
     )
 
 
@@ -3023,6 +3059,7 @@ def bootstrap():
     return jsonify(
         {
             "ok": True,
+            "csrf_token": get_csrf_token(),
             "settings": _settings_payload(settings),
             "auth": {
                 "role": role,
@@ -3049,7 +3086,11 @@ def bootstrap():
 
 @api_bp.route("/settings/public")
 def public_settings_api():
-    return jsonify({"ok": True, "settings": _public_settings_payload(SettingsService.get_settings())})
+    return jsonify({
+        "ok": True,
+        "csrf_token": get_csrf_token(),
+        "settings": _public_settings_payload(SettingsService.get_settings()),
+    })
 
 
 @api_bp.route("/registration-requests", methods=["POST"])
@@ -3836,7 +3877,7 @@ def react_register_api():
     if password != confirm_password:
         return jsonify({"ok": False, "message": "Passwords do not match."}), 400
     if not _valid_student_password(password):
-        return jsonify({"ok": False, "message": "Password must be at least 8 characters and include uppercase, number, and special character."}), 400
+        return jsonify({"ok": False, "message": "Password must be at least 8 characters and include uppercase, lowercase, number, and special character (!@#$%^&*)."}), 400
     if User.query.filter_by(username=username).first():
         return jsonify({"ok": False, "message": "Username already exists."}), 400
     if email and User.query.filter_by(email=email).first():
@@ -5696,7 +5737,7 @@ def admin_settings_api():
         return error_response
 
     if request.method == "GET":
-        return jsonify({"ok": True, "settings": _settings_payload(SettingsService.get_settings())})
+        return jsonify({"ok": True, "settings": _settings_payload(SettingsService.get_settings(), include_private=True)})
 
     payload = _get_json_payload()
     if payload.get("registration_code_required") and not (payload.get("registration_code") or "").strip():
@@ -5742,7 +5783,7 @@ def admin_settings_api():
         ip_address=get_client_ip(),
         user_agent=request.headers.get("User-Agent"),
     ).save()
-    return jsonify({"ok": True, "message": "Settings saved successfully.", "settings": _settings_payload(settings)})
+    return jsonify({"ok": True, "message": "Settings saved successfully.", "settings": _settings_payload(settings, include_private=True)})
 
 
 @api_bp.route("/admin/settings/logo", methods=["POST"])
@@ -5801,7 +5842,7 @@ def admin_settings_logo_api():
             except OSError:
                 current_app.logger.warning("Could not remove old platform logo %s", old_abs_path)
 
-    return jsonify({"ok": True, "message": "Logo uploaded successfully.", "settings": _settings_payload(settings)})
+    return jsonify({"ok": True, "message": "Logo uploaded successfully.", "settings": _settings_payload(settings, include_private=True)})
 
 
 @api_bp.route("/admin/settings/logo", methods=["DELETE"])
@@ -5840,7 +5881,7 @@ def admin_settings_logo_delete_api():
             except OSError:
                 current_app.logger.warning("Could not remove platform logo %s", old_abs_path)
 
-    return jsonify({"ok": True, "message": "Logo removed successfully.", "settings": _settings_payload(settings)})
+    return jsonify({"ok": True, "message": "Logo removed successfully.", "settings": _settings_payload(settings, include_private=True)})
 
 
 @api_bp.route("/admin/settings/backup", methods=["POST"])
@@ -7822,6 +7863,7 @@ def _code_run_response(student_session, data, legacy=False):
         execution_mode=current_app.config.get("CODE_EXECUTION_MODE", "subprocess"),
         docker_image=current_app.config.get("CODE_EXECUTION_DOCKER_IMAGE", "python:3.11-alpine"),
         memory_mb=current_app.config.get("CODE_EXECUTION_MEMORY_MB", 128),
+        allow_unsafe_subprocess=current_app.config.get("CODE_EXECUTION_ALLOW_UNSAFE_SUBPROCESS", True),
     )
 
     output_parts = []

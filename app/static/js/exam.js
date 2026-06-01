@@ -17,6 +17,10 @@ let codeTerminalMap = {};
 
 const QUESTION_STATES = ["NOT_VISITED", "VISITED_UNANSWERED", "ANSWERED", "MARKED_REVIEW", "ANSWERED_MARKED"];
 
+function getCsrfToken() {
+    return document.querySelector('meta[name="csrf-token"]')?.content || "";
+}
+
 async function enterFullscreen() {
     const element = document.documentElement;
     try {
@@ -48,11 +52,18 @@ function examRequestHeaders() {
     const headers = { "Content-Type": "application/json" };
     if (currentSessionToken) headers["X-Exam-Token"] = currentSessionToken;
     if (currentWindowToken) headers["X-Exam-Window-Token"] = currentWindowToken;
+    const csrfToken = getCsrfToken();
+    if (csrfToken) headers["X-CSRF-Token"] = csrfToken;
     return headers;
 }
 
 function examPayload(payload = {}) {
-    return { ...payload, session_token: currentSessionToken, window_token: currentWindowToken };
+    return {
+        ...payload,
+        csrf_token: getCsrfToken(),
+        session_token: currentSessionToken,
+        window_token: currentWindowToken
+    };
 }
 
 function redirectIfLocked(data) {
@@ -992,6 +1003,7 @@ async function initExamPage(sessionCode, remainingSeconds, sessionToken = null) 
                 type: "PAGE_CLOSE_ATTEMPT",
                 detail: "Repeated page close/refresh attempts",
                 violation_count: attempts,
+                csrf_token: getCsrfToken(),
                 session_token: currentSessionToken,
                 window_token: currentWindowToken
             })], { type: "application/json" });
@@ -1011,6 +1023,7 @@ async function initExamPage(sessionCode, remainingSeconds, sessionToken = null) 
                 type: "PAGE_CLOSE_ATTEMPT",
                 detail: "Repeated page close/refresh attempts",
                 violation_count: attempts,
+                csrf_token: getCsrfToken(),
                 session_token: currentSessionToken,
                 window_token: currentWindowToken
             })], { type: "application/json" });

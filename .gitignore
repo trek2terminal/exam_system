@@ -7,10 +7,21 @@ __pycache__/
 venv/
 
 instance/*.db
+instance/*.db-*
+instance/*.sqlite
+instance/*.sqlite3
 logs/*.log
 data/backups/
-app/static/uploads/exports/
+app/static/uploads/
+app/static/screenshots/
+exam-session-lock-test-*/
 
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+frontend/coverage/
+
+backend/node_modules/
+backend/dist/
+
+coverage/

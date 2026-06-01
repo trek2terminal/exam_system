@@ -34,7 +34,7 @@ class Config:
     PREFERRED_URL_SCHEME = os.environ.get("PREFERRED_URL_SCHEME", "https" if APP_ENV == "production" else "http")
     TRUST_PROXY_HEADERS = os.environ.get(
         "TRUST_PROXY_HEADERS",
-        "true" if APP_ENV == "production" else "false",
+        "false",
     ).lower() in {"1", "true", "yes"}
 
     # File Upload Limits
@@ -49,7 +49,8 @@ class Config:
     # Exam Configuration
     EXAM_HEARTBEAT_INTERVAL = 8
     EXAM_WINDOW_LOCK_TTL_SECONDS = 30
-    EXPIRED_EXAM_SWEEP_SECONDS = 30
+    EXPIRED_EXAM_SWEEP_SECONDS = int(os.environ.get("EXPIRED_EXAM_SWEEP_SECONDS", "30"))
+    EXPIRED_EXAM_SWEEP_BACKGROUND = os.environ.get("EXPIRED_EXAM_SWEEP_BACKGROUND", "true").lower() in {"1", "true", "yes"}
     MAX_VIOLATIONS_ALLOWED = 3
     AUTO_SUBMIT_ON_VIOLATION = False
 
@@ -60,12 +61,19 @@ class Config:
     CODE_EXECUTION_MODE = os.environ.get("CODE_EXECUTION_MODE", "subprocess").strip().lower()
     CODE_EXECUTION_DOCKER_IMAGE = os.environ.get("CODE_EXECUTION_DOCKER_IMAGE", "python:3.11-alpine").strip()
     CODE_EXECUTION_MEMORY_MB = int(os.environ.get("CODE_EXECUTION_MEMORY_MB", "128"))
+    CODE_EXECUTION_ALLOW_UNSAFE_SUBPROCESS = (
+        os.environ.get("CODE_EXECUTION_ALLOW_UNSAFE_SUBPROCESS", "").lower() in {"1", "true", "yes"}
+        or APP_ENV != "production"
+    )
 
     # Local-first in-memory rate limits. Set RATE_LIMIT_STORAGE=redis and REDIS_URL
     # for hosted multi-process deployment.
     REDIS_URL = os.environ.get("REDIS_URL", "").strip()
     RATE_LIMIT_STORAGE = os.environ.get("RATE_LIMIT_STORAGE", "memory").strip().lower()
-    RATE_LIMIT_FAIL_OPEN = os.environ.get("RATE_LIMIT_FAIL_OPEN", "true").lower() in {"1", "true", "yes"}
+    RATE_LIMIT_FAIL_OPEN = os.environ.get(
+        "RATE_LIMIT_FAIL_OPEN",
+        "false" if APP_ENV == "production" else "true",
+    ).lower() in {"1", "true", "yes"}
     RATE_LIMITS = {
         "auth_login": {"limit": 10, "window": 15 * 60},
         "student_login": {"limit": 30, "window": 15 * 60},

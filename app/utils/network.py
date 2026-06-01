@@ -1,12 +1,9 @@
-import requests
 from flask import request
 
 
 def get_client_ip():
-    """Get real client IP even behind proxy"""
-    if request.headers.get('X-Forwarded-For'):
-        return request.headers.get('X-Forwarded-For').split(',')[0].strip()
-    return request.remote_addr
+    """Return the client IP after Flask/Werkzeug proxy handling."""
+    return request.remote_addr or "unknown"
 
 
 def get_user_agent():

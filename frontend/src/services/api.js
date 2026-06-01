@@ -1,5 +1,9 @@
 import axios from "axios";
 
+const CSRF_HEADER = "X-CSRF-Token";
+const SAFE_METHODS = new Set(["get", "head", "options"]);
+let csrfToken = "";
+
 export const api = axios.create({
   baseURL: "/api",
   withCredentials: true,
@@ -10,6 +14,10 @@ export const api = axios.create({
 
 const pendingGetRequests = new Map();
 const getResponseCache = new Map();
+
+export function setCsrfToken(token) {
+  csrfToken = token ? String(token) : "";
+}
 
 function stableValue(value) {
   if (!value || typeof value !== "object") return value;
@@ -80,13 +88,24 @@ export function humanizeError(error) {
   return "Request failed. Please try again.";
 }
 
+api.interceptors.request.use(config => {
+  const method = String(config.method || "get").toLowerCase();
+  if (!SAFE_METHODS.has(method) && csrfToken) {
+    config.headers = config.headers || {};
+    config.headers[CSRF_HEADER] = csrfToken;
+  }
+  return config;
+});
+
 api.interceptors.response.use(
   response => {
+    setCsrfToken(response.headers?.["x-csrf-token"] || response.data?.csrf_token || csrfToken);
     const method = String(response.config?.method || "get").toLowerCase();
     if (!["get", "head", "options"].includes(method)) clearApiCache();
     return response;
   },
   error => {
+    setCsrfToken(error.response?.headers?.["x-csrf-token"] || error.response?.data?.csrf_token || csrfToken);
     const normalized = new Error(humanizeError(error));
     normalized.__humanizedMessage = true;
     normalized.response = error.response;

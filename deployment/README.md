@@ -18,6 +18,12 @@ python run.py smoke:realtime
 
 It creates temporary admin/teacher/student/exam/session rows, verifies proctor room authorization, verifies the student private Socket.IO room, sends a test violation to proctors, sends an admin message to the student room, and then cleans up the temporary rows.
 
+Expired exam windows are auto-submitted by a background sweeper while the app process is running. You can also run a one-shot sweep from a scheduler or maintenance console:
+
+```powershell
+python run.py sweep-expired
+```
+
 ## Production-Style Python Server
 
 Install dependencies and run migrations:
@@ -87,9 +93,10 @@ DATABASE_URL=<postgres-url-or-empty-for-local-sqlite>
 SESSION_COOKIE_SECURE=True
 PREFERRED_URL_SCHEME=https
 TRUST_PROXY_HEADERS=true
+RATE_LIMIT_FAIL_OPEN=false
 ```
 
-Use HTTPS in production before enabling secure cookies for browsers.
+Use HTTPS in production before enabling secure cookies for browsers. Enable `TRUST_PROXY_HEADERS=true` only when all public traffic reaches Flask through your trusted reverse proxy; direct access to the Python server should stay blocked by the firewall.
 
 ## Optional Redis
 
@@ -98,6 +105,7 @@ For hosted or multi-process deployments, set Redis-backed rate limiting and serv
 ```env
 REDIS_URL=redis://127.0.0.1:6379/0
 RATE_LIMIT_STORAGE=redis
+RATE_LIMIT_FAIL_OPEN=false
 SESSION_TYPE=redis
 SESSION_REDIS_URL=redis://127.0.0.1:6379/1
 ```
@@ -110,7 +118,10 @@ The default LAN mode uses the built-in subprocess runner with AST validation, ti
 
 ```env
 CODE_EXECUTION_MODE=subprocess
+CODE_EXECUTION_ALLOW_UNSAFE_SUBPROCESS=True
 ```
+
+Do not use the subprocess runner for hosted or untrusted production exams. When `APP_ENV=production`, subprocess execution is blocked unless `CODE_EXECUTION_ALLOW_UNSAFE_SUBPROCESS=True` is explicitly set.
 
 For stronger lab/hosted isolation, preinstall one of these runners and change `.env`:
 
@@ -133,4 +144,4 @@ CODE_EXECUTION_MODE=firejail
 CODE_EXECUTION_MEMORY_MB=128
 ```
 
-`CODE_EXECUTION_MODE=auto` uses a locally available Docker image first, then Firejail on Linux, then the subprocess runner. For predictable exam-day behavior, set the exact mode after testing on the admin machine.
+`CODE_EXECUTION_MODE=auto` uses a locally available Docker image first, then Firejail on Linux, then the subprocess runner. In production, the subprocess fallback is rejected unless explicitly allowed, so Docker or Firejail should be prepared before exam day.

@@ -184,16 +184,17 @@ class CodeExecutionService:
         return True, ""
 
     @staticmethod
-    def _resource_limiter():
+    def _resource_limiter(memory_mb=128):
         if platform.system().lower() == "windows":
             return None
+        memory_mb = max(int(memory_mb or 128), 32)
 
         def limit_resources():
             try:
                 import resource
 
                 resource.setrlimit(resource.RLIMIT_CPU, (10, 10))
-                memory_bytes = 128 * 1024 * 1024
+                memory_bytes = memory_mb * 1024 * 1024
                 resource.setrlimit(resource.RLIMIT_AS, (memory_bytes, memory_bytes))
             except Exception:
                 pass
@@ -352,7 +353,7 @@ class CodeExecutionService:
         )
 
     @staticmethod
-    def _run_subprocess(script_path, stdin_text, timeout_seconds, output_max_chars, temp_dir):
+    def _run_subprocess(script_path, stdin_text, timeout_seconds, output_max_chars, temp_dir, memory_mb):
         try:
             CodeExecutionService._lockdown_workdir(temp_dir)
             return CodeExecutionService._run_command(
@@ -362,7 +363,7 @@ class CodeExecutionService:
                 output_max_chars=output_max_chars,
                 cwd=temp_dir,
                 env=CodeExecutionService._isolated_env(),
-                preexec_fn=CodeExecutionService._resource_limiter(),
+                preexec_fn=CodeExecutionService._resource_limiter(memory_mb),
                 start_new_session=platform.system().lower() != "windows",
             )
         finally:
@@ -484,6 +485,7 @@ class CodeExecutionService:
         execution_mode="subprocess",
         docker_image="python:3.11-alpine",
         memory_mb=128,
+        allow_unsafe_subprocess=True,
     ):
         is_valid, validation_message = CodeExecutionService.validate_code(code, max_chars)
         if not is_valid:
@@ -500,6 +502,12 @@ class CodeExecutionService:
         with tempfile.TemporaryDirectory(prefix="exam_code_") as temp_dir:
             script_path = CodeExecutionService._write_script(temp_dir, code)
             mode = CodeExecutionService._resolve_execution_mode(execution_mode, docker_image)
+            if mode == "subprocess" and not allow_unsafe_subprocess:
+                return CodeExecutionResult(
+                    ok=False,
+                    status="error",
+                    message="Code execution sandbox is not available. Configure Docker or Firejail before enabling code execution.",
+                )
 
             if mode == "docker":
                 return CodeExecutionService._run_docker(
@@ -528,4 +536,5 @@ class CodeExecutionService:
                 timeout_seconds,
                 output_max_chars,
                 temp_dir,
+                memory_mb,
             )

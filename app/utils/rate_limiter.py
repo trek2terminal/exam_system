@@ -114,7 +114,7 @@ def rate_limit(scope, limit=None, window_seconds=None, methods=("POST",), json_r
                         allowed, retry_after = _memory_rate_limit(key, max_requests, window)
                 except Exception:
                     current_app.logger.exception("Redis rate limiter failed")
-                    if current_app.config.get("RATE_LIMIT_FAIL_OPEN", True):
+                    if current_app.config.get("RATE_LIMIT_FAIL_OPEN", False):
                         allowed, retry_after = True, 0
                     else:
                         allowed, retry_after = False, window

@@ -102,6 +102,15 @@ def unlock_admin_account():
         print(f"Admin account unlocked: {admin.username}")
 
 
+def sweep_expired_exams_once():
+    os.environ["EXPIRED_EXAM_SWEEP_BACKGROUND"] = "false"
+    app = create_app()
+    from app.utils.expired_exam_sweeper import sweep_expired_exams
+
+    submitted_count = sweep_expired_exams(app, source="cli")
+    print(f"Expired exam sweep complete. Auto-submitted sessions: {submitted_count}")
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
     app_env = os.environ.get("APP_ENV", os.environ.get("FLASK_ENV", "development")).lower()
@@ -129,6 +138,9 @@ if __name__ == "__main__":
             sys.exit(0)
         if cmd in {"unlock-admin", "admin-unlock"}:
             unlock_admin_account()
+            sys.exit(0)
+        if cmd in {"sweep-expired", "expired-sweep", "auto-submit-expired"}:
+            sweep_expired_exams_once()
             sys.exit(0)
         if cmd in {"smoke:realtime", "realtime-smoke", "smoke-realtime"}:
             from app.utils.realtime_smoke import run_realtime_smoke

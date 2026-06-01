@@ -83,6 +83,6 @@ monaco.editor.defineTheme("premium-dark", {
 });
 
 // Set default theme
-loader.init().then(m => {
+loader.init().then(() => {
   monaco.editor.setTheme("premium-dark");
 });

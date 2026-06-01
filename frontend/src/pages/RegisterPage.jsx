@@ -71,8 +71,8 @@ export default function RegisterPage({ settings }) {
 
   const strength = useMemo(() => {
     const score = Object.values(validations).filter(Boolean).length;
-    if (score <= 2) return { level: "Weak", percent: 33, color: "danger" };
-    if (score <= 3) return { level: "Fair", percent: 66, color: "warning" };
+    if (score <= 2) return { level: "Weak", percent: 40, color: "danger" };
+    if (score <= 4) return { level: "Fair", percent: 80, color: "warning" };
     return { level: "Strong", percent: 100, color: "success" };
   }, [validations]);
 
@@ -89,6 +89,7 @@ export default function RegisterPage({ settings }) {
     && passwordsMatch
     && validations.length
     && validations.uppercase
+    && validations.lowercase
     && validations.number
     && validations.special
   );
@@ -330,7 +331,7 @@ export default function RegisterPage({ settings }) {
                     icon={Lock}
                   />
                   <div className="mt-2 flex gap-1" aria-label={`Password strength: ${strength.level}`}>
-                    {[1, 2, 3, 4].map(bar => (
+                    {[1, 2, 3, 4, 5].map(bar => (
                       <span
                         key={bar}
                         className={cn(
@@ -655,6 +656,6 @@ function ValidationItem({ active, children }) {
 function strengthBarColor(score) {
   if (score <= 1) return "bg-red-500";
   if (score === 2) return "bg-orange-400";
-  if (score === 3) return "bg-yellow-400";
+  if (score <= 4) return "bg-yellow-400";
   return "bg-emerald-400";
 }
