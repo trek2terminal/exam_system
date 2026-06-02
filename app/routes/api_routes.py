@@ -496,7 +496,7 @@ def _public_settings_payload(settings):
         "loginForm": payload.get("login_form_content"),
         "login_form": payload.get("login_form_content"),
         "registrationPage": payload.get("registration_page_content"),
-        "registration_page": payload.get("registration_page_content"),
+        "registration_page": payload.get("registration_page_content"),        
     }
 
 
