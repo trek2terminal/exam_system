@@ -350,6 +350,21 @@ class ExamService:
             return True
         return False
 
+    @staticmethod
+    def _calculate_result_for_locked_session(session_code):
+        from app.services.result_service import ResultService
+
+        return ResultService.calculate_result(session_code)
+
+    @staticmethod
+    def _duration_elapsed(student_session):
+        return (
+            student_session
+            and student_session.status in ["active", "paused"]
+            and bool(student_session.start_time)
+            and ExamService.remaining_seconds_for_session(student_session) <= 0
+        )
+
 
     @staticmethod
     def enforce_time_window(student_session):
@@ -367,6 +382,16 @@ class ExamService:
                     reason="Auto-submitted because the exam window ended",
                     status="auto_submitted",
                 )
+                ExamService._calculate_result_for_locked_session(student_session.session_code)
+            return "ended"
+
+        if ExamService._duration_elapsed(student_session):
+            ExamService.end_exam(
+                student_session.session_code,
+                reason="Auto-submitted because the attempt duration ended",
+                status="auto_submitted",
+            )
+            ExamService._calculate_result_for_locked_session(student_session.session_code)
             return "ended"
 
         if not exam.has_started(now):
@@ -377,24 +402,31 @@ class ExamService:
 
     @staticmethod
     def auto_submit_expired_sessions(limit=200):
-        """Close in-progress attempts whose exam end time has passed."""
+        """Close in-progress attempts whose exam window or attempt duration has expired."""
         now = datetime.utcnow()
-        sessions = (
+        candidates = (
             StudentSession.query.join(ExamSet, StudentSession.exam_set_id == ExamSet.id)
             .filter(
-                ExamSet.end_time.isnot(None),
-                ExamSet.end_time <= now,
                 StudentSession.status.in_(["waiting", "active", "paused"]),
             )
             .limit(limit)
             .all()
         )
+        sessions = [
+            student_session
+            for student_session in candidates
+            if student_session.exam_set.has_ended(now) or ExamService._duration_elapsed(student_session)
+        ]
 
         for student_session in sessions:
+            if student_session.exam_set.has_ended(now):
+                reason = "Auto-submitted because the exam window ended"
+            else:
+                reason = "Auto-submitted because the attempt duration ended"
             student_session.status = "auto_submitted"
             student_session.end_time = now
             student_session.submitted_at = now
-            student_session.autosubmit_reason = "Auto-submitted because the exam window ended"
+            student_session.autosubmit_reason = reason
             student_session.active_window_token = None
             student_session.active_window_heartbeat_at = None
             student_session.paused_at = None
@@ -402,5 +434,7 @@ class ExamService:
 
         if sessions:
             db.session.commit()
+            for student_session in sessions:
+                ExamService._calculate_result_for_locked_session(student_session.session_code)
 
         return len(sessions)

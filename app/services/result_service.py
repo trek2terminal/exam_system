@@ -5,9 +5,22 @@ from app.models.submission_model import StudentSession, Answer
 
 class ResultService:
 
+    AUTO_GRADABLE_TYPES = {"mcq"}
+
+    @staticmethod
+    def _question_type(question):
+        question_type = (question.question_type or "short").strip().lower()
+        if question_type == "coding":
+            return "code"
+        if question_type in {"long_answer", "essay"}:
+            return "long"
+        if question_type in {"mcq", "short", "long", "code"}:
+            return question_type
+        return "short"
+
     @staticmethod
     def calculate_result(session_code: str):
-        """Auto calculate result for MCQ based exams"""
+        """Create an auto-graded result without pretending manual answers are marked."""
         session = StudentSession.query.filter_by(session_code=session_code).first()
         if not session:
             return None
@@ -31,8 +44,12 @@ class ResultService:
 
         for question in questions:
             answer_text = answers.get(question.id, "")
+            question_type = ResultService._question_type(question)
+            if question_type not in ResultService.AUTO_GRADABLE_TYPES:
+                continue
+
             marks_awarded = 0
-            if question.question_type == "mcq" and question.correct_answer:
+            if question.correct_answer:
                 if answer_text.strip().upper() == question.correct_answer.strip().upper():
                     marks_awarded = question.marks
 
@@ -47,7 +64,13 @@ class ResultService:
 
         result.total_marks_obtained = total_obtained
         result.calculate_percentage()
-        session.status = "evaluated"
+        manual_review_needed = any(
+            ResultService._question_type(question) not in ResultService.AUTO_GRADABLE_TYPES
+            and (answers.get(question.id, "") or "").strip()
+            for question in questions
+        )
+        if not manual_review_needed:
+            session.status = "evaluated"
         db.session.commit()
 
         return result

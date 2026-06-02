@@ -57,6 +57,36 @@ const LOCKED_STATUSES = new Set(["SUBMITTED", "AUTO_SUBMITTED", "TERMINATED", "E
 const WARNING_TYPES = new Set(["FULLSCREEN_EXIT", "TAB_SWITCH", "WINDOW_BLUR", "KEYBOARD_SHORTCUT", "DEVTOOLS_OPEN"]);
 const FONT_SIZES = { small: 14, medium: 16, large: 18 };
 
+function windowTokenKey(sessionCode) {
+  return `exam_window_token_${sessionCode}`;
+}
+
+function getOrCreateWindowToken(sessionCode) {
+  const key = windowTokenKey(sessionCode);
+  try {
+    const existing = window.sessionStorage.getItem(key);
+    if (existing) return existing;
+  } catch {
+    // Session storage is best effort; the generated token still identifies this tab.
+  }
+
+  let token = "";
+  if (window.crypto?.getRandomValues) {
+    const random = new Uint8Array(24);
+    window.crypto.getRandomValues(random);
+    token = Array.from(random, value => value.toString(16).padStart(2, "0")).join("");
+  } else {
+    token = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  }
+
+  try {
+    window.sessionStorage.setItem(key, token);
+  } catch {
+    // Best effort only.
+  }
+  return token;
+}
+
 function normalizeStatus(value) {
   return STATUS_ORDER.includes(value) ? value : STATUS.NOT_VISITED;
 }
@@ -339,6 +369,7 @@ export default function ExamInterface() {
   const [error, setError] = useState("");
   const [examState, setExamState] = useState(null);
   const [sessionToken, setSessionToken] = useState("");
+  const [windowToken, setWindowToken] = useState("");
   const [questions, setQuestions] = useState([]);
   const [answers, setAnswers] = useState({});
   const [stdinValues, setStdinValues] = useState({});
@@ -388,6 +419,7 @@ export default function ExamInterface() {
   const mountedRef = useRef(true);
   const hasHydratedRef = useRef(false);
   const sessionTokenRef = useLatestRef(sessionToken);
+  const windowTokenRef = useLatestRef(windowToken);
   const questionsRef = useLatestRef(questions);
   const answersRef = useLatestRef(answers);
   const questionTimeSpentRef = useLatestRef(questionTimeSpent);
@@ -487,13 +519,14 @@ export default function ExamInterface() {
 
   const answerPayload = useCallback((question, answer) => ({
     session_token: sessionTokenRef.current,
+    window_token: windowTokenRef.current,
     question_id: question.id,
     answer_text: question.type === "short" || question.type === "long" ? answer.answer_text || "" : "",
     selected_option: question.type === "mcq" ? answer.selected_option || "" : null,
     code_text: question.type === "code" ? answer.code_text || "" : "",
     navigator_status: normalizeStatus(answer.navigator_status),
     time_spent_seconds: getQuestionTimeSpentSeconds(question.id)
-  }), [getQuestionTimeSpentSeconds, sessionTokenRef]);
+  }), [getQuestionTimeSpentSeconds, sessionTokenRef, windowTokenRef]);
 
   const queueOfflineSave = useCallback((question, answer) => {
     const queue = safeJsonRead(bufferKey, []);
@@ -570,13 +603,14 @@ export default function ExamInterface() {
     try {
       await api.post(`/student/session/${sessionCode}/navigator-update`, {
         session_token: sessionTokenRef.current,
+        window_token: windowTokenRef.current,
         question_id: question.id,
         navigator_status: nextAnswer.navigator_status
       });
     } catch {
       setSaveState({ type: "error", text: "Save failed, retrying..." });
     }
-  }, [answersRef, onlineRef, queueOfflineSave, sessionCode, sessionTokenRef]);
+  }, [answersRef, onlineRef, queueOfflineSave, sessionCode, sessionTokenRef, windowTokenRef]);
 
   const visitQuestion = useCallback(index => {
     const target = questionsRef.current[index];
@@ -682,7 +716,8 @@ export default function ExamInterface() {
       try {
         await api.post(`/student/session/${sessionCode}/autosave`, {
           ...entry,
-          session_token: sessionTokenRef.current
+          session_token: sessionTokenRef.current,
+          window_token: windowTokenRef.current
         });
       } catch {
         setOfflineBanner("Connection restored, but some answers still need syncing.");
@@ -695,7 +730,7 @@ export default function ExamInterface() {
     setOfflineBanner("All answers synced");
     toast.success("All answers synced");
     window.setTimeout(() => setOfflineBanner(""), 1800);
-  }, [bufferKey, sessionCode, sessionTokenRef]);
+  }, [bufferKey, sessionCode, sessionTokenRef, windowTokenRef]);
 
   const submitExam = useCallback(async ({ auto = false, retry = true } = {}) => {
     if (!sessionTokenRef.current) {
@@ -716,6 +751,7 @@ export default function ExamInterface() {
       }
       const { data } = await api.post(`/student/session/${sessionCode}/submit`, {
         session_token: sessionTokenRef.current,
+        window_token: windowTokenRef.current,
         reason: auto ? "Time expired" : "Manual submission",
         final_answer: finalAnswer
       });
@@ -742,7 +778,7 @@ export default function ExamInterface() {
     } finally {
       if (mountedRef.current && !auto) setSubmitting(false);
     }
-  }, [answerPayload, answersRef, currentIndexRef, examState?.exam?.id, questionsRef, saveAnswerNow, sessionCode, sessionTokenRef, submittingRef]);
+  }, [answerPayload, answersRef, currentIndexRef, examState?.exam?.id, questionsRef, saveAnswerNow, sessionCode, sessionTokenRef, submittingRef, windowTokenRef]);
 
   const reportViolation = useCallback(async (violationType, options = {}) => {
     if (!sessionTokenRef.current || submittingRef.current) return;
@@ -755,6 +791,7 @@ export default function ExamInterface() {
     try {
       const { data } = await api.post(`/student/session/${sessionCode}/violation`, {
         session_token: sessionTokenRef.current,
+        window_token: windowTokenRef.current,
         violation_type: violationType,
         silent: Boolean(options.silent),
         detail: options.detail || ""
@@ -775,7 +812,7 @@ export default function ExamInterface() {
         setWarningOverlay({ count: Math.min(nextCount, maxWarnings), max: maxWarnings, type: violationType });
       }
     }
-  }, [maxWarnings, sessionCode, sessionTokenRef, submittingRef, warningCount]);
+  }, [maxWarnings, sessionCode, sessionTokenRef, submittingRef, warningCount, windowTokenRef]);
 
   const handleHeartbeatPayload = useCallback(data => {
     if (!data) return;
@@ -799,11 +836,12 @@ export default function ExamInterface() {
   }, [showAdminMessage, syncRemainingSeconds]);
 
   const sendHeartbeat = useCallback(async () => {
-    if (!sessionTokenRef.current || !onlineRef.current || submittingRef.current) return;
+    if (!sessionTokenRef.current || !windowTokenRef.current || !onlineRef.current || submittingRef.current) return;
     const currentQuestionForHeartbeat = questionsRef.current[currentIndexRef.current];
     try {
       const { data } = await api.post(`/student/session/${sessionCode}/heartbeat`, {
         session_token: sessionTokenRef.current,
+        window_token: windowTokenRef.current,
         current_question_index: currentIndexRef.current,
         current_question_id: currentQuestionForHeartbeat?.id,
         time_spent_seconds: currentQuestionForHeartbeat ? getQuestionTimeSpentSeconds(currentQuestionForHeartbeat.id) : undefined
@@ -820,7 +858,7 @@ export default function ExamInterface() {
     } catch {
       if (!window.navigator.onLine) setOnline(false);
     }
-  }, [currentIndexRef, getQuestionTimeSpentSeconds, handleHeartbeatPayload, onlineRef, questionsRef, sessionCode, sessionTokenRef, submittingRef]);
+  }, [currentIndexRef, getQuestionTimeSpentSeconds, handleHeartbeatPayload, onlineRef, questionsRef, sessionCode, sessionTokenRef, submittingRef, windowTokenRef]);
 
   const runCode = useCallback(async (question, stdinOverride = null, terminalMeta = {}) => {
     if (!question || question.type !== "code" || !canWork) return;
@@ -844,6 +882,7 @@ export default function ExamInterface() {
     try {
       const { data } = await api.post(`/student/session/${sessionCode}/code-run`, {
         session_token: sessionTokenRef.current,
+        window_token: windowTokenRef.current,
         question_id: question.id,
         code: answer.code_text || "",
         stdin: stdinText,
@@ -900,7 +939,7 @@ export default function ExamInterface() {
     } finally {
       setRunningQuestionId(null);
     }
-  }, [answersRef, canWork, sessionCode, sessionTokenRef, stdinValues]);
+  }, [answersRef, canWork, sessionCode, sessionTokenRef, stdinValues, windowTokenRef]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -946,9 +985,17 @@ export default function ExamInterface() {
             };
           }
         });
+        const nextSessionToken = data.session_token || data.attempt_token || "";
+        const nextWindowToken = getOrCreateWindowToken(sessionCode);
+        await api.post(`/student/session/${sessionCode}/window-lock`, {
+          session_token: nextSessionToken,
+          window_token: nextWindowToken
+        });
+
         hasHydratedRef.current = true;
         setExamState(data);
-        setSessionToken(data.session_token || data.attempt_token || "");
+        setSessionToken(nextSessionToken);
+        setWindowToken(nextWindowToken);
         setQuestions(normalizedQuestions);
         setAnswers(nextAnswers);
         setStdinValues(nextStdin);
@@ -996,10 +1043,10 @@ export default function ExamInterface() {
   }, [currentIndex, questions]);
 
   useEffect(() => {
-    if (!sessionToken) return undefined;
+    if (!sessionToken || !windowToken) return undefined;
     const intervalId = window.setInterval(sendHeartbeat, 20000);
     return () => window.clearInterval(intervalId);
-  }, [sendHeartbeat, sessionToken]);
+  }, [sendHeartbeat, sessionToken, windowToken]);
 
   useEffect(() => {
     if (paused || submitting || terminateOverlay) return undefined;

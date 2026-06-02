@@ -1659,15 +1659,9 @@ def _student_user_for_current_session():
     student_user_id = session.get("student_user_id")
     if student_user_id:
         user = User.query.filter_by(id=student_user_id, role="student").first()
-        if user:
+        if user and user.is_active and current_session_matches_user(user):
             return user
-    roll_no = (session.get("roll_no") or "").strip().upper()
-    if not roll_no:
-        return None
-    return User.query.filter(
-        User.role == "student",
-        db.func.upper(User.roll_number) == roll_no,
-    ).first()
+    return None
 
 
 def _current_session_user():
@@ -1710,20 +1704,22 @@ def _remember_react_attempt(student_session):
 
 def _require_student_api_details():
     student_user_id = session.get("student_user_id")
-    if student_user_id:
-        user = User.query.get(student_user_id)
-        if (
-            not user
-            or user.role != "student"
-            or not user.is_active
-            or not current_session_matches_user(user)
-        ):
-            session.clear()
-            return None, None, _role_error("Student login required", 401)
+    if not student_user_id or session.get("role") != "student":
+        return None, None, _role_error("Student login required", 401)
 
-    student_name = (session.get("student_name") or "").strip()
-    roll_no = (session.get("roll_no") or "").strip().upper()
-    if session.get("role") != "student" or not student_name or not roll_no:
+    user = User.query.get(student_user_id)
+    if (
+        not user
+        or user.role != "student"
+        or not user.is_active
+        or not current_session_matches_user(user)
+    ):
+        session.clear()
+        return None, None, _role_error("Student login required", 401)
+
+    student_name = (user.name or session.get("student_name") or "").strip()
+    roll_no = (user.roll_number or session.get("roll_no") or user.username or "").strip().upper()
+    if not student_name or not roll_no:
         return None, None, _role_error("Student login required", 401)
     return student_name, roll_no, None
 
@@ -2680,6 +2676,26 @@ def _question_payload(question):
     }
 
 
+def _needs_manual_mark(question, answer, question_mark):
+    return (
+        _exam_question_type(question) != "mcq"
+        and _answered_answer(answer)
+        and question_mark is None
+    )
+
+
+def _pending_manual_mark_count(questions, answers_by_question, marks_by_question):
+    return sum(
+        1
+        for question in questions
+        if _needs_manual_mark(
+            question,
+            answers_by_question.get(question.id),
+            marks_by_question.get(question.id),
+        )
+    )
+
+
 def _session_review_summary(student_session):
     result = student_session.result
     questions = ExamService.get_session_questions(student_session)
@@ -2705,6 +2721,11 @@ def _session_review_summary(student_session):
         int(getattr(answer, "total_time_spent_seconds", 0) or 0)
         for answer in answers_by_question.values()
     )
+    marks_by_question = {
+        question_mark.question_id: question_mark
+        for question_mark in result.question_marks
+    } if result else {}
+    pending_manual_marks = _pending_manual_mark_count(questions, answers_by_question, marks_by_question)
     locked_for_review = student_session.status in LOCKED_SESSION_STATUSES
     if not locked_for_review:
         review_status = "in_progress"
@@ -2712,6 +2733,8 @@ def _session_review_summary(student_session):
         review_status = "pending"
     elif result.published:
         review_status = "published"
+    elif pending_manual_marks:
+        review_status = "pending"
     else:
         review_status = "evaluated"
     max_warnings = SettingsService.max_violations_allowed()
@@ -2747,6 +2770,7 @@ def _session_review_summary(student_session):
         "unanswered_count": max(total_questions - answered_count, 0),
         "not_visited_count": status_counts.get("NOT_VISITED", 0),
         "review_count": status_counts.get("MARKED_REVIEW", 0) + status_counts.get("ANSWERED_MARKED", 0),
+        "pending_manual_marks": pending_manual_marks,
         "progress_percent": round((answered_count / total_questions) * 100) if total_questions else 0,
         "total_questions": total_questions,
         "time_spent_seconds": total_time_spent_seconds,
@@ -5378,7 +5402,9 @@ def teacher_exam_review_api(exam_id):
     )
     questions = Question.query.filter_by(exam_set_id=exam.id).order_by(Question.question_number.asc()).all()
     session_payloads = [_session_review_summary(student_session) for student_session in sessions]
-    evaluated_count = sum(1 for item in session_payloads if item.get("result"))
+    evaluated_count = sum(
+        1 for item in session_payloads if item.get("review_status") in {"evaluated", "published"}
+    )
     published_count = sum(
         1 for item in session_payloads if (item.get("result") or {}).get("published")
     )
@@ -5437,10 +5463,42 @@ def teacher_publish_exam_results_api(exam_id):
     payload = _get_json_payload()
     publish = bool(payload.get("publish"))
     sessions = (
-        StudentSession.query.options(selectinload(StudentSession.result))
+        StudentSession.query.options(
+            selectinload(StudentSession.answers),
+            selectinload(StudentSession.result).selectinload(Result.question_marks),
+        )
         .filter_by(exam_set_id=exam.id)
         .all()
     )
+    questions = ExamService.get_questions_for_exam(exam.id)
+
+    if publish:
+        pending_sessions = []
+        for student_session in sessions:
+            result = student_session.result
+            if not result:
+                continue
+            answers_by_question = {answer.question_id: answer for answer in student_session.answers}
+            marks_by_question = {mark.question_id: mark for mark in result.question_marks}
+            if _pending_manual_mark_count(questions, answers_by_question, marks_by_question):
+                pending_sessions.append(student_session)
+        if pending_sessions:
+            return jsonify(
+                {
+                    "ok": False,
+                    "message": f"Review {len(pending_sessions)} submitted attempt(s) before publishing results.",
+                    "pending_sessions": [
+                        {
+                            "id": item.id,
+                            "session_code": item.session_code,
+                            "student_name": item.student_name,
+                            "roll_no": item.roll_no,
+                        }
+                        for item in pending_sessions[:20]
+                    ],
+                }
+            ), 409
+
     changed_count = 0
     notification_targets = []
     now = datetime.utcnow()
@@ -6145,6 +6203,12 @@ def admin_update_user_api(user_id):
         return jsonify({"ok": False, "message": "Username already exists."}), 400
     if email and User.query.filter(User.email == email, User.id != user.id).first():
         return jsonify({"ok": False, "message": "Email already exists."}), 400
+    if user.role == "student" and roll_number and User.query.filter(
+        User.role == "student",
+        User.roll_number == roll_number,
+        User.id != user.id,
+    ).first():
+        return jsonify({"ok": False, "message": "Roll number already exists for another student."}), 400
     if user.id == admin.id and is_active is False:
         return jsonify({"ok": False, "message": "You cannot disable your own account."}), 400
 
@@ -7648,7 +7712,7 @@ def autosave_answer(session_code):
         session_code,
         data,
         require_active=True,
-        require_window=False,
+        require_window=True,
         allowed_statuses={"active", "paused"},
     )
     if error_response:
@@ -7694,7 +7758,7 @@ def navigator_update(session_code):
         session_code,
         data,
         require_active=True,
-        require_window=False,
+        require_window=True,
         allowed_statuses={"active", "paused"},
     )
     if error_response:
@@ -7949,7 +8013,7 @@ def code_run(session_code):
         session_code,
         data,
         require_active=True,
-        require_window=False,
+        require_window=True,
     )
     if error_response:
         return error_response
@@ -8057,7 +8121,7 @@ def record_violation(session_code):
         session_code,
         data,
         require_active=True,
-        require_window=False,
+        require_window=True,
         allowed_statuses={"active", "paused"},
     )
     if error_response:

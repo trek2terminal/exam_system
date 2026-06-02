@@ -1,12 +1,12 @@
 import os
-from flask import Flask, send_from_directory, session
+from flask import Flask, jsonify, request, send_from_directory, session
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.utils import safe_join
 from config import DevelopmentConfig, ProductionConfig
 
 # Import extensions
 from app.models.database import db, init_db
-from app.utils.csrf import get_csrf_token
+from app.utils.csrf import CSRF_HEADER, SAFE_METHODS, csrf_token_matches, get_csrf_token
 from app.utils.expired_exam_sweeper import start_expired_exam_sweeper
 from app.utils.logger import setup_logging
 
@@ -108,6 +108,20 @@ def create_app(config_class=None):
         app.logger.exception("Realtime layer could not be initialized; polling fallback remains active.")
 
     start_expired_exam_sweeper(app)
+
+    @app.before_request
+    def require_csrf_for_classic_mutations():
+        if request.method in SAFE_METHODS or request.blueprint == "api" or request.endpoint == "static":
+            return None
+
+        token = request.headers.get(CSRF_HEADER) or request.form.get("csrf_token")
+        if csrf_token_matches(token):
+            return None
+
+        message = "Security token expired. Refresh the page and try again."
+        if request.is_json or "application/json" in (request.headers.get("Accept") or ""):
+            return jsonify({"ok": False, "message": message}), 403
+        return message, 403
 
     @app.context_processor
     def inject_platform_settings():

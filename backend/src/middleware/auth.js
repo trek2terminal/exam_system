@@ -2,9 +2,17 @@ import jwt from 'jsonwebtoken';
 import { loadEnvironment, assertRequiredEnvironment } from '../config/env.js';
 
 const environment = loadEnvironment();
-assertRequiredEnvironment(environment);
 
 export function requireAuth(req, res, next) {
+  try {
+    assertRequiredEnvironment(environment);
+  } catch (error) {
+    return res.status(503).json({
+      ok: false,
+      message: error.message,
+    });
+  }
+
   const authHeader = req.headers.authorization || '';
   const [scheme, token] = authHeader.split(' ');
 

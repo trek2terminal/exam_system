@@ -136,14 +136,44 @@
     <script src="{{ url_for('static', filename='js/ui.js') }}"></script>
     <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
     <script>
+      const pageCsrfToken = document.querySelector('meta[name="csrf-token"]')?.content || "";
+      const safeHttpMethods = new Set(["GET", "HEAD", "OPTIONS"]);
+      const sameOrigin = value => {
+        try {
+          const target = value?.url || value || window.location.href;
+          return new URL(target, window.location.href).origin === window.location.origin;
+        } catch {
+          return false;
+        }
+      };
+      const originalFetch = window.fetch.bind(window);
+      window.fetch = (input, init = {}) => {
+        const method = String(init.method || input?.method || "GET").toUpperCase();
+        if (pageCsrfToken && !safeHttpMethods.has(method) && sameOrigin(input)) {
+          const headers = new Headers(init.headers || input?.headers || {});
+          if (!headers.has("X-CSRF-Token")) headers.set("X-CSRF-Token", pageCsrfToken);
+          return originalFetch(input, { ...init, headers });
+        }
+        return originalFetch(input, init);
+      };
+      document.addEventListener("submit", event => {
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement)) return;
+        const method = String(form.method || "GET").toUpperCase();
+        if (!pageCsrfToken || safeHttpMethods.has(method) || !sameOrigin(form.action)) return;
+        if (form.querySelector('input[name="csrf_token"]')) return;
+        const field = document.createElement("input");
+        field.type = "hidden";
+        field.name = "csrf_token";
+        field.value = pageCsrfToken;
+        form.appendChild(field);
+      }, true);
       document.querySelector(".notification-toggle")?.addEventListener("click", event => {
         event.currentTarget.closest(".notification-bell")?.classList.toggle("open");
       });
       document.getElementById("markNotificationsRead")?.addEventListener("click", async () => {
-        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || "";
         await fetch("/api/notifications/mark-read", {
-          method: "POST",
-          headers: csrfToken ? { "X-CSRF-Token": csrfToken } : {}
+          method: "POST"
         });
         window.location.reload();
       });

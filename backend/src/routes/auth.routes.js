@@ -8,7 +8,19 @@ import { logError, logInfo } from '../utils/logger.js';
 
 const router = Router();
 const environment = loadEnvironment();
-assertRequiredEnvironment(environment);
+
+function requireConfiguredEnvironment(res) {
+  try {
+    assertRequiredEnvironment(environment);
+    return true;
+  } catch (error) {
+    res.status(503).json({
+      ok: false,
+      message: error.message,
+    });
+    return false;
+  }
+}
 
 function buildAuthTokens(user) {
   const accessToken = jwt.sign(
@@ -72,6 +84,10 @@ async function findValidRefreshToken(prisma, userId, refreshToken) {
 }
 
 router.post('/login', async (req, res) => {
+  if (!requireConfiguredEnvironment(res)) {
+    return null;
+  }
+
   const prisma = getPrismaClient();
   const { email, password } = req.body || {};
 
@@ -132,6 +148,10 @@ router.post('/login', async (req, res) => {
 });
 
 router.post('/register', async (req, res) => {
+  if (!requireConfiguredEnvironment(res)) {
+    return null;
+  }
+
   const prisma = getPrismaClient();
   const { name, email, password, rollNumber } = req.body || {};
 
@@ -191,6 +211,10 @@ router.post('/register', async (req, res) => {
 });
 
 router.post('/refresh', async (req, res) => {
+  if (!requireConfiguredEnvironment(res)) {
+    return null;
+  }
+
   const prisma = getPrismaClient();
   const { refreshToken } = req.body || {};
 
@@ -252,6 +276,10 @@ router.post('/refresh', async (req, res) => {
 });
 
 router.post('/logout', async (req, res) => {
+  if (!requireConfiguredEnvironment(res)) {
+    return null;
+  }
+
   const prisma = getPrismaClient();
   const { refreshToken } = req.body || {};
 

@@ -7,8 +7,8 @@
     <section class="student-entry-panel animate-fade-in-up">
         <div class="student-entry-copy">
             <span class="student-kicker"><i class="fas fa-seedling"></i> Student space</span>
-            <h1>Start with your name, not the pressure.</h1>
-            <p>Use your account if you registered, or continue with your name and roll number for local classroom exams.</p>
+            <h1>Start with your student account.</h1>
+            <p>Use your username, email, or roll number with your password to enter the exam space.</p>
         </div>
         <div class="student-calm-strip" aria-hidden="true">
             <span></span><span></span><span></span><span></span>
@@ -24,44 +24,7 @@
             </div>
         </div>
 
-        <div class="student-login-tabs" role="tablist">
-            <button type="button" class="student-login-tab active" data-login-tab="quick">Quick Entry</button>
-            <button type="button" class="student-login-tab" data-login-tab="account">Account</button>
-        </div>
-
-        <form method="POST" class="student-form student-login-panel active" data-login-panel="quick">
-            <input type="hidden" name="login_mode" value="quick">
-            <div class="form-group">
-                <label for="student_name"><i class="fas fa-user"></i> Full Name</label>
-                <input
-                    type="text"
-                    id="student_name"
-                    name="student_name"
-                    placeholder="Enter your full name"
-                    required
-                    autocomplete="name"
-                    autofocus
-                >
-            </div>
-
-            <div class="form-group">
-                <label for="roll_no"><i class="fas fa-id-card"></i> Roll Number</label>
-                <input
-                    type="text"
-                    id="roll_no"
-                    name="roll_no"
-                    placeholder="Enter your roll number"
-                    required
-                    autocomplete="off"
-                >
-            </div>
-
-            <button type="submit" class="btn primary student-primary-action">
-                Continue <i class="fas fa-arrow-right"></i>
-            </button>
-        </form>
-
-        <form method="POST" class="student-form student-login-panel" data-login-panel="account">
+        <form method="POST" class="student-form student-login-panel active" data-login-panel="account">
             <input type="hidden" name="login_mode" value="account">
             <div class="form-group">
                 <label for="identifier"><i class="fas fa-user-lock"></i> Username / Email / Roll No</label>
@@ -71,6 +34,8 @@
                     name="identifier"
                     placeholder="Enter username, email, or roll number"
                     autocomplete="username"
+                    required
+                    autofocus
                 >
             </div>
 
@@ -82,6 +47,7 @@
                     name="password"
                     placeholder="Enter your password"
                     autocomplete="current-password"
+                    required
                 >
             </div>
 
@@ -101,29 +67,4 @@
         </a>
     </section>
 </div>
-{% endblock %}
-
-{% block scripts %}
-<script>
-document.querySelectorAll("[data-login-tab]").forEach(tab => {
-    tab.addEventListener("click", () => {
-        const target = tab.dataset.loginTab;
-        document.querySelectorAll("[data-login-tab]").forEach(item => item.classList.toggle("active", item === tab));
-        document.querySelectorAll("[data-login-panel]").forEach(panel => {
-            const isActive = panel.dataset.loginPanel === target;
-            panel.classList.toggle("active", isActive);
-            panel.querySelectorAll("input").forEach(input => {
-                if (input.type !== "hidden") input.required = isActive;
-            });
-        });
-    });
-});
-
-document.querySelectorAll("[data-login-panel]").forEach(panel => {
-    const isActive = panel.classList.contains("active");
-    panel.querySelectorAll("input").forEach(input => {
-        if (input.type !== "hidden") input.required = isActive;
-    });
-});
-</script>
 {% endblock %}

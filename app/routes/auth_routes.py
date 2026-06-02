@@ -442,7 +442,7 @@ def student_login():
     platform_settings = SettingsService.get_settings()
 
     if request.method == "POST":
-        login_mode = request.form.get("login_mode", "quick")
+        login_mode = request.form.get("login_mode", "account")
 
         if login_mode == "account":
             identifier = request.form.get("identifier", "").strip()
@@ -509,17 +509,8 @@ def student_login():
             flash(f"Welcome {user.name}!", "success")
             return redirect("/react/student")
 
-        student_name = request.form.get("student_name", "").strip()
-        roll_no = request.form.get("roll_no", "").strip().upper()
-
-        if not student_name or not roll_no:
-            flash("Student name and roll number are required.", "danger")
-            return redirect(url_for("auth.student_login"))
-
-        _set_student_session(student_name, roll_no)
-
-        flash(f"Welcome {student_name}!", "success")
-        return redirect("/react/student")
+        flash("Student account login is required. Please use your username, email, or roll number with password.", "danger")
+        return redirect(url_for("auth.student_login"))
 
     return redirect("/react/login")
 
