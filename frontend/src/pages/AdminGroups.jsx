@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CheckCircle2, Copy, FileText, Hash, Plus, RefreshCw, Search, Trash2, UserPlus, Users, X } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { Avatar, Badge, Button, Card, ConfirmationDialog, EmptyState, PageLoading, RefreshStatus } from "../components/ui";
@@ -19,6 +19,24 @@ function studentLabel(count) {
   return `${Number(count || 0).toLocaleString()} student${Number(count || 0) === 1 ? "" : "s"}`;
 }
 
+function normalizeLookup(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function studentAlreadyInGroup(group, student) {
+  const members = group.members || [];
+  const studentIds = [student.id, student.student_id, student.user_id].filter(value => value !== undefined && value !== null).map(String);
+  const studentKeys = [student.roll_number, student.username, student.email].map(normalizeLookup).filter(Boolean);
+
+  return members.some(member => {
+    const memberIds = [member.id, member.student_id, member.user_id].filter(value => value !== undefined && value !== null).map(String);
+    if (studentIds.length && memberIds.some(id => studentIds.includes(id))) return true;
+
+    const memberKeys = [member.roll_number, member.username, member.email].map(normalizeLookup).filter(Boolean);
+    return studentKeys.length > 0 && memberKeys.some(key => studentKeys.includes(key));
+  });
+}
+
 export default function AdminGroups() {
   const [searchParams] = useSearchParams();
   const [groups, setGroups] = useState([]);
@@ -32,6 +50,8 @@ export default function AdminGroups() {
   const [studentResults, setStudentResults] = useState({});
   const [searchingGroupId, setSearchingGroupId] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const studentSearchTimersRef = useRef({});
+  const studentSearchRequestRef = useRef({});
 
   const loadGroups = useCallback(async (soft = false, options = {}) => {
     if (!soft) setLoading(true);
@@ -50,6 +70,10 @@ export default function AdminGroups() {
     loadGroups();
   }, [loadGroups]);
   const liveRefresh = useLiveRefresh(loadGroups, { enabled: !livePaused, intervalMs: 25000 });
+
+  useEffect(() => () => {
+    Object.values(studentSearchTimersRef.current).forEach(timerId => window.clearTimeout(timerId));
+  }, []);
 
   const restoreGroupDraft = useCallback(draftData => {
     setNewGroup({
@@ -127,24 +151,58 @@ export default function AdminGroups() {
     }
   };
 
-  const searchStudents = async group => {
-    const query = (studentSearches[group.id] || "").trim();
+  const runStudentSearch = useCallback(async (group, rawQuery, options = {}) => {
+    const query = String(rawQuery || "").trim();
     if (query.length < 2) {
-      notify.error("Type at least two characters to search students.");
+      setStudentResults(current => ({ ...current, [group.id]: [] }));
+      if (options.notifyWhenShort) notify.error("Type at least two characters to search students.");
       return;
     }
+    const requestId = (studentSearchRequestRef.current[group.id] || 0) + 1;
+    studentSearchRequestRef.current[group.id] = requestId;
     setSearchingGroupId(group.id);
     try {
       const { data } = await api.get("/admin/students/search", { params: { q: query } });
+      if (studentSearchRequestRef.current[group.id] !== requestId) return;
       setStudentResults(current => ({ ...current, [group.id]: data.students || [] }));
     } catch (error) {
-      notify.error(error.response?.data?.message || "Could not search students");
+      if (studentSearchRequestRef.current[group.id] === requestId) {
+        notify.error(error.response?.data?.message || "Could not search students");
+      }
     } finally {
-      setSearchingGroupId(null);
+      if (studentSearchRequestRef.current[group.id] === requestId) {
+        setSearchingGroupId(current => current === group.id ? null : current);
+      }
     }
+  }, []);
+
+  const queueStudentSearch = (group, value) => {
+    setStudentSearches(current => ({ ...current, [group.id]: value }));
+    if (studentSearchTimersRef.current[group.id]) window.clearTimeout(studentSearchTimersRef.current[group.id]);
+
+    const query = value.trim();
+    if (query.length < 2) {
+      studentSearchRequestRef.current[group.id] = (studentSearchRequestRef.current[group.id] || 0) + 1;
+      setSearchingGroupId(current => current === group.id ? null : current);
+      setStudentResults(current => ({ ...current, [group.id]: [] }));
+      return;
+    }
+
+    studentSearchTimersRef.current[group.id] = window.setTimeout(() => {
+      runStudentSearch(group, query);
+    }, 280);
+  };
+
+  const searchStudents = group => {
+    if (studentSearchTimersRef.current[group.id]) window.clearTimeout(studentSearchTimersRef.current[group.id]);
+    runStudentSearch(group, studentSearches[group.id], { notifyWhenShort: true });
   };
 
   const addStudentToGroup = async (group, student) => {
+    if (studentAlreadyInGroup(group, student)) {
+      notify.info(`${student.name} is already in ${group.name}`);
+      return;
+    }
     try {
       const { data } = await api.post(`/admin/groups/${group.id}/members`, { student_id: student.id });
       setGroups(current => current.map(item => item.id === group.id ? data.group : item));
@@ -294,6 +352,8 @@ export default function AdminGroups() {
                 const count = memberCount(group);
                 const members = group.members || [];
                 const joinCode = String(group.join_code || "--------");
+                const studentQuery = (studentSearches[group.id] || "").trim();
+                const suggestions = studentResults[group.id] || [];
                 return (
                 <Card key={group.id} className="adminGroupCard">
                   <div className="adminGroupCardHeader">
@@ -337,7 +397,7 @@ export default function AdminGroups() {
                           <input
                             className="adminGroupsField"
                             value={studentSearches[group.id] || ""}
-                            onChange={event => setStudentSearches(current => ({ ...current, [group.id]: event.target.value }))}
+                            onChange={event => queueStudentSearch(group, event.target.value)}
                             onKeyDown={event => {
                               if (event.key === "Enter") {
                                 event.preventDefault();
@@ -358,26 +418,41 @@ export default function AdminGroups() {
                           <Search size={16} /> Search
                         </Button>
                       </div>
-                      {(studentResults[group.id] || []).length > 0 && (
+                      {studentQuery.length === 1 && (
+                        <div className="adminGroupSearchHint mt-3">Type one more character to see suggestions.</div>
+                      )}
+                      {studentQuery.length >= 2 && searchingGroupId === group.id && (
+                        <div className="adminGroupSearchHint mt-3">Searching students...</div>
+                      )}
+                      {suggestions.length > 0 && (
                         <div className="adminGroupSearchResults mt-3">
-                          {(studentResults[group.id] || []).map(student => (
-                            <button
-                              key={student.id}
-                              type="button"
-                              onClick={() => addStudentToGroup(group, student)}
-                              className="adminGroupSearchResult"
-                            >
-                              <span className="flex min-w-0 items-center gap-3">
-                                <Avatar name={student.name} src={student.profile_picture} size="sm" />
-                                <span className="min-w-0">
-                                  <span className="block truncate text-sm font-semibold text-text-primary">{student.name}</span>
-                                  <span className="block truncate text-xs text-text-muted">{student.roll_number || student.username} | {student.email || "No email"}</span>
+                          {suggestions.map(student => {
+                            const alreadyAdded = studentAlreadyInGroup(group, student);
+                            return (
+                              <button
+                                key={student.id}
+                                type="button"
+                                disabled={alreadyAdded}
+                                onClick={() => addStudentToGroup(group, student)}
+                                className={`adminGroupSearchResult ${alreadyAdded ? "is-added" : ""}`}
+                              >
+                                <span className="flex min-w-0 items-center gap-3">
+                                  <Avatar name={student.name} src={student.profile_picture} size="sm" />
+                                  <span className="min-w-0">
+                                    <span className="block truncate text-sm font-semibold text-text-primary">{student.name}</span>
+                                    <span className="block truncate text-xs text-text-muted">{student.roll_number || student.username} | {student.email || "No email"}</span>
+                                  </span>
                                 </span>
-                              </span>
-                              <Badge variant="info" size="sm">Add</Badge>
-                            </button>
-                          ))}
+                                <Badge variant={alreadyAdded ? "success" : "info"} size="sm">
+                                  {alreadyAdded ? "Already added" : "Add"}
+                                </Badge>
+                              </button>
+                            );
+                          })}
                         </div>
+                      )}
+                      {studentQuery.length >= 2 && searchingGroupId !== group.id && suggestions.length === 0 && (
+                        <div className="adminGroupSearchHint mt-3">No matching students found yet.</div>
                       )}
 
                       <div className="adminGroupManagementGrid">
