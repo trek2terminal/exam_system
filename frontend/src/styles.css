@@ -1290,6 +1290,734 @@ html.live-data-updated body::after {
   }
 }
 
+.adminGroupsShell {
+  position: relative;
+  isolation: isolate;
+}
+
+.adminGroupsShell::before {
+  content: "";
+  position: absolute;
+  inset: -36px -28px auto;
+  z-index: -1;
+  height: 300px;
+  background:
+    radial-gradient(circle at 16% 20%, rgb(var(--role-accent) / 0.18), transparent 34%),
+    radial-gradient(circle at 86% 8%, rgb(var(--color-info) / 0.12), transparent 32%);
+  pointer-events: none;
+}
+
+.adminGroupsHero,
+.adminGroupsPanel,
+.adminGroupCard {
+  border: 1px solid rgb(var(--color-border) / 0.78);
+  background:
+    linear-gradient(145deg, rgb(var(--color-background-card) / 0.94), rgb(var(--color-background-surface) / 0.80));
+  box-shadow:
+    var(--shadow-card),
+    inset 0 1px 0 rgb(255 255 255 / 0.04);
+}
+
+.adminGroupsHero {
+  position: relative;
+  overflow: hidden;
+  border-color: rgb(var(--role-accent) / 0.24);
+  border-radius: 18px;
+}
+
+.adminGroupsHero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(110deg, transparent 0%, rgb(var(--role-accent) / 0.09) 42%, transparent 70%),
+    radial-gradient(circle at 100% 0%, rgb(var(--role-accent) / 0.16), transparent 30%);
+  pointer-events: none;
+}
+
+.adminGroupsHero > * {
+  position: relative;
+  z-index: 1;
+}
+
+.adminGroupsMetric {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid rgb(var(--color-border) / 0.72);
+  border-radius: 14px;
+  background: rgb(var(--color-background-base) / 0.42);
+  padding: 13px;
+}
+
+.adminGroupsMetricIcon,
+.adminGroupsCreateIcon,
+.adminGroupAvatar {
+  display: grid;
+  place-items: center;
+  color: rgb(var(--role-accent));
+}
+
+.adminGroupsMetricIcon {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  border-radius: 12px;
+  background: rgb(var(--role-accent) / 0.12);
+}
+
+.adminGroupsMetric p,
+.adminGroupsMetric span {
+  margin: 0;
+  color: rgb(var(--color-text-muted));
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.adminGroupsMetric strong {
+  display: block;
+  color: rgb(var(--color-text-primary));
+  font-size: 24px;
+  line-height: 1.1;
+}
+
+.adminGroupsMetric span {
+  display: block;
+  margin-top: 4px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.adminGroupsCreateCard {
+  align-self: start;
+}
+
+@media (min-width: 1280px) {
+  .adminGroupsCreateCard {
+    position: sticky;
+    top: 92px;
+  }
+}
+
+.adminGroupsCreateIcon {
+  width: 52px;
+  height: 52px;
+  border: 1px solid rgb(var(--role-accent) / 0.18);
+  border-radius: 16px;
+  background:
+    linear-gradient(145deg, rgb(var(--role-accent) / 0.18), rgb(var(--color-background-base) / 0.56));
+}
+
+.adminGroupsLabel {
+  color: rgb(var(--color-text-secondary));
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.adminGroupsField,
+.adminGroupsSearchInput {
+  width: 100%;
+  min-height: 46px;
+  border: 1px solid rgb(var(--color-border) / 0.82);
+  border-radius: 12px;
+  background: rgb(var(--color-background-base) / 0.70);
+  color: rgb(var(--color-text-primary));
+  font-size: 14px;
+  outline: none;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    background-color 180ms ease;
+}
+
+.adminGroupsField {
+  padding: 0 14px;
+}
+
+.adminGroupsTextarea {
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.adminGroupsField::placeholder,
+.adminGroupsSearchInput::placeholder {
+  color: rgb(var(--color-text-muted) / 0.78);
+}
+
+.adminGroupsField:focus,
+.adminGroupsSearchInput:focus {
+  border-color: rgb(var(--role-accent) / 0.62);
+  background: rgb(var(--color-background-base) / 0.86);
+  box-shadow: 0 0 0 3px rgb(var(--role-accent) / 0.16);
+}
+
+.adminGroupsPrimaryAction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 46px;
+  border: 0;
+  border-radius: 13px;
+  background:
+    linear-gradient(135deg, rgb(var(--role-accent)), rgb(var(--color-info)));
+  color: white;
+  cursor: pointer;
+  font-weight: 800;
+  box-shadow: 0 18px 34px rgb(var(--role-accent) / 0.22);
+  transition: transform 180ms ease, filter 180ms ease, box-shadow 180ms ease;
+}
+
+.adminGroupsPrimaryAction:hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+  box-shadow: 0 22px 40px rgb(var(--role-accent) / 0.26);
+}
+
+.adminGroupsPrimaryAction:active {
+  transform: translateY(0);
+}
+
+.adminGroupsSearch {
+  position: relative;
+  display: block;
+  width: min(100%, 460px);
+}
+
+.adminGroupsSearch svg {
+  position: absolute;
+  top: 50%;
+  left: 16px;
+  color: rgb(var(--color-text-muted));
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.adminGroupsSearchInput {
+  padding: 0 16px 0 46px;
+}
+
+.adminGroupCard {
+  position: relative;
+  overflow: hidden;
+  border-radius: 16px;
+  transition:
+    border-color 180ms ease,
+    box-shadow 220ms ease,
+    transform 220ms var(--ease-emphasized);
+}
+
+.adminGroupCard::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 4px;
+  background: linear-gradient(180deg, rgb(var(--role-accent)), rgb(var(--color-info)));
+}
+
+.adminGroupCard:hover {
+  border-color: rgb(var(--role-accent) / 0.32);
+  box-shadow: var(--shadow-elevated);
+  transform: translateY(-2px);
+}
+
+.adminGroupAvatar {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  border: 1px solid rgb(var(--role-accent) / 0.24);
+  border-radius: 14px;
+  background: rgb(var(--role-accent) / 0.12);
+  font-weight: 900;
+}
+
+.adminGroupCodePanel,
+.adminGroupTools,
+.adminGroupToolBlock,
+.adminGroupMemberList,
+.adminGroupEmptyMembers {
+  border: 1px solid rgb(var(--color-border) / 0.76);
+  border-radius: 14px;
+  background: rgb(var(--color-background-base) / 0.48);
+}
+
+.adminGroupCodePanel {
+  padding: 15px;
+  border-color: rgb(var(--role-accent) / 0.28);
+  background:
+    linear-gradient(135deg, rgb(var(--role-accent) / 0.15), rgb(var(--color-background-base) / 0.56));
+}
+
+.adminGroupCodeLetters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.adminGroupCodeLetters span {
+  display: grid;
+  width: 28px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid rgb(var(--role-accent) / 0.22);
+  border-radius: 9px;
+  background: rgb(var(--color-background-card) / 0.68);
+  color: rgb(var(--color-text-primary));
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: 0;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.04);
+}
+
+.adminGroupMiniButton,
+.adminGroupSecondaryButton,
+.adminGroupDeleteButton {
+  border-color: rgb(var(--color-border) / 0.84) !important;
+  background: rgb(var(--color-background-card) / 0.52) !important;
+  color: rgb(var(--color-text-primary)) !important;
+}
+
+.adminGroupMiniButton {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid;
+  border-radius: 11px;
+  padding: 0 12px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+  transition:
+    border-color 180ms ease,
+    background-color 180ms ease,
+    transform 180ms ease;
+}
+
+.adminGroupMiniButton:hover,
+.adminGroupSecondaryButton:hover {
+  border-color: rgb(var(--role-accent) / 0.42) !important;
+  background: rgb(var(--role-accent) / 0.10) !important;
+  transform: translateY(-1px);
+}
+
+.adminGroupTools {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+}
+
+.adminGroupToolBlock {
+  padding: 14px;
+}
+
+.adminGroupSearchResults,
+.adminGroupMemberList {
+  max-height: 230px;
+  overflow: auto;
+}
+
+.adminGroupSearchResult,
+.adminGroupMemberRow {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 0;
+  border-bottom: 1px solid rgb(var(--color-border) / 0.70);
+  background: transparent;
+  color: inherit;
+  padding: 10px 12px;
+  text-align: left;
+  transition: background-color 160ms ease;
+}
+
+.adminGroupSearchResult:last-child,
+.adminGroupMemberRow:last-child {
+  border-bottom: 0;
+}
+
+.adminGroupSearchResult:hover,
+.adminGroupMemberRow:hover {
+  background: rgb(var(--role-accent) / 0.07);
+}
+
+.adminGroupRemoveButton {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  padding: 0 !important;
+  color: rgb(var(--color-text-muted)) !important;
+}
+
+.adminGroupRemoveButton:hover {
+  color: rgb(var(--color-danger)) !important;
+}
+
+.adminGroupEmptyMembers {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: rgb(var(--color-text-muted));
+  font-size: 13px;
+  font-weight: 700;
+  padding: 14px;
+}
+
+.adminGroupEmptyMembers svg {
+  flex: 0 0 auto;
+  color: rgb(var(--role-accent));
+}
+
+.adminGroupDeleteButton {
+  color: rgb(var(--color-danger)) !important;
+}
+
+.adminGroupDeleteButton:hover {
+  border-color: rgb(var(--color-danger) / 0.32) !important;
+  background: rgb(var(--color-danger) / 0.11) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .adminGroupsPrimaryAction,
+  .adminGroupCard,
+  .adminGroupMiniButton,
+  .adminGroupSecondaryButton,
+  .adminGroupSearchResult,
+  .adminGroupMemberRow,
+  .adminGroupsField,
+  .adminGroupsSearchInput {
+    transition: none;
+  }
+
+  .adminGroupsPrimaryAction:hover,
+  .adminGroupCard:hover,
+  .adminGroupMiniButton:hover,
+  .adminGroupSecondaryButton:hover {
+    transform: none;
+  }
+}
+
+/* Admin Groups: refined dense workspace */
+.adminGroupsShell {
+  overflow-x: clip;
+}
+
+.adminGroupsShell::before,
+.adminGroupsHero,
+.adminGroupsHero::after {
+  display: none;
+}
+
+.adminGroupsHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding-bottom: 4px;
+}
+
+.adminGroupsRefresh {
+  flex: 0 0 auto;
+}
+
+.adminGroupsStatsBar {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.adminGroupsMetric {
+  min-width: 0;
+  border: 1px solid rgb(var(--color-border) / 0.72);
+  border-radius: 12px;
+  background: rgb(var(--color-background-card) / 0.62);
+  padding: 11px 12px;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.035);
+}
+
+.adminGroupsMetricIcon {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border-radius: 10px;
+  background: rgb(var(--role-accent) / 0.10);
+}
+
+.adminGroupsMetric p,
+.adminGroupsMetric span {
+  color: rgb(var(--color-text-muted));
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.adminGroupsMetric strong {
+  color: rgb(var(--color-text-primary));
+  font-size: 20px;
+}
+
+.adminGroupsMetric span {
+  margin-top: 2px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.adminGroupsLayout {
+  display: grid;
+  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.adminGroupsPanel,
+.adminGroupCard {
+  border-color: rgb(var(--color-border) / 0.74);
+  background:
+    linear-gradient(180deg, rgb(var(--color-background-card) / 0.86), rgb(var(--color-background-card) / 0.74));
+  box-shadow: var(--shadow-card);
+}
+
+.adminGroupsCreateCard {
+  top: 86px;
+}
+
+.adminGroupsCreateIcon {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  background: rgb(var(--role-accent) / 0.10);
+}
+
+.adminGroupsPrimaryAction {
+  min-height: 44px;
+  border-radius: 10px;
+  background: rgb(var(--role-accent));
+  box-shadow: 0 12px 24px rgb(var(--role-accent) / 0.18);
+}
+
+.adminGroupsPrimaryAction:hover {
+  box-shadow: 0 14px 28px rgb(var(--role-accent) / 0.22);
+}
+
+.adminGroupsDirectoryCard {
+  position: sticky;
+  top: 76px;
+  z-index: 5;
+}
+
+.adminGroupsSearch {
+  width: min(100%, 430px);
+}
+
+.adminGroupsField,
+.adminGroupsSearchInput {
+  min-height: 42px;
+  border-radius: 10px;
+  background: rgb(var(--color-background-base) / 0.58);
+}
+
+.adminGroupsTextarea {
+  min-height: 92px;
+}
+
+.adminGroupsList {
+  display: grid;
+  gap: 14px;
+}
+
+.adminGroupCard {
+  padding: 0;
+  border-radius: 14px;
+  transform: none;
+}
+
+.adminGroupCard::before {
+  top: 0;
+  right: auto;
+  bottom: 0;
+  left: 0;
+  width: 3px;
+  background: rgb(var(--role-accent));
+}
+
+.adminGroupCard:hover {
+  border-color: rgb(var(--role-accent) / 0.24);
+  box-shadow: var(--shadow-card);
+  transform: none;
+}
+
+.adminGroupCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-bottom: 1px solid rgb(var(--color-border) / 0.64);
+  padding: 16px 18px 14px 20px;
+}
+
+.adminGroupAvatar {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  border-radius: 11px;
+  background: rgb(var(--role-accent) / 0.10);
+}
+
+.adminGroupBody {
+  display: grid;
+  gap: 14px;
+  padding: 16px 18px 18px 20px;
+}
+
+.adminGroupCodePanel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-color: rgb(var(--role-accent) / 0.16);
+  background: rgb(var(--role-accent) / 0.055);
+  padding: 13px 14px;
+}
+
+.adminGroupCodeText {
+  margin-top: 5px;
+  overflow: hidden;
+  color: rgb(var(--color-text-primary));
+  font-family: var(--font-mono);
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adminGroupCodeLetters {
+  display: none;
+}
+
+.adminGroupCodeActions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.adminGroupMiniButton {
+  min-height: 36px;
+  border-radius: 9px;
+  background: rgb(var(--color-background-card) / 0.70) !important;
+  font-size: 12px;
+}
+
+.adminGroupTools {
+  display: grid;
+  gap: 14px;
+  border: 0;
+  border-top: 1px solid rgb(var(--color-border) / 0.64);
+  border-radius: 0;
+  background: transparent;
+  padding: 14px 0 0;
+}
+
+.adminGroupToolBlock {
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.adminGroupManagementGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 0.9fr);
+  gap: 14px;
+}
+
+.adminGroupSearchResults,
+.adminGroupMemberList {
+  max-height: 172px;
+  border: 1px solid rgb(var(--color-border) / 0.66);
+  border-radius: 12px;
+  background: rgb(var(--color-background-base) / 0.42);
+}
+
+.adminGroupSearchResult,
+.adminGroupMemberRow {
+  padding: 9px 10px;
+}
+
+.adminGroupEmptyMembers {
+  min-height: 92px;
+  border-radius: 12px;
+  background: rgb(var(--color-background-base) / 0.36);
+  padding: 12px;
+}
+
+.adminGroupStatusLine {
+  border-top: 1px solid rgb(var(--color-border) / 0.64);
+  padding-top: 12px;
+}
+
+.adminGroupStatusLine span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: rgb(var(--color-text-muted));
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.adminGroupRemoveButton {
+  border-radius: 9px;
+}
+
+@media (max-width: 1280px) {
+  .adminGroupsLayout {
+    grid-template-columns: 1fr;
+  }
+
+  .adminGroupsCreateCard,
+  .adminGroupsDirectoryCard {
+    position: relative;
+    top: auto;
+  }
+}
+
+@media (max-width: 900px) {
+  .adminGroupsHeader,
+  .adminGroupCodePanel,
+  .adminGroupCardHeader {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .adminGroupsStatsBar,
+  .adminGroupManagementGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .adminGroupsRefresh,
+  .adminGroupsSearch,
+  .adminGroupCodeActions {
+    width: 100%;
+  }
+
+  .adminGroupMiniButton,
+  .adminGroupSecondaryButton {
+    flex: 1 1 auto;
+  }
+}
+
 /* tooltip always dark background */
 .tooltip-bg {
   background: rgba(17, 24, 39, 0.96);
@@ -1360,16 +2088,17 @@ html.live-data-updated body::after {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-  border-radius: 14px;
-  background: rgb(15 23 42 / 0.96);
+  gap: 10px;
+  width: 100%;
+  padding: 12px 13px;
+  border-radius: 12px;
+  background: rgb(var(--color-background-card) / 0.96);
   color: #f8fafc;
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.18);
-  min-width: 320px;
-  max-width: 420px;
-  border: 1px solid rgb(148 163 184 / 0.15);
-  backdrop-filter: blur(16px);
+  box-shadow: 0 16px 38px rgb(0 0 0 / 0.22);
+  min-width: 0;
+  max-width: 380px;
+  border: 1px solid rgb(var(--color-border) / 0.84);
+  backdrop-filter: blur(14px);
 }
 .toastFrame::before {
   content: "";
@@ -1414,7 +2143,10 @@ html.live-data-updated body::after {
 .toastFrame span {
   position: relative;
   z-index: 1;
-  color: #f8fafc;
+  color: rgb(var(--color-text-primary));
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
 }
 .toastFrame button {
   position: relative;
@@ -1466,10 +2198,9 @@ html.live-data-updated body::after {
 
 @media (max-width: 640px) {
   .toastFrame {
-    min-width: min(calc(100vw - 32px), 420px);
+    min-width: 0;
     max-width: calc(100vw - 32px);
-    padding: 13px 14px;
-    border-radius: 12px;
+    padding: 12px;
   }
   .toastEnter {
     animation-name: toastMobileIn;

@@ -9,15 +9,32 @@ const icons = {
   info: Info
 };
 
+const MAX_VISIBLE_TOASTS = 3;
+const DEFAULT_DURATIONS = {
+  success: 2600,
+  info: 3200,
+  warning: 5200,
+  error: 6500
+};
+const toastTimers = new Map();
+
+function dismissToast(id) {
+  if (toastTimers.has(id)) {
+    window.clearTimeout(toastTimers.get(id));
+    toastTimers.delete(id);
+  }
+  toast.dismiss(id);
+}
+
 export function ToastViewport() {
   const { toasts } = useToasterStore();
 
   useEffect(() => {
     const visibleToasts = toasts.filter(item => item.visible);
-    if (visibleToasts.length <= 4) return;
+    if (visibleToasts.length <= MAX_VISIBLE_TOASTS) return;
     visibleToasts
-      .slice(0, visibleToasts.length - 4)
-      .forEach(item => toast.remove(item.id));
+      .slice(0, visibleToasts.length - MAX_VISIBLE_TOASTS)
+      .forEach(item => dismissToast(item.id));
   }, [toasts]);
 
   return (
@@ -25,13 +42,14 @@ export function ToastViewport() {
       position="top-right"
       gutter={10}
       containerStyle={{
-        top: 16,
-        right: 16,
-        left: 16,
+        top: 84,
+        right: 18,
+        left: "auto",
+        width: "min(380px, calc(100vw - 32px))",
         zIndex: 9999
       }}
       toastOptions={{
-        duration: 4000,
+        duration: DEFAULT_DURATIONS.info,
         className: "toastFrame"
       }}
     />
@@ -40,8 +58,10 @@ export function ToastViewport() {
 
 function show(type, message, options = {}) {
   const Icon = icons[type] || Info;
-  const duration = type === "warning" || type === "error" ? 7000 : 4000;
-  return toast.custom(
+  const { action, duration: optionDuration, id: optionId, dedupe = true, ...toastOptions } = options;
+  const duration = optionDuration ?? DEFAULT_DURATIONS[type] ?? DEFAULT_DURATIONS.info;
+  const id = optionId || (dedupe ? `${type}:${message}` : undefined);
+  const createdId = toast.custom(
     toastItem => (
       <div
         role="status"
@@ -50,14 +70,19 @@ function show(type, message, options = {}) {
       >
         <Icon size={18} />
         <span>{message}</span>
-        {options.action && <a href={options.action.href}>{options.action.label}</a>}
-        <button type="button" onClick={() => toast.dismiss(toastItem.id)} aria-label="Close toast">
+        {action && <a href={action.href}>{action.label}</a>}
+        <button type="button" onClick={() => dismissToast(toastItem.id)} aria-label="Close toast">
           <X size={16} />
         </button>
       </div>
     ),
-    { duration, removeDelay: 220, ...options }
+    { id, duration, removeDelay: 220, ...toastOptions }
   );
+  if (Number.isFinite(duration) && duration > 0) {
+    if (toastTimers.has(createdId)) window.clearTimeout(toastTimers.get(createdId));
+    toastTimers.set(createdId, window.setTimeout(() => dismissToast(createdId), duration));
+  }
+  return createdId;
 }
 
 export const notify = {
