@@ -533,10 +533,12 @@ export default function Proctoring({ mode }) {
           })}
 
           {!sortedSessions.length && (
-            <div className="emptyState proctorEmptyState">
-              <UserCheck size={34} />
-              <h3>No active attempts</h3>
-              <p>Students who are waiting, active, or paused will appear here automatically.</p>
+            <div className="emptyState proctorEmptyState proctorAttemptEmpty">
+              <span className="proctorEmptyIcon"><UserCheck size={30} /></span>
+              <div>
+                <h3>No active attempts</h3>
+                <p>Students who are waiting, active, or paused will appear here automatically.</p>
+              </div>
             </div>
           )}
         </section>
@@ -551,10 +553,10 @@ export default function Proctoring({ mode }) {
               onReload={() => loadStatus(true)}
             />
           ) : (
-            <div className="emptyState compact proctorEmptyState">
-              <BellRing size={30} />
+            <div className="emptyState compact proctorEmptyState proctorDetailEmpty">
+              <span className="proctorEmptyIcon"><BellRing size={28} /></span>
               <h3>Select a student</h3>
-              <p>Detailed status and controls will open here.</p>
+              <p>Click an active attempt to review status, heartbeat, progress, and available controls.</p>
             </div>
           )}
         </aside>
@@ -581,7 +583,7 @@ export default function Proctoring({ mode }) {
 
       {isAdmin && data?.recent_violations?.length > 0 && (
         <section className="recentViolationFeed">
-          <div className="rowBetween">
+          <div className="rowBetween proctorViolationHeader">
             <div>
               <span className="eyebrow">Recent alerts</span>
               <h3>Violation Feed</h3>
@@ -589,11 +591,16 @@ export default function Proctoring({ mode }) {
             <Button as="a" variant="ghost" size="sm" href="/react/admin/reports">Full log</Button>
           </div>
           {data.recent_violations.map(item => (
-            <article key={item.id}>
-              <AlertTriangle size={17} />
-              <div>
-                <strong>{item.student_name} | {item.type}</strong>
-                <p>{item.exam_name} | {formatDate(item.occurred_at)}{item.detail ? ` | ${item.detail}` : ""}</p>
+            <article key={item.id} className="proctorViolationItem">
+              <span className="proctorViolationIcon"><AlertTriangle size={16} /></span>
+              <div className="min-w-0">
+                <strong>{item.student_name}</strong>
+                <p>
+                  <span className="proctorViolationType">{item.type}</span>
+                  <span>{item.exam_name}</span>
+                  <span>{formatDate(item.occurred_at)}</span>
+                </p>
+                {item.detail && <small>{item.detail}</small>}
               </div>
             </article>
           ))}

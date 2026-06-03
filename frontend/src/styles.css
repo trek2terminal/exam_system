@@ -4781,26 +4781,159 @@ p {
 }
 
 .proctorEmptyState {
-  min-height: 288px;
-  border: 1px dashed rgb(var(--color-border) / 0.74);
   border-radius: 14px;
-  background: rgb(var(--color-background-card) / 0.50);
 }
 
-.proctorEmptyState svg {
+.proctorEmptyIcon {
+  display: grid;
+  width: 50px;
+  height: 50px;
+  place-items: center;
+  border: 1px solid rgb(var(--role-accent) / 0.18);
+  border-radius: 14px;
+  background: rgb(var(--role-accent) / 0.10);
   color: rgb(var(--role-accent));
+}
+
+.proctorAttemptEmpty {
+  grid-column: 1 / -1;
+  display: flex;
+  min-height: 190px;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  border: 1px dashed rgb(var(--color-border) / 0.74);
+  background:
+    linear-gradient(180deg, rgb(var(--color-background-card) / 0.72), rgb(var(--color-background-base) / 0.36));
+  padding: 24px;
+  text-align: left;
+}
+
+.proctorAttemptEmpty h3,
+.proctorDetailEmpty h3 {
+  margin: 0;
+  color: rgb(var(--color-text-primary));
+  font-size: 18px;
+}
+
+.proctorAttemptEmpty p,
+.proctorDetailEmpty p {
+  max-width: 460px;
+  margin: 7px 0 0;
+  color: rgb(var(--color-text-secondary));
+  line-height: 1.55;
 }
 
 .proctorEmptyState.compact {
   min-height: 100%;
 }
 
-.recentViolationFeed {
-  padding: 16px;
+.proctorDetailEmpty {
+  display: grid;
+  min-height: 230px;
+  align-content: center;
+  justify-items: center;
+  border: 0;
+  background:
+    radial-gradient(circle at 50% 0%, rgb(var(--role-accent) / 0.10), transparent 38%),
+    rgb(var(--color-background-base) / 0.24);
+  padding: 26px 18px;
+  text-align: center;
 }
 
-.recentViolationFeed article {
-  border-color: rgb(var(--color-border) / 0.66);
+.proctorDetailEmpty .proctorEmptyIcon {
+  margin-bottom: 14px;
+}
+
+.proctorDetailEmpty p {
+  max-width: 300px;
+}
+
+.recentViolationFeed {
+  gap: 0;
+  overflow: hidden;
+  border-color: rgb(var(--color-border) / 0.74);
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgb(var(--color-background-card) / 0.86), rgb(var(--color-background-card) / 0.72));
+  padding: 0;
+}
+
+.proctorViolationHeader {
+  align-items: center;
+  border-bottom: 1px solid rgb(var(--color-border) / 0.68);
+  padding: 16px 18px;
+}
+
+.proctorViolationHeader h3 {
+  margin: 2px 0 0;
+}
+
+.proctorViolationItem {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 12px;
+  border-top: 0;
+  border-bottom: 1px solid rgb(var(--color-border) / 0.62);
+  padding: 14px 18px;
+}
+
+.proctorViolationItem:last-child {
+  border-bottom: 0;
+}
+
+.proctorViolationIcon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 10px;
+  background: rgb(var(--color-danger) / 0.10);
+  color: rgb(var(--color-danger));
+}
+
+.recentViolationFeed .proctorViolationIcon svg {
+  color: inherit;
+}
+
+.proctorViolationItem strong {
+  display: block;
+  color: rgb(var(--color-text-primary));
+  font-size: 15px;
+}
+
+.proctorViolationItem p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 5px 0 0;
+  color: rgb(var(--color-text-muted));
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.proctorViolationItem p span:not(:last-child)::after {
+  content: "";
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  margin-left: 8px;
+  border-radius: 9999px;
+  background: currentColor;
+  opacity: 0.45;
+  vertical-align: middle;
+}
+
+.proctorViolationType {
+  color: rgb(var(--color-danger));
+}
+
+.proctorViolationItem small {
+  display: block;
+  margin-top: 7px;
+  color: rgb(var(--color-text-secondary));
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 @media (max-width: 1280px) {
@@ -4840,6 +4973,12 @@ p {
   .proctorCardFoot {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .proctorAttemptEmpty {
+    align-items: center;
+    flex-direction: column;
+    text-align: center;
   }
 }
 
