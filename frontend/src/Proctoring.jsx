@@ -364,6 +364,8 @@ export default function Proctoring({ mode }) {
   const selectedSession = sortedSessions.find(item => item.id === selectedId) || sortedSessions[0] || null;
   const waitingSessions = sortedSessions.filter(item => item.status === "waiting");
   const counts = data?.counts || {};
+  const recentViolations = data?.recent_violations || [];
+  const visibleRecentViolations = recentViolations.slice(0, 6);
 
   if (loading) return <PageLoading title="Loading proctoring workspace..." />;
 
@@ -581,16 +583,20 @@ export default function Proctoring({ mode }) {
         </div>
       )}
 
-      {isAdmin && data?.recent_violations?.length > 0 && (
+      {isAdmin && recentViolations.length > 0 && (
         <section className="recentViolationFeed">
           <div className="rowBetween proctorViolationHeader">
             <div>
               <span className="eyebrow">Recent alerts</span>
               <h3>Violation Feed</h3>
+              <p className="proctorViolationLimit">
+                Showing latest {visibleRecentViolations.length}
+                {recentViolations.length > visibleRecentViolations.length ? ` of ${recentViolations.length}` : ""}.
+              </p>
             </div>
             <Button as="a" variant="ghost" size="sm" href="/react/admin/reports">Full log</Button>
           </div>
-          {data.recent_violations.map(item => (
+          {visibleRecentViolations.map(item => (
             <article key={item.id} className="proctorViolationItem">
               <span className="proctorViolationIcon"><AlertTriangle size={16} /></span>
               <div className="min-w-0">
