@@ -369,12 +369,13 @@ export default function Proctoring({ mode }) {
 
   return (
     <section className="proctorWorkspace">
-      <Card className="reviewHeader">
+      <Card className="reviewHeader proctorHero">
         <div>
+          <span className="eyebrow">Live monitor</span>
           <h2>Live Proctoring</h2>
           <p>{isAdmin ? "Monitor active attempts and take audited security actions." : "Read-only view of your active exam attempts."}</p>
         </div>
-        <div className="actionRow">
+        <div className="actionRow proctorHeroActions">
           <span className="proctorUpdated">
             <Radio size={16} />
             Updated {formatDate(data?.updated_at)}
@@ -416,15 +417,22 @@ export default function Proctoring({ mode }) {
       {message && <div className="successBanner">{message}</div>}
 
       <section className="studentStats">
-        <Card className="statsCard border-success/30 bg-success/5"><PlayCircle size={18} className="text-success" /><span>Active</span><strong>{counts.active_sessions || 0}</strong></Card>
-        <Card className="statsCard border-info/30 bg-info/5"><Wifi size={18} className="text-info" /><span>Online</span><strong>{counts.online_sessions || 0}</strong></Card>
-        <Card className="statsCard border-warning/30 bg-warning/5"><Clock3 size={18} className="text-warning" /><span>Waiting</span><strong>{counts.waiting_sessions || 0}</strong></Card>
-        <Card className={cn("statsCard border-orange-300/30 bg-orange-500/5", Number(counts.paused_sessions || 0) > 0 && "border-orange-400/70 bg-orange-500/10")}><PauseCircle size={18} className="text-orange-500" /><span>Paused</span><strong>{counts.paused_sessions || 0}</strong></Card>
-        <Card className={cn("statsCard border-danger/30 bg-danger/5", Number(counts.flagged_sessions || 0) > 0 && "border-danger/70 bg-danger/10")}><ShieldAlert size={18} className="text-danger" /><span>Flagged</span><strong>{counts.flagged_sessions || 0}</strong></Card>
-        <Card className={cn("statsCard border-slate-300/40 bg-slate-500/5", Number(counts.offline_sessions || 0) > 0 && "border-danger/50 bg-danger/5")}><WifiOff size={18} className={Number(counts.offline_sessions || 0) > 0 ? "text-danger" : "text-text-muted"} /><span>Offline</span><strong>{counts.offline_sessions || 0}</strong></Card>
+        <Card className="statsCard proctorStatsCard success"><PlayCircle size={18} /><span>Active</span><strong>{counts.active_sessions || 0}</strong></Card>
+        <Card className="statsCard proctorStatsCard info"><Wifi size={18} /><span>Online</span><strong>{counts.online_sessions || 0}</strong></Card>
+        <Card className="statsCard proctorStatsCard warning"><Clock3 size={18} /><span>Waiting</span><strong>{counts.waiting_sessions || 0}</strong></Card>
+        <Card className={cn("statsCard proctorStatsCard orange", Number(counts.paused_sessions || 0) > 0 && "activeTone")}><PauseCircle size={18} /><span>Paused</span><strong>{counts.paused_sessions || 0}</strong></Card>
+        <Card className={cn("statsCard proctorStatsCard danger", Number(counts.flagged_sessions || 0) > 0 && "activeTone")}><ShieldAlert size={18} /><span>Flagged</span><strong>{counts.flagged_sessions || 0}</strong></Card>
+        <Card className={cn("statsCard proctorStatsCard muted", Number(counts.offline_sessions || 0) > 0 && "danger activeTone")}><WifiOff size={18} /><span>Offline</span><strong>{counts.offline_sessions || 0}</strong></Card>
       </section>
 
-      <Card className="p-4">
+      <Card className="proctorFilterPanel p-4">
+        <div className="proctorFilterHeader">
+          <div>
+            <span className="eyebrow">Controls</span>
+            <h3>Filter attempts</h3>
+          </div>
+          <Badge variant="purple" dot>{sortedSessions.length} visible</Badge>
+        </div>
         <div className="proctorFilters">
           <Select label="Active Exam" value={selectedExamId} onChange={setSelectedExamId} options={examOptions} required />
           <Input
@@ -525,7 +533,7 @@ export default function Proctoring({ mode }) {
           })}
 
           {!sortedSessions.length && (
-            <div className="emptyState">
+            <div className="emptyState proctorEmptyState">
               <UserCheck size={34} />
               <h3>No active attempts</h3>
               <p>Students who are waiting, active, or paused will appear here automatically.</p>
@@ -543,7 +551,7 @@ export default function Proctoring({ mode }) {
               onReload={() => loadStatus(true)}
             />
           ) : (
-            <div className="emptyState compact">
+            <div className="emptyState compact proctorEmptyState">
               <BellRing size={30} />
               <h3>Select a student</h3>
               <p>Detailed status and controls will open here.</p>
@@ -650,7 +658,7 @@ function SessionDetail({ sessionItem, isAdmin, onActionMessage, onActionError, o
 
   return (
     <div className="proctorDetail">
-      <div>
+      <div className="proctorDetailHeader">
         <span className="eyebrow">Selected attempt</span>
         <h3>{sessionItem.student_name}</h3>
         <p>{sessionItem.exam_name} | Roll {sessionItem.roll_no} | Set {sessionItem.set_code}</p>
@@ -691,7 +699,7 @@ function SessionDetail({ sessionItem, isAdmin, onActionMessage, onActionError, o
       {!isAdmin ? (
         <div className="softNote">Teacher proctoring is read-only. Admin-only actions are intentionally unavailable here.</div>
       ) : (
-        <Card className="adminActionPanel">
+        <Card className="adminActionPanel proctorActionPanel">
           <Input
             label="Admin password"
             type="password"
