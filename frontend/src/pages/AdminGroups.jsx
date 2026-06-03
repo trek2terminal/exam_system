@@ -225,9 +225,25 @@ export default function AdminGroups() {
   };
 
   const copyCode = async code => {
-    if (!code) return;
+    const cleanCode = String(code || "").trim();
+    if (!cleanCode) return;
     try {
-      await window.navigator.clipboard.writeText(code);
+      if (window.navigator.clipboard?.writeText && window.isSecureContext) {
+        await window.navigator.clipboard.writeText(cleanCode);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = cleanCode;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "fixed";
+        textarea.style.top = "-9999px";
+        textarea.style.left = "-9999px";
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        const copied = document.execCommand("copy");
+        document.body.removeChild(textarea);
+        if (!copied) throw new Error("Copy command failed");
+      }
       notify.success("Batch code copied");
     } catch {
       notify.error("Could not copy code");
