@@ -586,30 +586,39 @@ export default function Proctoring({ mode }) {
       {isAdmin && recentViolations.length > 0 && (
         <section className="recentViolationFeed">
           <div className="rowBetween proctorViolationHeader">
-            <div>
-              <span className="eyebrow">Recent alerts</span>
-              <h3>Violation Feed</h3>
-              <p className="proctorViolationLimit">
-                Showing latest {visibleRecentViolations.length}
-                {recentViolations.length > visibleRecentViolations.length ? ` of ${recentViolations.length}` : ""}.
-              </p>
-            </div>
-            <Button as="a" variant="ghost" size="sm" href="/react/admin/reports">Full log</Button>
-          </div>
-          {visibleRecentViolations.map(item => (
-            <article key={item.id} className="proctorViolationItem">
-              <span className="proctorViolationIcon"><AlertTriangle size={16} /></span>
-              <div className="min-w-0">
-                <strong>{item.student_name}</strong>
-                <p>
-                  <span className="proctorViolationType">{item.type}</span>
-                  <span>{item.exam_name}</span>
-                  <span>{formatDate(item.occurred_at)}</span>
-                </p>
-                {item.detail && <small>{item.detail}</small>}
+            <div className="proctorViolationTitle">
+              <span className="proctorViolationHeaderIcon"><BellRing size={18} /></span>
+              <div>
+                <span className="eyebrow">Recent alerts</span>
+                <h3>Violation Feed</h3>
               </div>
-            </article>
-          ))}
+            </div>
+            <div className="proctorViolationHeaderActions">
+              <p className="proctorViolationLimit">
+                Latest {visibleRecentViolations.length}
+                {recentViolations.length > visibleRecentViolations.length ? ` of ${recentViolations.length}` : ""}
+              </p>
+              <Button className="proctorViolationLogButton" as="a" variant="ghost" size="sm" href="/react/admin/reports">Full log</Button>
+            </div>
+          </div>
+          <div className="proctorViolationList">
+            {visibleRecentViolations.map(item => (
+              <article key={item.id} className="proctorViolationItem">
+                <span className="proctorViolationIcon"><AlertTriangle size={16} /></span>
+                <div className="proctorViolationContent">
+                  <div className="proctorViolationTopline">
+                    <strong>{item.student_name}</strong>
+                    <span className="proctorViolationTime"><Clock3 size={13} /> {formatDate(item.occurred_at)}</span>
+                  </div>
+                  <div className="proctorViolationMeta">
+                    <span className="proctorViolationType">{item.type}</span>
+                    <span>{item.exam_name}</span>
+                    {item.detail && <span className="proctorViolationDetail">{item.detail}</span>}
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
         </section>
       )}
     </section>

@@ -119,14 +119,14 @@ export default function AdminReports() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-        <div>
-          <p className="text-sm font-semibold uppercase text-text-muted">Admin workspace</p>
-          <h1 className="text-3xl font-bold text-text-primary">Reports & Activity</h1>
-          <p className="mt-1 text-text-secondary">Audit trail, important events, violation exports, and exam report PDFs.</p>
+    <div className="adminReportsPage">
+      <div className="reportsHero">
+        <div className="reportsHeroCopy">
+          <span className="reportsEyebrow">Admin workspace</span>
+          <h1>Reports & Activity</h1>
+          <p>Audit trail, important events, violation exports, and exam report PDFs.</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="reportsHeroActions">
           <RefreshStatus
             refreshing={liveRefresh.refreshing}
             lastUpdated={loadedAt || liveRefresh.lastUpdated}
@@ -135,7 +135,7 @@ export default function AdminReports() {
             onToggleLive={() => setLivePaused(current => !current)}
             onRefresh={() => loadReports(true, { force: true })}
           />
-          <Button as="a" href={auditExportHref("/api/admin/audit-log/export.csv", auditFilters)} variant="secondary">
+          <Button className="reportsHeroButton" as="a" href={auditExportHref("/api/admin/audit-log/export.csv", auditFilters)} variant="secondary">
             <Download size={18} /> Export Filtered Audit
           </Button>
         </div>
@@ -143,47 +143,47 @@ export default function AdminReports() {
 
       {loading && <PageLoading title="Loading admin reports..." variant="reports" />}
 
-      {!loading && <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {!loading && <section className="reportsMetricGrid">
         <ActivityMetric icon={Clock3} label="Today" value={auditSummary.today || 0} tone="info" />
         <ActivityMetric icon={AlertTriangle} label="Important" value={auditSummary.important || 0} tone={auditSummary.important ? "warning" : "success"} />
         <ActivityMetric icon={ShieldAlert} label="Security" value={auditSummary.security || 0} tone={auditSummary.security ? "warning" : "success"} />
         <ActivityMetric icon={Download} label="Exports" value={auditSummary.exports || 0} tone="info" />
       </section>}
 
-      {!loading && <div className="grid gap-6 xl:grid-cols-2">
-        <Card className="p-5">
-          <div className="mb-5 flex items-start gap-3">
-            <span className="grid h-11 w-11 place-items-center rounded-lg bg-danger/10 text-danger">
+      {!loading && <div className="reportsExportGrid">
+        <Card className="reportActionCard reportActionCard--danger">
+          <div className="reportActionHeader">
+            <span className="reportActionIcon">
               <AlertTriangle size={22} />
             </span>
             <div>
-              <h2 className="text-xl font-semibold text-text-primary">Violation Log Export</h2>
-              <p className="text-sm text-text-secondary">Download the current violation CSV for the selected date range.</p>
+              <h2>Violation Log Export</h2>
+              <p>Download the current violation CSV for the selected date range.</p>
             </div>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="reportDateGrid">
             <DateInput label="From" value={fromDate} onChange={event => setFromDate(event.target.value)} />
             <DateInput label="To" value={toDate} onChange={event => setToDate(event.target.value)} />
           </div>
-          <Button as="a" href={violationExportHref} variant="secondary" className="mt-4 w-full">
+          <Button as="a" href={violationExportHref} variant="secondary" className="reportWideButton">
             <Download size={18} /> Export Violation CSV
           </Button>
         </Card>
 
-        <Card className="p-5">
-          <div className="mb-5 flex items-start gap-3">
-            <span className="grid h-11 w-11 place-items-center rounded-lg bg-brand-primary/10 text-brand-primary">
+        <Card className="reportActionCard reportActionCard--brand">
+          <div className="reportActionHeader">
+            <span className="reportActionIcon">
               <FileText size={22} />
             </span>
             <div>
-              <h2 className="text-xl font-semibold text-text-primary">Complete Exam Report PDF</h2>
-              <p className="text-sm text-text-secondary">Download the admin PDF report for an exam.</p>
+              <h2>Complete Exam Report PDF</h2>
+              <p>Download the admin PDF report for an exam.</p>
             </div>
           </div>
           {examOptions.length > 0 ? (
-            <div className="space-y-4">
+            <div className="reportActionBody">
               <Select label="Exam" value={selectedExamId} onChange={setSelectedExamId} options={examOptions} required />
-              <Button as="a" href={`/api/admin/exams/${selectedExamId}/report.pdf`} variant="primary" className="w-full">
+              <Button as="a" href={`/api/admin/exams/${selectedExamId}/report.pdf`} variant="primary" className="reportWideButton">
                 <Download size={18} /> Download PDF
               </Button>
             </div>
@@ -193,76 +193,85 @@ export default function AdminReports() {
         </Card>
       </div>}
 
-      {!loading && <div className="grid gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,0.8fr)]">
-        <Card className="p-5">
-          <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      {!loading && <div className="reportsMainGrid">
+        <Card className="reportsAuditCard">
+          <div className="reportsPanelHeader">
             <div>
-              <h2 className="text-xl font-semibold text-text-primary">Audit Activity Center</h2>
-              <p className="text-sm text-text-secondary">Search, filter, review, and export platform activity.</p>
+              <span className="reportsEyebrow">Activity center</span>
+              <h2>Audit Activity Center</h2>
+              <p>Search, filter, review, and export platform activity.</p>
             </div>
-            <Badge variant="purple" size="md">{Number(auditSummary.total || 0).toLocaleString()} matching</Badge>
+            <Badge className="reportsCountBadge" variant="purple" size="md">{Number(auditSummary.total || 0).toLocaleString()} matching</Badge>
           </div>
-          <div className="mb-4 grid gap-3 lg:grid-cols-[minmax(220px,1fr)_repeat(3,minmax(150px,180px))]">
+          <div className="reportsFilterGrid">
             <Input value={auditFilters.q} onChange={event => updateAuditFilter("q", event.target.value)} placeholder="Search activity, actor, target, IP" aria-label="Search audit activity" />
             <Select value={auditFilters.category} onChange={value => updateAuditFilter("category", value)} options={categoryOptions} placeholder="Category" ariaLabel="Audit category" />
             <Select value={auditFilters.status} onChange={value => updateAuditFilter("status", value)} options={statusOptions} placeholder="Status" ariaLabel="Audit status" />
             <Select value={auditFilters.resource_type} onChange={value => updateAuditFilter("resource_type", value)} options={resourceOptions} placeholder="Target" ariaLabel="Audit target" />
           </div>
-          <div className="mb-4 grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+          <div className="reportsDateFilterGrid">
             <DateInput label="Activity from" value={auditFilters.from} onChange={event => updateAuditFilter("from", event.target.value)} />
             <DateInput label="Activity to" value={auditFilters.to} onChange={event => updateAuditFilter("to", event.target.value)} />
-            <Button variant="ghost" onClick={() => setAuditFilters({ q: "", category: "all", status: "all", resource_type: "all", from: "", to: "" })}>
+            <Button className="reportsResetButton" variant="ghost" onClick={() => setAuditFilters({ q: "", category: "all", status: "all", resource_type: "all", from: "", to: "" })}>
               <Search size={17} /> Reset
             </Button>
           </div>
           {auditRows.length > 0 ? (
-            <Table columns={auditColumns} data={auditRows} rowsPerPageOptions={[10, 20, 50]} className="shadow-none" />
+            <Table columns={auditColumns} data={auditRows} rowsPerPageOptions={[10, 20, 50]} className="reportsTable" />
           ) : (
             <EmptyState icon={FileBarChart} heading="No audit entries" description="Try adjusting the filters." compact />
           )}
         </Card>
 
-        <div className="space-y-6">
-          <Card className="p-5">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <ShieldAlert size={22} className="text-warning" />
-                <h2 className="text-xl font-semibold text-text-primary">Important Events</h2>
+        <div className="reportsSideStack">
+          <Card className="reportsSideCard reportsEventsCard">
+            <div className="reportsSideHeader">
+              <div className="reportsSideTitle">
+                <span className="reportsSideIcon reportsSideIcon--warning"><ShieldAlert size={20} /></span>
+                <div>
+                  <span className="reportsEyebrow">Needs review</span>
+                  <h2>Important Events</h2>
+                </div>
               </div>
               <Badge variant="warning">{auditImportant.length}</Badge>
             </div>
             {auditImportant.length > 0 ? (
-              <div className="space-y-3">
+              <div className="reportEventList">
                 {auditImportant.map(item => (
-                  <div key={item.id} className="rounded-lg border border-border bg-background-base p-3">
-                    <div className="mb-2 flex items-center justify-between gap-2">
+                  <div key={item.id} className={`reportEventItem reportEventItem--${auditBadge(item.severity)}`}>
+                    <div className="reportEventTopline">
                       <Badge variant={auditBadge(item.severity)}>{humanize(item.category)}</Badge>
-                      <span className="text-xs text-text-muted">{timeAgo(item.timestamp)}</span>
+                      <span>{timeAgo(item.timestamp)}</span>
                     </div>
-                    <p className="text-sm font-semibold text-text-primary">{item.formatted_message}</p>
-                    <p className="mt-1 text-xs text-text-muted">{item.actor_name} {item.ip_address ? `| ${item.ip_address}` : ""}</p>
+                    <p className="reportEventMessage">{item.formatted_message}</p>
+                    <p className="reportEventMeta">{item.actor_name} {item.ip_address ? `| ${item.ip_address}` : ""}</p>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="rounded-lg border border-success/20 bg-success/5 p-5 text-center">
-                <CheckCircle2 size={34} className="mx-auto mb-3 text-success" />
-                <p className="font-semibold text-text-primary">No important events</p>
+              <div className="reportsClearState">
+                <CheckCircle2 size={34} />
+                <p>No important events</p>
               </div>
             )}
           </Card>
 
-          <Card className="p-5">
-            <div className="mb-4 flex items-center gap-3">
-              <ShieldAlert size={22} className="text-warning" />
-              <h2 className="text-xl font-semibold text-text-primary">Suspicious Activity</h2>
+          <Card className="reportsSideCard">
+            <div className="reportsSideHeader">
+              <div className="reportsSideTitle">
+                <span className="reportsSideIcon reportsSideIcon--warning"><ShieldAlert size={20} /></span>
+                <div>
+                  <span className="reportsEyebrow">Cross-exam signals</span>
+                  <h2>Suspicious Activity</h2>
+                </div>
+              </div>
             </div>
             {suspicious.length > 0 ? (
-              <div className="space-y-3">
+              <div className="reportEventList">
                 {suspicious.map(student => (
-                  <div key={student.id || student.name} className="rounded-lg border border-warning/30 bg-warning/5 p-3">
-                    <strong className="block text-text-primary">{student.name}</strong>
-                    <div className="mt-2 flex flex-wrap gap-2">
+                  <div key={student.id || student.name} className="reportEventItem reportEventItem--warning">
+                    <strong>{student.name}</strong>
+                    <div className="reportStudentBadges">
                       <Badge variant="warning">{student.exam_count || 0} exams</Badge>
                       <Badge variant="danger">{student.total_violations || student.violation_count || 0} violations</Badge>
                     </div>
@@ -270,13 +279,13 @@ export default function AdminReports() {
                 ))}
               </div>
             ) : (
-              <div className="rounded-lg border border-success/20 bg-success/5 p-5 text-center">
-                <CheckCircle2 size={34} className="mx-auto mb-3 text-success" />
-                <p className="font-semibold text-text-primary">All clear</p>
-                <p className="mt-1 text-sm text-text-muted">No cross-exam suspicious activity found.</p>
+              <div className="reportsClearState">
+                <CheckCircle2 size={34} />
+                <p>All clear</p>
+                <span>No cross-exam suspicious activity found.</span>
               </div>
             )}
-            <Button as="a" href="/react/admin/users" variant="secondary" className="mt-4 w-full">
+            <Button as="a" href="/react/admin/users" variant="secondary" className="reportWideButton">
               Review Users
             </Button>
           </Card>
@@ -287,12 +296,13 @@ export default function AdminReports() {
 }
 
 function ActivityMetric({ icon: Icon, label, value, tone }) {
-  const color = tone === "warning" ? "text-warning" : tone === "success" ? "text-success" : "text-brand-primary";
   return (
-    <Card className="p-4">
-      <Icon size={18} className={`mb-3 ${color}`} />
-      <p className="text-xs font-semibold uppercase text-text-muted">{label}</p>
-      <p className="mt-1 text-2xl font-bold text-text-primary">{Number(value || 0).toLocaleString()}</p>
+    <Card className={`reportMetricCard reportMetricCard--${tone}`}>
+      <span className="reportMetricIcon"><Icon size={18} /></span>
+      <div>
+        <p>{label}</p>
+        <strong>{Number(value || 0).toLocaleString()}</strong>
+      </div>
     </Card>
   );
 }

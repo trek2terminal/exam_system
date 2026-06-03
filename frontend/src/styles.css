@@ -4850,52 +4850,134 @@ p {
 }
 
 .recentViolationFeed {
-  gap: 0;
+  position: relative;
   overflow: hidden;
-  border-color: rgb(var(--color-border) / 0.74);
-  border-radius: 14px;
+  border: 1px solid rgb(var(--color-border) / 0.72);
+  border-radius: 16px;
   background:
-    linear-gradient(180deg, rgb(var(--color-background-card) / 0.86), rgb(var(--color-background-card) / 0.72));
+    radial-gradient(circle at 4% 0%, rgb(var(--color-danger) / 0.13), transparent 28%),
+    linear-gradient(180deg, rgb(var(--color-background-card) / 0.92), rgb(var(--color-background-card) / 0.76));
+  box-shadow: 0 20px 55px rgb(0 0 0 / 0.18);
+  gap: 0;
   padding: 0;
+}
+
+.recentViolationFeed::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  background: linear-gradient(90deg, rgb(var(--color-danger) / 0.78), rgb(var(--role-accent) / 0.52), transparent);
 }
 
 .proctorViolationHeader {
   align-items: center;
-  border-bottom: 1px solid rgb(var(--color-border) / 0.68);
-  padding: 16px 18px;
+  gap: 16px;
+  border-bottom: 1px solid rgb(var(--color-border) / 0.54);
+  padding: 18px 20px;
+}
+
+.proctorViolationTitle {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+}
+
+.proctorViolationHeaderIcon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid rgb(var(--color-danger) / 0.25);
+  border-radius: 12px;
+  background:
+    linear-gradient(135deg, rgb(var(--color-danger) / 0.20), rgb(var(--role-accent) / 0.10));
+  color: rgb(var(--color-danger));
 }
 
 .proctorViolationHeader h3 {
   margin: 2px 0 0;
+  color: rgb(var(--color-text-primary));
+  font-size: 20px;
+  letter-spacing: 0;
+}
+
+.proctorViolationHeaderActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
 .proctorViolationLimit {
-  margin: 5px 0 0;
-  color: rgb(var(--color-text-muted));
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  margin: 0;
+  border: 1px solid rgb(var(--color-danger) / 0.20);
+  border-radius: 999px;
+  background: rgb(var(--color-danger) / 0.10);
+  color: rgb(var(--color-text-secondary));
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 800;
+  padding: 0 12px;
 }
 
-.proctorViolationItem {
+.proctorViolationLogButton {
+  border: 1px solid rgb(var(--color-border) / 0.72);
+  border-radius: 999px;
+  background: rgb(var(--color-background-base) / 0.36);
+  color: rgb(var(--color-text-primary));
+}
+
+.proctorViolationList {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
-  gap: 12px;
-  border-top: 0;
-  border-bottom: 1px solid rgb(var(--color-border) / 0.62);
-  padding: 14px 18px;
+  gap: 10px;
+  padding: 14px;
 }
 
-.proctorViolationItem:last-child {
-  border-bottom: 0;
+.recentViolationFeed .proctorViolationItem {
+  position: relative;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  overflow: hidden;
+  border: 1px solid rgb(var(--color-border) / 0.55);
+  border-radius: 13px;
+  background:
+    linear-gradient(135deg, rgb(var(--color-background-base) / 0.62), rgb(var(--color-background-card) / 0.58));
+  padding: 13px 14px;
+  transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.recentViolationFeed .proctorViolationItem::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: linear-gradient(180deg, rgb(var(--color-danger)), rgb(var(--role-accent)));
+  opacity: 0.82;
+}
+
+.recentViolationFeed .proctorViolationItem:hover {
+  border-color: rgb(var(--color-danger) / 0.32);
+  box-shadow: 0 12px 30px rgb(var(--color-danger) / 0.10);
+  transform: translateY(-1px);
 }
 
 .proctorViolationIcon {
   display: grid;
-  width: 34px;
-  height: 34px;
+  width: 40px;
+  height: 40px;
   place-items: center;
-  border-radius: 10px;
-  background: rgb(var(--color-danger) / 0.10);
+  border: 1px solid rgb(var(--color-danger) / 0.22);
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 30% 20%, rgb(var(--color-danger) / 0.26), rgb(var(--color-danger) / 0.10));
   color: rgb(var(--color-danger));
 }
 
@@ -4903,44 +4985,534 @@ p {
   color: inherit;
 }
 
+.proctorViolationContent {
+  min-width: 0;
+}
+
+.proctorViolationTopline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 14px;
+}
+
 .proctorViolationItem strong {
   display: block;
   color: rgb(var(--color-text-primary));
-  font-size: 15px;
+  font-size: 15.5px;
+  line-height: 1.2;
 }
 
-.proctorViolationItem p {
+.proctorViolationTime {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: rgb(var(--color-text-muted));
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.recentViolationFeed .proctorViolationTime svg {
+  color: currentColor;
+}
+
+.proctorViolationMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 8px;
+  margin-top: 9px;
+  color: rgb(var(--color-text-secondary));
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.proctorViolationMeta span:not(.proctorViolationType) {
+  display: inline-flex;
+  align-items: center;
+}
+
+.proctorViolationMeta span:not(.proctorViolationType)::before {
+  content: "";
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  margin-right: 8px;
+  border-radius: 9999px;
+  background: currentColor;
+  opacity: 0.45;
+}
+
+.proctorViolationType {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgb(var(--color-danger) / 0.24);
+  border-radius: 999px;
+  background: rgb(var(--color-danger) / 0.10);
+  color: rgb(var(--color-danger));
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  padding: 5px 8px;
+}
+
+.proctorViolationDetail {
+  color: rgb(var(--color-text-primary));
+  font-weight: 700;
+  opacity: 0.86;
+}
+
+.adminReportsPage {
+  display: grid;
+  gap: 22px;
+}
+
+.reportsHero {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  overflow: hidden;
+  border: 1px solid rgb(var(--color-border) / 0.72);
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 5% 0%, rgb(var(--role-accent) / 0.20), transparent 28%),
+    linear-gradient(135deg, rgb(var(--color-background-card) / 0.94), rgb(var(--color-background-base) / 0.66));
+  box-shadow: var(--shadow-card);
+  padding: 22px 26px;
+}
+
+.reportsHero::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  background: linear-gradient(90deg, rgb(var(--role-accent) / 0.92), rgb(var(--color-info) / 0.58), transparent);
+}
+
+.reportsHeroCopy {
+  min-width: 0;
+}
+
+.reportsEyebrow {
+  display: inline-flex;
+  align-items: center;
+  color: rgb(var(--color-text-muted));
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.reportsHero h1 {
+  margin: 4px 0 0;
+  color: rgb(var(--color-text-primary));
+  font-size: 34px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.reportsHero p,
+.reportActionHeader p,
+.reportsPanelHeader p {
+  margin: 6px 0 0;
+  color: rgb(var(--color-text-secondary));
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.reportsHeroActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.reportsHeroButton {
+  border-color: rgb(var(--role-accent) / 0.52) !important;
+  background: rgb(var(--role-accent) / 0.12) !important;
+  color: rgb(var(--color-text-primary)) !important;
+}
+
+.reportsMetricGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.reportMetricCard {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  overflow: hidden;
+  border-color: rgb(var(--report-tone) / 0.42) !important;
+  border-radius: 14px;
+  background:
+    linear-gradient(135deg, rgb(var(--report-tone) / 0.12), transparent 36%),
+    linear-gradient(180deg, rgb(var(--color-background-card) / 0.88), rgb(var(--color-background-card) / 0.66)) !important;
+  padding: 18px 20px;
+}
+
+.reportMetricCard::after {
+  content: "";
+  position: absolute;
+  inset: auto 18px 0;
+  height: 2px;
+  border-radius: 999px 999px 0 0;
+  background: linear-gradient(90deg, transparent, rgb(var(--report-tone) / 0.78), transparent);
+  opacity: 0.72;
+}
+
+.reportMetricCard--info {
+  --report-tone: var(--color-info);
+}
+
+.reportMetricCard--warning {
+  --report-tone: var(--color-warning);
+}
+
+.reportMetricCard--success {
+  --report-tone: var(--color-success);
+}
+
+.reportMetricIcon,
+.reportActionIcon,
+.reportsSideIcon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid rgb(var(--report-tone) / 0.25);
+  background:
+    radial-gradient(circle at 30% 20%, rgb(var(--report-tone) / 0.24), rgb(var(--report-tone) / 0.10));
+  color: rgb(var(--report-tone));
+}
+
+.reportMetricIcon {
+  width: 46px;
+  height: 46px;
+  border-radius: 13px;
+}
+
+.reportMetricCard p {
+  margin: 0;
+  color: rgb(var(--color-text-muted));
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.reportMetricCard strong {
+  display: block;
+  margin-top: 3px;
+  color: rgb(var(--color-text-primary));
+  font-size: 28px;
+  line-height: 1;
+}
+
+.reportsExportGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.reportActionCard,
+.reportsAuditCard,
+.reportsSideCard {
+  position: relative;
+  overflow: hidden;
+  border-color: rgb(var(--color-border) / 0.72) !important;
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgb(var(--color-background-card) / 0.90), rgb(var(--color-background-card) / 0.70)) !important;
+  padding: 24px;
+}
+
+.reportActionCard::before,
+.reportsAuditCard::before,
+.reportsSideCard::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  background: linear-gradient(90deg, rgb(var(--report-tone, var(--role-accent)) / 0.72), transparent);
+}
+
+.reportActionCard--danger {
+  --report-tone: var(--color-danger);
+}
+
+.reportActionCard--brand {
+  --report-tone: var(--role-accent);
+}
+
+.reportActionHeader,
+.reportsSideTitle {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.reportActionIcon,
+.reportsSideIcon {
+  width: 54px;
+  height: 54px;
+  border-radius: 14px;
+}
+
+.reportActionHeader h2,
+.reportsPanelHeader h2,
+.reportsSideHeader h2 {
+  margin: 0;
+  color: rgb(var(--color-text-primary));
+  font-size: 22px;
+  font-weight: 850;
+  letter-spacing: 0;
+}
+
+.reportActionBody {
+  display: grid;
+  gap: 16px;
+}
+
+.reportDateGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 22px;
+}
+
+.reportWideButton {
+  width: 100%;
+  margin-top: 16px;
+}
+
+.reportsMainGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(320px, 0.8fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.reportsAuditCard {
+  --report-tone: var(--role-accent);
+}
+
+.reportsPanelHeader,
+.reportsSideHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.reportsCountBadge {
+  flex: 0 0 auto;
+  border: 1px solid rgb(var(--role-accent) / 0.24);
+}
+
+.reportsFilterGrid {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) repeat(3, minmax(150px, 190px));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.reportsDateFilterGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.reportsResetButton {
+  min-width: 106px;
+  border: 1px solid rgb(var(--color-border) / 0.68) !important;
+  background: rgb(var(--color-background-base) / 0.38) !important;
+}
+
+.reportsTable {
+  border-radius: 14px;
+  background: rgb(var(--color-background-card) / 0.54) !important;
+  box-shadow: none !important;
+}
+
+.reportsTable thead {
+  background: rgb(var(--color-background-surface) / 0.74) !important;
+}
+
+.reportsTable tbody tr {
+  background: rgb(var(--color-background-card) / 0.48) !important;
+}
+
+.reportsTable tbody tr:hover {
+  background: rgb(var(--color-background-surface) / 0.70) !important;
+}
+
+.reportsSideStack {
+  display: grid;
+  gap: 20px;
+}
+
+.reportsSideCard {
+  --report-tone: var(--color-warning);
+}
+
+.reportsSideIcon--warning {
+  --report-tone: var(--color-warning);
+}
+
+.reportEventList {
+  display: grid;
+  gap: 12px;
+}
+
+.reportEventItem {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgb(var(--report-tone) / 0.34);
+  border-radius: 14px;
+  background:
+    linear-gradient(135deg, rgb(var(--report-tone) / 0.10), transparent 38%),
+    rgb(var(--color-background-base) / 0.36);
+  padding: 14px 15px;
+}
+
+.reportEventItem::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: rgb(var(--report-tone));
+  opacity: 0.72;
+}
+
+.reportEventItem--danger {
+  --report-tone: var(--color-danger);
+}
+
+.reportEventItem--warning {
+  --report-tone: var(--color-warning);
+}
+
+.reportEventItem--success {
+  --report-tone: var(--color-success);
+}
+
+.reportEventItem--info {
+  --report-tone: var(--color-info);
+}
+
+.reportEventTopline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: rgb(var(--color-text-muted));
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.reportEventMessage,
+.reportEventItem strong {
+  display: block;
+  margin: 10px 0 0;
+  color: rgb(var(--color-text-primary));
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.42;
+}
+
+.reportEventMeta {
+  margin: 7px 0 0;
+  color: rgb(var(--color-text-secondary));
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.reportStudentBadges {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin: 5px 0 0;
+  margin-top: 10px;
+}
+
+.reportsClearState {
+  display: grid;
+  justify-items: center;
+  border: 1px solid rgb(var(--color-success) / 0.22);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 50% 0%, rgb(var(--color-success) / 0.14), transparent 42%),
+    rgb(var(--color-background-base) / 0.28);
+  color: rgb(var(--color-success));
+  padding: 26px 16px;
+  text-align: center;
+}
+
+.reportsClearState p {
+  margin: 10px 0 0;
+  color: rgb(var(--color-text-primary));
+  font-weight: 850;
+}
+
+.reportsClearState span {
+  margin-top: 5px;
   color: rgb(var(--color-text-muted));
   font-size: 13px;
   font-weight: 700;
 }
 
-.proctorViolationItem p span:not(:last-child)::after {
-  content: "";
-  display: inline-block;
-  width: 4px;
-  height: 4px;
-  margin-left: 8px;
-  border-radius: 9999px;
-  background: currentColor;
-  opacity: 0.45;
-  vertical-align: middle;
+@media (max-width: 1280px) {
+  .reportsMetricGrid,
+  .reportsExportGrid,
+  .reportsMainGrid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .reportsAuditCard {
+    grid-column: 1 / -1;
+  }
 }
 
-.proctorViolationType {
-  color: rgb(var(--color-danger));
-}
+@media (max-width: 900px) {
+  .reportsHero,
+  .reportsPanelHeader,
+  .reportsSideHeader {
+    align-items: stretch;
+    flex-direction: column;
+  }
 
-.proctorViolationItem small {
-  display: block;
-  margin-top: 7px;
-  color: rgb(var(--color-text-secondary));
-  font-size: 13px;
-  line-height: 1.45;
+  .reportsHeroActions {
+    justify-content: flex-start;
+  }
+
+  .reportsMetricGrid,
+  .reportsExportGrid,
+  .reportsMainGrid,
+  .reportsFilterGrid,
+  .reportsDateFilterGrid,
+  .reportDateGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .reportMetricCard,
+  .reportActionCard,
+  .reportsAuditCard,
+  .reportsSideCard {
+    padding: 18px;
+  }
+
+  .reportsHero h1 {
+    font-size: 30px;
+  }
 }
 
 @media (max-width: 1280px) {
