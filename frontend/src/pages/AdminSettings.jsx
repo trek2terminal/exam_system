@@ -478,24 +478,24 @@ export default function AdminSettings() {
   );
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <p className="text-sm font-semibold uppercase text-text-muted">Administration</p>
-          <h1 className="text-3xl font-bold text-text-primary">Platform Settings</h1>
-          <p className="mt-1 text-text-secondary">Manage student registration, announcements, violation threshold, and database backup.</p>
+    <div className="adminSettingsPage">
+      <div className="settingsHero">
+        <div className="settingsHeroCopy">
+          <span className="settingsEyebrow">Administration</span>
+          <h1>Platform Settings</h1>
+          <p>Manage student registration, announcements, violation threshold, and database backup.</p>
         </div>
-        <div className="flex flex-col items-start gap-2 lg:items-end">
-          <Button variant="primary" onClick={handleSave} loading={loading} loadingLabel="Saving..." disabled={!hasChanges}>
+        <div className="settingsHeroActions">
+          <Button className="settingsSaveButton" variant="primary" onClick={handleSave} loading={loading} loadingLabel="Saving..." disabled={!hasChanges}>
             <Save size={16} /> Save Changes
           </Button>
           {settingsDraft.indicator}
         </div>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-[220px_minmax(0,1fr)]">
-        <Card className="hidden p-3 md:block">
-          <nav className="grid gap-1">
+      <div className="settingsWorkspace">
+        <Card className="settingsNavCard">
+          <nav className="settingsNav" aria-label="Settings sections">
             {tabs.map(tab => {
               const Icon = tab.icon;
               return (
@@ -503,39 +503,37 @@ export default function AdminSettings() {
                   key={tab.id}
                   type="button"
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex min-h-11 items-center gap-3 rounded-md px-3 text-left text-sm font-semibold transition ${
-                    activeTab === tab.id ? "bg-brand-primary text-white" : "text-text-secondary hover:bg-background-elevated hover:text-text-primary"
-                  }`}
+                  className={`settingsNavButton ${activeTab === tab.id ? "is-active" : ""}`}
                 >
-                  <Icon size={18} />
-                  {tab.label}
+                  <span className="settingsNavIcon"><Icon size={18} /></span>
+                  <span>{tab.label}</span>
                 </button>
               );
             })}
           </nav>
         </Card>
 
-        <div className="hidden md:block">
-          {activeTab === "general" && <div className="mb-4">{settingsDraft.banner}</div>}
+        <div className="settingsContent">
+          {activeTab === "general" && <div className="settingsDraftBanner">{settingsDraft.banner}</div>}
           {renderSection(activeTab)}
         </div>
 
-        <div className="space-y-3 md:hidden">
+        <div className="settingsMobileStack">
           {tabs.map(tab => {
             const Icon = tab.icon;
             const open = activeTab === tab.id;
             return (
-              <Card key={tab.id} className="overflow-hidden">
+              <div key={tab.id} className="settingsMobileCard">
                 <button
                   type="button"
-                  className="flex min-h-14 w-full items-center justify-between gap-3 px-4 text-left font-semibold text-text-primary"
+                  className="settingsMobileToggle"
                   onClick={() => setActiveTab(open ? "" : tab.id)}
                 >
-                  <span className="inline-flex items-center gap-3"><Icon size={18} /> {tab.label}</span>
-                  <span>{open ? "-" : "+"}</span>
+                  <span><Icon size={18} /> {tab.label}</span>
+                  <span aria-hidden="true">{open ? "-" : "+"}</span>
                 </button>
-                {open && <div className="border-t border-border p-4">{renderSection(tab.id)}</div>}
-              </Card>
+                {open && <div className="settingsMobileBody">{renderSection(tab.id)}</div>}
+              </div>
             );
           })}
         </div>
@@ -588,22 +586,29 @@ function SettingsSection({
       onGeneralChange("registration_page_content", { ...registrationCopy, [field]: value });
     };
     return (
-      <Card className="p-6">
-        <div className="space-y-5">
-          <h2 className="text-xl font-semibold text-text-primary">General</h2>
-          <Input label="Platform Name" value={general.platform_name} onChange={event => onGeneralChange("platform_name", event.target.value)} required />
+      <Card className="settingsSectionCard settingsSectionCard--general">
+        <div className="settingsSectionHeader">
+          <span className="settingsSectionIcon"><Settings2 size={22} /></span>
           <div>
-            <label className="mb-3 block font-semibold text-text-primary">Logo</label>
-            <div className="rounded-lg border-2 border-dashed border-border bg-background-base p-6 text-center">
+            <span className="settingsEyebrow">Platform identity</span>
+            <h2>General</h2>
+            <p>Brand the workspace, login screen, registration experience, and welcome copy.</p>
+          </div>
+        </div>
+        <div className="settingsSectionBody">
+          <Input label="Platform Name" value={general.platform_name} onChange={event => onGeneralChange("platform_name", event.target.value)} required />
+          <div className="settingsLogoField">
+            <label>Logo</label>
+            <div className="settingsLogoDrop">
               <PlatformLogo
                 src={general.logo_url}
                 name={general.platform_name}
                 size="lg"
-                className="mx-auto mb-3"
+                className="settingsLogoPreview"
                 fallbackClassName="bg-brand-primary"
               />
-              <p className="mb-3 text-sm text-text-secondary">Upload a PNG, JPG, WEBP, or GIF logo up to 2 MB.</p>
-              <div className="flex flex-col justify-center gap-2 sm:flex-row">
+              <p>Upload a PNG, JPG, WEBP, or GIF logo up to 2 MB.</p>
+              <div className="settingsLogoActions">
                 <Button as="label" variant="secondary" loading={logoUploading} loadingLabel="Uploading..." className="cursor-pointer">
                   <Upload size={16} /> Upload Logo
                   <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden" onChange={onLogoUpload} disabled={logoUploading || logoRemoving} />
@@ -617,13 +622,14 @@ function SettingsSection({
             </div>
           </div>
           <Textarea label="Welcome Message" value={general.welcome_message} onChange={event => onGeneralChange("welcome_message", event.target.value)} rows={3} required />
-          <div className="space-y-4 rounded-lg border border-border bg-background-base p-4">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="settingsSubPanel settingsSubPanel--login">
+            <div className="settingsSubHeader">
               <div>
-                <h3 className="text-base font-semibold text-text-primary">Login Page Content</h3>
-                <p className="text-sm text-text-secondary">Controls the left panel copy shown before users sign in.</p>
+                <span className="settingsEyebrow">Public login</span>
+                <h3>Login Page Content</h3>
+                <p>Controls the left panel copy shown before users sign in.</p>
               </div>
-              <Badge variant="info">{enabledFeatureCount}/6 Features enabled</Badge>
+              <Badge className="settingsCountBadge" variant="info">{enabledFeatureCount}/6 Features enabled</Badge>
             </div>
             <Input
               label="Heading"
@@ -643,9 +649,9 @@ function SettingsSection({
               onChange={event => onGeneralChange("login_page_subheading", event.target.value)}
               placeholder="Focused, secure, and ready for every exam session."
             />
-            <div className="space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <label className="font-semibold text-text-primary">Feature Bullets</label>
+            <div className="settingsFeaturePanel">
+              <div className="settingsFeatureHeader">
+                <label>Feature Bullets</label>
                 <Button
                   type="button"
                   variant="secondary"
@@ -656,9 +662,9 @@ function SettingsSection({
                   <Plus size={15} /> Add Feature
                 </Button>
               </div>
-              <div className="space-y-2">
+              <div className="settingsFeatureList">
                 {general.login_page_features.map((feature, index) => (
-                  <div key={`login-feature-${index}`} className="grid gap-3 rounded-md border border-border bg-background-card p-3 lg:grid-cols-[auto_150px_minmax(0,1fr)_auto_auto] lg:items-center">
+                  <div key={`login-feature-${index}`} className="settingsFeatureRow">
                     <GripVertical className="hidden text-text-muted lg:block" size={17} aria-hidden="true" />
                     <Select
                       aria-label={`Login feature ${index + 1} icon`}
@@ -715,7 +721,7 @@ function SettingsSection({
                 ))}
               </div>
             </div>
-            <div className="grid gap-3 rounded-lg border border-border bg-background-card p-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+            <div className="settingsInlinePanel">
               <Input
                 label="Security Badge Text"
                 value={general.login_page_security_badge_text}
@@ -728,8 +734,8 @@ function SettingsSection({
                 label="Show badge"
               />
             </div>
-            <div className="overflow-hidden rounded-xl border border-border bg-gradient-to-br from-brand-primary via-indigo-500 to-info p-5 text-white shadow-sm">
-              <div className="mb-6 flex items-center gap-3">
+            <div className="settingsLoginPreview">
+              <div className="settingsLoginPreviewBrand">
                 <PlatformLogo
                   src={general.logo_url}
                   name={general.platform_name}
@@ -739,17 +745,17 @@ function SettingsSection({
                 />
                 <strong className="truncate text-lg">{general.platform_name || "Exam Platform"}</strong>
               </div>
-              <h4 className="text-2xl font-bold leading-tight">{general.login_page_heading || "Exam Platform"}</h4>
-              <p className="mt-3 text-sm font-light italic text-cyan-100/80">{general.login_page_tagline || "The future of secure, intelligent assessment."}</p>
-              <p className="mt-3 text-sm text-white/85">
+              <h4>{general.login_page_heading || "Exam Platform"}</h4>
+              <p className="settingsLoginPreviewTagline">{general.login_page_tagline || "The future of secure, intelligent assessment."}</p>
+              <p className="settingsLoginPreviewCopy">
                 {general.login_page_subheading || "Focused, secure, and ready for every exam session."}
               </p>
-              <div className="mt-6 space-y-2 text-sm text-white/85">
+              <div className="settingsLoginPreviewFeatures">
                 {(general.login_page_features.length ? general.login_page_features : defaultLoginFeatures).filter(feature => feature.enabled !== false && feature.text).map(feature => {
                   const Icon = loginFeatureIcons[feature.icon] || CheckCircle2;
                   return (
-                  <p key={feature.text} className="flex items-center gap-2">
-                    <span className="grid h-6 w-6 place-items-center rounded-full bg-white/20">
+                  <p key={feature.text}>
+                    <span>
                       <Icon size={14} />
                     </span>
                     {feature.text}
@@ -757,16 +763,19 @@ function SettingsSection({
                 );})}
               </div>
               {general.login_page_security_badge_enabled && general.login_page_security_badge_text && (
-                <p className="mt-5 inline-flex rounded-full bg-white/15 px-3 py-1 text-xs font-semibold text-cyan-50">
+                <p className="settingsLoginPreviewBadge">
                   {general.login_page_security_badge_text}
                 </p>
               )}
             </div>
           </div>
-          <div className="space-y-4 rounded-lg border border-border bg-background-base p-4">
-            <div>
-              <h3 className="text-base font-semibold text-text-primary">Login Form Copy</h3>
-              <p className="text-sm text-text-secondary">Controls the sign-in card text, tabs, labels, buttons, and links.</p>
+          <div className="settingsSubPanel">
+            <div className="settingsSubHeader">
+              <div>
+                <span className="settingsEyebrow">Sign-in card</span>
+                <h3>Login Form Copy</h3>
+                <p>Controls the sign-in card text, tabs, labels, buttons, and links.</p>
+              </div>
             </div>
             <div className="grid gap-3 md:grid-cols-2">
               <Input
@@ -865,10 +874,13 @@ function SettingsSection({
               />
             </div>
           </div>
-          <div className="space-y-4 rounded-lg border border-border bg-background-base p-4">
-            <div>
-              <h3 className="text-base font-semibold text-text-primary">Registration Page Copy</h3>
-              <p className="text-sm text-text-secondary">Controls the create-account and paused-registration panels.</p>
+          <div className="settingsSubPanel">
+            <div className="settingsSubHeader">
+              <div>
+                <span className="settingsEyebrow">Student onboarding</span>
+                <h3>Registration Page Copy</h3>
+                <p>Controls the create-account and paused-registration panels.</p>
+              </div>
             </div>
             <div className="grid gap-3 md:grid-cols-2">
               <Input
@@ -977,13 +989,20 @@ function SettingsSection({
               />
             </div>
           </div>
-          <div className="space-y-3">
-            <label className="block font-semibold text-text-primary">Quote Pool</label>
-            <div className="flex flex-wrap gap-2">
+          <div className="settingsQuotePanel">
+            <div className="settingsSubHeader">
+              <div>
+                <span className="settingsEyebrow">Rotating copy</span>
+                <h3>Quote Pool</h3>
+                <p>Short login-page quotes that keep the experience fresh.</p>
+              </div>
+              <Badge variant="purple">{general.quote_pool.length} quotes</Badge>
+            </div>
+            <div className="settingsQuoteList">
               {general.quote_pool.map((quote, index) => (
-                <span key={`${quote}-${index}`} className="inline-flex min-h-10 items-center gap-2 rounded-pill border border-border bg-background-base px-3 text-sm text-text-primary">
+                <span key={`${quote}-${index}`} className="settingsQuoteChip">
                   {quote}
-                  <button type="button" onClick={() => onRemoveQuote(index)} className="text-text-muted hover:text-danger" aria-label="Remove quote">
+                  <button type="button" onClick={() => onRemoveQuote(index)} aria-label="Remove quote">
                     <X size={14} />
                   </button>
                 </span>
@@ -1009,13 +1028,24 @@ function SettingsSection({
 
   if (sectionId === "registration") {
     return (
-      <Card className="p-6">
-        <div className="space-y-5">
-          <h2 className="text-xl font-semibold text-text-primary">Registration</h2>
-          <Toggle checked={registration.self_registration_enabled} onChange={checked => onRegistrationChange("self_registration_enabled", checked)} label="Allow student self-registration" />
-          <Toggle checked={registration.registration_code_required} onChange={checked => onRegistrationChange("registration_code_required", checked)} label="Require registration code" />
+      <Card className="settingsSectionCard settingsSectionCard--registration">
+        <div className="settingsSectionHeader">
+          <span className="settingsSectionIcon"><UserPlus size={22} /></span>
+          <div>
+            <span className="settingsEyebrow">Student access</span>
+            <h2>Registration</h2>
+            <p>Control who can create accounts and whether a join code is required.</p>
+          </div>
+        </div>
+        <div className="settingsSectionBody">
+          <div className="settingsToggleGrid">
+            <Toggle checked={registration.self_registration_enabled} onChange={checked => onRegistrationChange("self_registration_enabled", checked)} label="Allow student self-registration" />
+            <Toggle checked={registration.registration_code_required} onChange={checked => onRegistrationChange("registration_code_required", checked)} label="Require registration code" />
+          </div>
           {registration.registration_code_required && (
-            <Input label="Registration Code" value={registration.registration_code} onChange={event => onRegistrationChange("registration_code", event.target.value)} placeholder="e.g. EXAM2026" required />
+            <div className="settingsSubPanel settingsSubPanel--compact">
+              <Input label="Registration Code" value={registration.registration_code} onChange={event => onRegistrationChange("registration_code", event.target.value)} placeholder="e.g. EXAM2026" required />
+            </div>
           )}
         </div>
       </Card>
@@ -1024,9 +1054,16 @@ function SettingsSection({
 
   if (sectionId === "security") {
     return (
-      <Card className="p-6">
-        <div className="space-y-5">
-          <h2 className="text-xl font-semibold text-text-primary">Security</h2>
+      <Card className="settingsSectionCard settingsSectionCard--security">
+        <div className="settingsSectionHeader">
+          <span className="settingsSectionIcon"><ShieldCheck size={22} /></span>
+          <div>
+            <span className="settingsEyebrow">Protection rules</span>
+            <h2>Security</h2>
+            <p>Set alert limits, lockout rules, and admin session timeout windows.</p>
+          </div>
+        </div>
+        <div className="settingsSectionBody settingsFieldGrid">
           <Input label="Violation Threshold" type="text" inputMode="numeric" pattern="[0-9]*" maxLength={2} value={security.violation_threshold} onChange={event => onSecurityChange("violation_threshold", clampInteger(integerInput(event.target.value, 2), 1, 10, 1))} required />
           <Input label="Admin Lockout Count" type="text" inputMode="numeric" pattern="[0-9]*" maxLength={2} value={security.admin_lockout_count} onChange={event => onSecurityChange("admin_lockout_count", clampInteger(integerInput(event.target.value, 2), 1, 10, 1))} helperText="Failed admin attempts before a 30-minute lockout." required />
           <Input label="Admin Idle Timeout" type="text" inputMode="numeric" pattern="[0-9]*" maxLength={4} value={security.admin_idle_timeout} onChange={event => onSecurityChange("admin_idle_timeout", clampInteger(integerInput(event.target.value, 4), 5, 1440, 5))} helperText="Minutes before an inactive admin session expires." required />
@@ -1037,17 +1074,26 @@ function SettingsSection({
 
   if (sectionId === "announcement") {
     return (
-      <Card className="p-6">
-        <div className="space-y-5">
-          <h2 className="text-xl font-semibold text-text-primary">Announcement</h2>
-          <Toggle checked={announcement.enabled} onChange={checked => onAnnouncementChange("enabled", checked)} label="Enable announcement" />
+      <Card className="settingsSectionCard settingsSectionCard--announcement">
+        <div className="settingsSectionHeader">
+          <span className="settingsSectionIcon"><Megaphone size={22} /></span>
+          <div>
+            <span className="settingsEyebrow">Broadcast banner</span>
+            <h2>Announcement</h2>
+            <p>Show a short message across the platform for students and teachers.</p>
+          </div>
+        </div>
+        <div className="settingsSectionBody">
+          <div className="settingsToggleGrid">
+            <Toggle checked={announcement.enabled} onChange={checked => onAnnouncementChange("enabled", checked)} label="Enable announcement" />
+          </div>
           {announcement.enabled && (
             <>
               <Textarea label="Announcement Message" value={announcement.message} onChange={event => onAnnouncementChange("message", event.target.value)} rows={4} required />
-              <Card className="border-warning/30 bg-warning/5 p-4">
-                <div className="flex items-start gap-3">
-                  <Megaphone size={20} className="mt-1 shrink-0 text-warning" />
-                  <p className="mb-0 text-sm text-text-secondary">{announcement.message || "Announcement preview"}</p>
+              <Card className="settingsPreviewNotice">
+                <div>
+                  <Megaphone size={20} />
+                  <p>{announcement.message || "Announcement preview"}</p>
                 </div>
               </Card>
             </>
@@ -1059,15 +1105,23 @@ function SettingsSection({
 
   if (sectionId === "backup") {
     return (
-      <Card className="p-6">
-        <div className="space-y-5">
-          <h2 className="text-xl font-semibold text-text-primary">Backup</h2>
-          <div className="rounded-lg border border-border bg-background-base p-4">
-            <p className="mb-0 text-sm text-text-secondary">Download a fresh backup whenever you need an offline copy.</p>
+      <Card className="settingsSectionCard settingsSectionCard--backup">
+        <div className="settingsSectionHeader">
+          <span className="settingsSectionIcon"><DatabaseBackup size={22} /></span>
+          <div>
+            <span className="settingsEyebrow">Database export</span>
+            <h2>Backup</h2>
+            <p>Download a protected offline copy of the current platform database.</p>
           </div>
-          <form onSubmit={onBackup} className="space-y-3 rounded-lg border border-border bg-background-base p-4">
+        </div>
+        <div className="settingsSectionBody">
+          <div className="settingsInfoPanel">
+            <DatabaseBackup size={20} />
+            <p>Download a fresh backup whenever you need an offline copy.</p>
+          </div>
+          <form onSubmit={onBackup} className="settingsBackupForm">
             <Input label="Admin Password" name="admin_password" type="password" value={backupPassword} onChange={event => onBackupPasswordChange(event.target.value)} autoComplete="current-password" required />
-            <Button type="submit" variant="primary" loading={backupLoading} loadingLabel="Preparing...">
+            <Button className="settingsBackupButton" type="submit" variant="primary" loading={backupLoading} loadingLabel="Preparing...">
               <Download size={16} /> Download Backup
             </Button>
           </form>
@@ -1077,10 +1131,20 @@ function SettingsSection({
   }
 
   return (
-    <Card className="p-6">
-      <div className="space-y-4">
-        <h2 className="text-xl font-semibold text-text-primary">Notifications</h2>
-        <p className="text-sm text-text-secondary">In-app notifications are active for account, exam, result, and proctoring events.</p>
+    <Card className="settingsSectionCard settingsSectionCard--notifications">
+      <div className="settingsSectionHeader">
+        <span className="settingsSectionIcon"><Bell size={22} /></span>
+        <div>
+          <span className="settingsEyebrow">Activity alerts</span>
+          <h2>Notifications</h2>
+          <p>In-app notifications are active for account, exam, result, and proctoring events.</p>
+        </div>
+      </div>
+      <div className="settingsSectionBody">
+        <div className="settingsInfoPanel settingsInfoPanel--success">
+          <CheckCircle2 size={20} />
+          <p>Notification routing is enabled and ready for platform events.</p>
+        </div>
       </div>
     </Card>
   );
