@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Bell,
   CalendarDays,
   Camera,
+  CheckCircle2,
   Lock,
   LogOut,
   Save,
@@ -19,14 +20,21 @@ import { formatDate } from "../utils/dateFormat";
 
 function passwordStrength(password) {
   if (!password) return null;
+  const checks = [
+    { key: "length", label: "10+ characters", met: password.length >= 10 },
+    { key: "case", label: "Upper and lower case", met: /[a-z]/.test(password) && /[A-Z]/.test(password) },
+    { key: "number", label: "Number", met: /\d/.test(password) },
+    { key: "symbol", label: "Symbol", met: /[^A-Za-z0-9]/.test(password) }
+  ];
+  const score = checks.filter(check => check.met).length;
   const mixedCase = /[a-z]/.test(password) && /[A-Z]/.test(password);
   const hasNumber = /\d/.test(password);
   const hasSymbol = /[^A-Za-z0-9]/.test(password);
   if (password.length >= 10 && mixedCase && hasNumber && hasSymbol) {
-    return { label: "Strong", color: "bg-success", width: "100%" };
+    return { label: "Strong", color: "bg-success", width: "100%", checks, score };
   }
-  if (password.length >= 6) return { label: "Fair", color: "bg-warning", width: "60%" };
-  return { label: "Weak", color: "bg-danger", width: "30%" };
+  if (password.length >= 6 && score >= 2) return { label: "Fair", color: "bg-warning", width: "60%", checks, score };
+  return { label: "Weak", color: "bg-danger", width: "30%", checks, score };
 }
 
 function sectionLabel(children) {
@@ -101,6 +109,15 @@ function initials(name = "") {
     .join("") || "U";
 }
 
+function InlineSuccess({ children, className = "" }) {
+  return (
+    <div className={`accountInlineSuccess ${className}`} role="status" aria-live="polite">
+      <CheckCircle2 size={16} />
+      <span>{children}</span>
+    </div>
+  );
+}
+
 function IdentityAvatar({ name, src, className }) {
   return (
     <span
@@ -137,6 +154,8 @@ export default function AccountSettings({ auth, mode = "settings" }) {
   const [deactivating, setDeactivating] = useState(false);
   const [avatarCropSrc, setAvatarCropSrc] = useState("");
   const [avatarFileName, setAvatarFileName] = useState("profile-avatar.png");
+  const [feedback, setFeedback] = useState({ profile: "", avatar: "", password: "", preferences: "" });
+  const feedbackTimers = useRef({});
 
   const strength = useMemo(() => passwordStrength(security.next), [security.next]);
   const canChangePassword = security.current && security.next && security.confirm && security.next === security.confirm;
@@ -176,6 +195,19 @@ export default function AccountSettings({ auth, mode = "settings" }) {
     if (avatarCropSrc) window.URL.revokeObjectURL(avatarCropSrc);
   }, [avatarCropSrc]);
 
+  useEffect(() => () => {
+    Object.values(feedbackTimers.current).forEach(timerId => window.clearTimeout(timerId));
+  }, []);
+
+  const showFeedback = (key, message) => {
+    if (feedbackTimers.current[key]) window.clearTimeout(feedbackTimers.current[key]);
+    setFeedback(current => ({ ...current, [key]: message }));
+    feedbackTimers.current[key] = window.setTimeout(() => {
+      setFeedback(current => ({ ...current, [key]: "" }));
+      delete feedbackTimers.current[key];
+    }, 2600);
+  };
+
   const saveProfile = async () => {
     setSavingProfile(true);
     try {
@@ -190,6 +222,7 @@ export default function AccountSettings({ auth, mode = "settings" }) {
       }));
       setAccount(current => ({ ...current, user: data.user || current.user }));
       await loadBootstrap();
+      showFeedback("profile", "Profile saved just now");
       notify.success(data.message || "Profile updated");
     } catch (error) {
       notify.error(error.message || "Could not update profile");
@@ -237,6 +270,7 @@ export default function AccountSettings({ auth, mode = "settings" }) {
       setProfile(current => ({ ...current, avatar_url: data.user?.profile_picture || current.avatar_url }));
       setAccount(current => ({ ...current, user: data.user || current.user }));
       await loadBootstrap();
+      showFeedback("avatar", "New profile photo is live");
       notify.success(data.message || "Profile image uploaded");
       clearAvatarCrop();
     } catch (error) {
@@ -256,6 +290,7 @@ export default function AccountSettings({ auth, mode = "settings" }) {
         confirm_password: security.confirm
       });
       setSecurity({ current: "", next: "", confirm: "" });
+      showFeedback("password", "Password updated successfully");
       notify.success(data.message || "Password changed successfully");
     } catch (error) {
       notify.error(error.message || "Could not change password");
@@ -269,6 +304,7 @@ export default function AccountSettings({ auth, mode = "settings" }) {
     try {
       const { data } = await api.patch("/account/preferences", preferences);
       setPreferences(data.preferences || preferences);
+      showFeedback("preferences", "Preferences saved");
       notify.success(data.message || "Preferences saved");
     } catch (error) {
       notify.error(error.message || "Could not save preferences");
@@ -308,7 +344,7 @@ export default function AccountSettings({ auth, mode = "settings" }) {
               </div>
             </div>
             <div className="-mt-14 flex justify-center">
-              <div className="relative">
+              <div className={`accountAvatarFrame relative ${uploadingAvatar ? "is-uploading" : ""}`}>
                 <IdentityAvatar
                   name={profile.name}
                   src={profile.avatar_url}
@@ -345,6 +381,7 @@ export default function AccountSettings({ auth, mode = "settings" }) {
                 <Camera size={16} /> Change profile photo
                 <input type="file" accept="image/png,image/jpeg" className="hidden" onChange={uploadAvatar} disabled={uploadingAvatar} />
               </Button>
+              {feedback.avatar && <InlineSuccess className="mt-3 justify-center">{feedback.avatar}</InlineSuccess>}
             </div>
           </Card>
 
@@ -381,6 +418,7 @@ export default function AccountSettings({ auth, mode = "settings" }) {
               <Button variant="primary" onClick={saveProfile} loading={savingProfile} loadingLabel="Saving" className="w-full">
                 <Save size={17} /> Save Profile
               </Button>
+              {feedback.profile && <InlineSuccess>{feedback.profile}</InlineSuccess>}
             </div>
           </Card>
         </div>
@@ -404,11 +442,22 @@ export default function AccountSettings({ auth, mode = "settings" }) {
           <Input label="Current Password" type="password" value={security.current} onChange={event => setSecurity(current => ({ ...current, current: event.target.value }))} required />
           <Input label="New Password" type="password" value={security.next} onChange={event => setSecurity(current => ({ ...current, next: event.target.value }))} required />
           {strength && (
-            <div>
+            <div className="accountPasswordFeedback">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-text-primary">Password strength</p>
+                <span className="text-xs font-bold uppercase tracking-[0.08em] text-text-muted">{strength.label}</span>
+              </div>
               <div className="rounded-pill bg-background-elevated p-1">
                 <div className={`h-2 rounded-pill ${strength.color} transition-all duration-300`} style={{ width: strength.width }} />
               </div>
-              <p className="mt-2 text-sm font-semibold text-text-secondary">Strength: {strength.label}</p>
+              <div className="accountPasswordChecklist" aria-label="Password requirements">
+                {strength.checks.map(check => (
+                  <span key={check.key} className={`accountPasswordCheck ${check.met ? "met" : ""}`}>
+                    <CheckCircle2 size={14} />
+                    {check.label}
+                  </span>
+                ))}
+              </div>
             </div>
           )}
           <Input
@@ -422,6 +471,7 @@ export default function AccountSettings({ auth, mode = "settings" }) {
           <Button variant="primary" disabled={!canChangePassword} loading={changingPassword} loadingLabel="Changing" onClick={changePassword}>
             <ShieldCheck size={17} /> Change Password
           </Button>
+          {feedback.password && <InlineSuccess>{feedback.password}</InlineSuccess>}
         </div>
       </Card>
 
@@ -485,6 +535,7 @@ export default function AccountSettings({ auth, mode = "settings" }) {
           <Button variant="secondary" onClick={savePreferences} loading={savingPreferences} loadingLabel="Saving">
             <Save size={17} /> Save Preferences
           </Button>
+          {feedback.preferences && <InlineSuccess>{feedback.preferences}</InlineSuccess>}
         </div>
       </Card>
 

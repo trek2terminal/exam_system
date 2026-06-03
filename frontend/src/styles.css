@@ -1168,6 +1168,128 @@ html.live-data-updated body::after {
   }
 }
 
+.accountInlineSuccess {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgb(var(--color-success) / 0.24);
+  border-radius: 10px;
+  background:
+    linear-gradient(135deg, rgb(var(--color-success) / 0.13), rgb(var(--color-background-card) / 0.68));
+  color: rgb(var(--color-success));
+  font-size: 13px;
+  font-weight: 700;
+  padding: 10px 12px;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06);
+  animation: accountFeedbackIn 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.accountInlineSuccess svg {
+  flex: 0 0 auto;
+}
+
+.accountAvatarFrame {
+  isolation: isolate;
+}
+
+.accountAvatarFrame::after {
+  content: "";
+  position: absolute;
+  inset: -7px;
+  z-index: -1;
+  border-radius: 9999px;
+  background: conic-gradient(from 180deg, transparent, rgb(var(--role-accent) / 0.42), transparent 62%);
+  opacity: 0;
+  transform: scale(0.92);
+  transition: opacity 180ms ease, transform 220ms ease;
+}
+
+.accountAvatarFrame.is-uploading::after {
+  opacity: 1;
+  transform: scale(1);
+  animation: accountAvatarSweep 1100ms linear infinite;
+}
+
+.accountPasswordFeedback {
+  border: 1px solid rgb(var(--color-border) / 0.75);
+  border-radius: 12px;
+  background:
+    linear-gradient(145deg, rgb(var(--color-background-base) / 0.84), rgb(var(--color-background-card) / 0.96));
+  padding: 14px;
+}
+
+.accountPasswordChecklist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.accountPasswordCheck {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgb(var(--color-border) / 0.82);
+  border-radius: 9999px;
+  background: rgb(var(--color-background-card) / 0.78);
+  color: rgb(var(--color-text-muted));
+  font-size: 12px;
+  font-weight: 700;
+  padding: 7px 10px;
+  transition:
+    border-color 180ms ease,
+    background-color 180ms ease,
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.accountPasswordCheck svg {
+  opacity: 0.35;
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.accountPasswordCheck.met {
+  border-color: rgb(var(--color-success) / 0.28);
+  background: rgb(var(--color-success) / 0.10);
+  color: rgb(var(--color-success));
+  transform: translateY(-1px);
+}
+
+.accountPasswordCheck.met svg {
+  opacity: 1;
+  transform: scale(1.06);
+}
+
+@keyframes accountFeedbackIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes accountAvatarSweep {
+  to {
+    transform: scale(1) rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .accountInlineSuccess,
+  .accountAvatarFrame.is-uploading::after {
+    animation: none;
+  }
+
+  .accountPasswordCheck,
+  .accountPasswordCheck svg,
+  .accountAvatarFrame::after {
+    transition: none;
+  }
+}
+
 /* tooltip always dark background */
 .tooltip-bg {
   background: rgba(17, 24, 39, 0.96);

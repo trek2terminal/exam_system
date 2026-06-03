@@ -1971,6 +1971,50 @@ function RightPanel({
   onSubmit,
   mobile = false
 }) {
+  const previousStatusesRef = useRef({});
+  const statusTimersRef = useRef({});
+  const [changedQuestionIds, setChangedQuestionIds] = useState(() => new Set());
+
+  useEffect(() => () => {
+    Object.values(statusTimersRef.current).forEach(timerId => window.clearTimeout(timerId));
+  }, []);
+
+  useEffect(() => {
+    const previousStatuses = previousStatusesRef.current;
+    const nextStatuses = {};
+    const changedIds = [];
+
+    questions.forEach(question => {
+      const status = normalizeStatus((answers[question.id] || emptyAnswer()).navigator_status);
+      nextStatuses[question.id] = status;
+      if (previousStatuses[question.id] && previousStatuses[question.id] !== status) {
+        changedIds.push(question.id);
+      }
+    });
+
+    previousStatusesRef.current = nextStatuses;
+
+    if (!changedIds.length) return;
+
+    setChangedQuestionIds(current => {
+      const next = new Set(current);
+      changedIds.forEach(id => next.add(id));
+      return next;
+    });
+
+    changedIds.forEach(id => {
+      if (statusTimersRef.current[id]) window.clearTimeout(statusTimersRef.current[id]);
+      statusTimersRef.current[id] = window.setTimeout(() => {
+        setChangedQuestionIds(current => {
+          const next = new Set(current);
+          next.delete(id);
+          return next;
+        });
+        delete statusTimersRef.current[id];
+      }, 720);
+    });
+  }, [answers, questions]);
+
   return (
     <aside className={cn("examRightPanel", mobile && "mobile")}>
       <section className="examStudentStrip">
@@ -2016,7 +2060,11 @@ function RightPanel({
               <button
                 type="button"
                 key={question.id}
-                className={cn(`status-${status.toLowerCase().replaceAll("_", "-")}`, index === currentIndex && "current")}
+                className={cn(
+                  `status-${status.toLowerCase().replaceAll("_", "-")}`,
+                  index === currentIndex && "current",
+                  changedQuestionIds.has(question.id) && "status-changed"
+                )}
                 onClick={() => onQuestionClick(index)}
               >
                 {question.order_index}
