@@ -19,6 +19,8 @@ def create_app(config_class=None):
     template_dir = os.path.join(app_dir, "templates")
     static_dir = os.path.join(app_dir, "static")
 
+    
+
     app = Flask(
         __name__,
         template_folder=template_dir,
